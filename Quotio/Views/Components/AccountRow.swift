@@ -36,6 +36,8 @@ struct AccountRowData: Identifiable, Hashable {
     let canDelete: Bool           // Only proxy accounts can be deleted
     let canEdit: Bool             // Whether this account can be edited (GLM only)
     let canSwitch: Bool           // Whether this account can be switched (Antigravity only)
+    let identityPackage: RuntimeIdentityPackage?
+    let supportsIdentityBinding: Bool
 
     // Custom initializer to handle canEdit parameter
     init(
@@ -49,7 +51,9 @@ struct AccountRowData: Identifiable, Hashable {
         isDisabled: Bool,
         canDelete: Bool,
         canEdit: Bool = false,
-        canSwitch: Bool = false
+        canSwitch: Bool = false,
+        identityPackage: RuntimeIdentityPackage? = nil,
+        supportsIdentityBinding: Bool = false
     ) {
         self.id = id
         self.provider = provider
@@ -62,6 +66,8 @@ struct AccountRowData: Identifiable, Hashable {
         self.canDelete = canDelete
         self.canEdit = canEdit
         self.canSwitch = canSwitch
+        self.identityPackage = identityPackage
+        self.supportsIdentityBinding = supportsIdentityBinding
     }
 
     // For menu bar selection
@@ -72,7 +78,7 @@ struct AccountRowData: Identifiable, Hashable {
     // MARK: - Factory Methods
     
     /// Create from AuthFile (proxy mode)
-    static func from(authFile: AuthFile) -> AccountRowData {
+    static func from(authFile: AuthFile, identityPackage: RuntimeIdentityPackage?) -> AccountRowData {
         let name = authFile.email ?? authFile.name
         return AccountRowData(
             id: authFile.id,
@@ -83,7 +89,9 @@ struct AccountRowData: Identifiable, Hashable {
             status: authFile.status,
             statusMessage: authFile.statusMessage,
             isDisabled: authFile.disabled,
-            canDelete: true
+            canDelete: true,
+            identityPackage: identityPackage,
+            supportsIdentityBinding: true
         )
     }
     
@@ -122,12 +130,16 @@ struct AccountRowData: Identifiable, Hashable {
         hasher.combine(id)
         hasher.combine(isDisabled)
         hasher.combine(status)
+        hasher.combine(identityPackage)
+        hasher.combine(supportsIdentityBinding)
     }
 
     static func == (lhs: AccountRowData, rhs: AccountRowData) -> Bool {
         lhs.id == rhs.id &&
         lhs.isDisabled == rhs.isDisabled &&
-        lhs.status == rhs.status
+        lhs.status == rhs.status &&
+        lhs.identityPackage == rhs.identityPackage &&
+        lhs.supportsIdentityBinding == rhs.supportsIdentityBinding
     }
 }
 
@@ -139,6 +151,8 @@ struct AccountRow: View {
     var onEdit: (() -> Void)?
     var onSwitch: (() -> Void)?
     var onToggleDisabled: (() -> Void)?
+    var onManageIdentityBinding: (() -> Void)?
+    var onUnbindIdentityBinding: (() -> Void)?
     var isActiveInIDE: Bool = false
     
     @State private var settings = MenuBarSettingsManager.shared
@@ -160,6 +174,24 @@ struct AccountRow: View {
         case "cooling": return .orange
         case "error": return .red
         default: return .gray
+        }
+    }
+
+    private var identityBadgeText: String {
+        account.identityPackage?.name ?? "Unbound identity package"
+    }
+
+    private var identityBadgeColor: Color {
+        guard account.supportsIdentityBinding else { return .secondary }
+        guard let package = account.identityPackage else { return .orange }
+
+        switch package.status {
+        case .bound:
+            return .green
+        case .verificationFailed, .blocked:
+            return .red
+        case .available, .draft:
+            return .orange
         }
     }
     
@@ -198,6 +230,27 @@ struct AccountRow: View {
                         Text(account.source.displayName)
                             .font(.caption)
                             .foregroundStyle(.tertiary)
+                    }
+                }
+
+                if account.supportsIdentityBinding {
+                    HStack(spacing: 6) {
+                        Image(systemName: account.identityPackage == nil ? "shield.slash" : "shield.fill")
+                            .foregroundStyle(identityBadgeColor)
+
+                        Text(identityBadgeText)
+                            .font(.caption)
+                            .foregroundStyle(account.identityPackage == nil ? .secondary : .primary)
+
+                        if let package = account.identityPackage {
+                            Text(package.status.displayName)
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(identityBadgeColor.opacity(0.12))
+                                .foregroundStyle(identityBadgeColor)
+                                .clipShape(Capsule())
+                        }
                     }
                 }
             }
@@ -252,6 +305,28 @@ struct AccountRow: View {
                 isSelected: isMenuBarSelected,
                 onTap: handleMenuBarToggle
             )
+
+            if account.supportsIdentityBinding, let onManageIdentityBinding = onManageIdentityBinding {
+                Button {
+                    onManageIdentityBinding()
+                } label: {
+                    Image(systemName: account.identityPackage == nil ? "shield" : "arrow.triangle.2.circlepath")
+                        .foregroundStyle(account.identityPackage == nil ? Color.secondary : .blue)
+                }
+                .buttonStyle(.rowAction)
+                .help(account.identityPackage == nil ? "Bind identity package" : "Change identity package")
+            }
+
+            if account.identityPackage != nil, let onUnbindIdentityBinding = onUnbindIdentityBinding {
+                Button(role: .destructive) {
+                    onUnbindIdentityBinding()
+                } label: {
+                    Image(systemName: "shield.slash")
+                        .foregroundStyle(.red.opacity(0.8))
+                }
+                .buttonStyle(.rowActionDestructive)
+                .help("Unbind identity package")
+            }
 
             // Disable/Enable toggle button (only for proxy accounts)
             if account.source == .proxy, let onToggleDisabled = onToggleDisabled {
@@ -319,6 +394,27 @@ struct AccountRow: View {
                 } else {
                     Label("menubar.showOnMenuBar".localized(), systemImage: "chart.bar.fill")
                 }
+            }
+
+            if account.supportsIdentityBinding, let onManageIdentityBinding = onManageIdentityBinding {
+                Button {
+                    onManageIdentityBinding()
+                } label: {
+                    Label(
+                        account.identityPackage == nil ? "Bind identity package" : "Change identity package",
+                        systemImage: account.identityPackage == nil ? "shield" : "arrow.triangle.2.circlepath"
+                    )
+                }
+
+                if account.identityPackage != nil, let onUnbindIdentityBinding = onUnbindIdentityBinding {
+                    Button(role: .destructive) {
+                        onUnbindIdentityBinding()
+                    } label: {
+                        Label("Unbind identity package", systemImage: "shield.slash")
+                    }
+                }
+
+                Divider()
             }
 
             // Disable/Enable toggle (only for proxy accounts)

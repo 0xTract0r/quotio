@@ -25,6 +25,7 @@ struct ProvidersScreen: View {
     @State private var editingWarpToken: WarpService.WarpToken?
     @State private var showAddProviderPopover = false
     @State private var switchingAccount: AccountRowData?
+    @State private var bindingTargetAuthFile: AuthFile?
     @State private var modeManager = OperatingModeManager.shared
 
     private let customProviderService = CustomProviderService.shared
@@ -49,7 +50,10 @@ struct ProvidersScreen: View {
             // From proxy auth files (proxy running)
             for file in viewModel.authFiles {
                 guard let provider = file.providerType else { continue }
-                let data = AccountRowData.from(authFile: file)
+                let data = AccountRowData.from(
+                    authFile: file,
+                    identityPackage: viewModel.identityPackage(for: file)
+                )
                 groups[provider, default: []].append(data)
             }
         } else {
@@ -225,6 +229,10 @@ struct ProvidersScreen: View {
             )
             .environment(viewModel)
         }
+        .sheet(item: $bindingTargetAuthFile) { authFile in
+            BindIdentityPackageSheet(authFile: authFile)
+                .environment(viewModel)
+        }
     }
     
     // MARK: - Toolbar
@@ -298,6 +306,12 @@ struct ProvidersScreen: View {
                         } : nil,
                         onToggleDisabled: { account in
                             Task { await toggleAccountDisabled(account) }
+                        },
+                        onManageIdentityBinding: { account in
+                            openIdentityBinding(for: account)
+                        },
+                        onUnbindIdentityBinding: { account in
+                            unbindIdentityBinding(for: account)
                         },
                         isAccountActive: provider == .antigravity ? { account in
                             viewModel.isAntigravityAccountActive(email: account.displayName)
@@ -430,6 +444,24 @@ struct ProvidersScreen: View {
         if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
             await viewModel.toggleAuthFileDisabled(authFile)
         }
+    }
+
+    private func openIdentityBinding(for account: AccountRowData) {
+        guard account.supportsIdentityBinding,
+              let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) else {
+            return
+        }
+
+        bindingTargetAuthFile = authFile
+    }
+
+    private func unbindIdentityBinding(for account: AccountRowData) {
+        guard account.supportsIdentityBinding,
+              let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) else {
+            return
+        }
+
+        viewModel.unbindIdentityPackage(from: authFile)
     }
 
     private func handleEditGlmAccount(_ account: AccountRowData) {
@@ -721,6 +753,8 @@ struct MenuBarHintView: View {
 
 // MARK: - OAuth Sheet
 
+/// TODO: Support manual localhost callback URL paste for cross-device web OAuth flows.
+/// Current implementation assumes the browser login and localhost redirect happen on the same device.
 struct OAuthSheet: View {
     @Environment(QuotaViewModel.self) private var viewModel
     let provider: AIProvider

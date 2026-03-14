@@ -26,6 +26,7 @@ final class QuotaViewModel {
     @ObservationIgnored private let refreshSettings = RefreshSettingsManager.shared
     @ObservationIgnored private let warmupSettings = WarmupSettingsManager.shared
     @ObservationIgnored private let warmupService = WarmupService()
+    @ObservationIgnored private let identityPackageService = IdentityPackageService.shared
     private var warmupNextRun: [WarmupAccountKey: Date] = [:]
     private var warmupStatuses: [WarmupAccountKey: WarmupStatus] = [:]
     @ObservationIgnored private var warmupModelCache: [WarmupAccountKey: (models: [WarmupModelInfo], fetchedAt: Date)] = [:]
@@ -50,6 +51,8 @@ final class QuotaViewModel {
     
     var currentPage: NavigationPage = .dashboard
     var authFiles: [AuthFile] = []
+    var identityPackages: [RuntimeIdentityPackage] = []
+    var identityBindings: [String: AccountIdentityBinding] = [:]
     var usageStats: UsageStats?
     var apiKeys: [String] = []
     var isLoading = false
@@ -165,6 +168,7 @@ final class QuotaViewModel {
     init() {
         self.proxyManager = CLIProxyManager.shared
         loadPersistedIDEQuotas()
+        syncIdentityPackageState()
         setupRefreshCadenceCallback()
         setupWarmupCallback()
         restartWarmupScheduler()
@@ -338,6 +342,43 @@ final class QuotaViewModel {
     /// Load auth files directly from filesystem
     func loadDirectAuthFiles() async {
         directAuthFiles = await directAuthService.scanAllAuthFiles()
+    }
+
+    func createIdentityPackage(name: String? = nil) {
+        identityPackageService.createPackage(name: name)
+        syncIdentityPackageState()
+    }
+
+    func identityPackage(for authFile: AuthFile) -> RuntimeIdentityPackage? {
+        identityPackageService.package(for: authFile.id)
+    }
+
+    func identityBinding(for authFile: AuthFile) -> AccountIdentityBinding? {
+        identityBindings[authFile.id]
+    }
+
+    func availableIdentityPackages(for authFile: AuthFile) -> [RuntimeIdentityPackage] {
+        identityPackageService.availablePackages(for: authFile.id)
+    }
+
+    func bindIdentityPackage(packageId: UUID, to authFile: AuthFile) throws {
+        try identityPackageService.bind(packageId: packageId, to: authFile)
+        syncIdentityPackageState()
+    }
+
+    func unbindIdentityPackage(from authFile: AuthFile) {
+        identityPackageService.unbind(authFileId: authFile.id)
+        syncIdentityPackageState()
+    }
+
+    func updateIdentityPackage(_ package: RuntimeIdentityPackage) {
+        identityPackageService.updatePackage(package)
+        syncIdentityPackageState()
+    }
+
+    func deleteIdentityPackage(id: UUID) {
+        identityPackageService.deletePackage(id: id)
+        syncIdentityPackageState()
     }
     
     /// Refresh quotas directly without proxy (for Quota-Only Mode)
@@ -1121,6 +1162,7 @@ final class QuotaViewModel {
             }
 
             self.authFiles = newAuthFiles
+            syncIdentityPackageState(reconcilingWith: newAuthFiles)
 
             self.usageStats = try await client.fetchUsageStats()
             self.apiKeys = try await client.fetchAPIKeys()
@@ -1363,6 +1405,8 @@ final class QuotaViewModel {
             return
         }
 
+        // TODO: Support submitting the final localhost redirect URL for cross-device web OAuth.
+        // The current flow only opens the auth URL and polls status, which assumes callback completion on the same machine.
         guard let client = apiClient else {
             oauthState = OAuthState(provider: provider, status: .error, error: "Proxy not running. Please start the proxy first.")
             return
@@ -1608,6 +1652,15 @@ final class QuotaViewModel {
         }
         
         menuBarSettings.pruneInvalidItems(validItems: validItems)
+    }
+
+    private func syncIdentityPackageState(reconcilingWith authFiles: [AuthFile]? = nil) {
+        if let authFiles {
+            identityPackageService.reconcileBindings(with: authFiles)
+        }
+
+        identityPackages = identityPackageService.sortedPackages
+        identityBindings = identityPackageService.bindings
     }
 
     func importVertexServiceAccount(url: URL) async {
