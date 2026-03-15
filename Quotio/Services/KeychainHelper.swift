@@ -14,6 +14,7 @@ enum KeychainHelper {
     private static let remoteService = "dev.quotio.desktop.remote-management"
     private static let localService = "dev.quotio.desktop.local-management"
     private static let warpService = "dev.quotio.desktop.warp"
+    private static let identityProxyService = "dev.quotio.desktop.identity-package.proxy"
     private static let localManagementAccount = "local-management-key"
     private static let warpTokensAccount = "warp-tokens"
     private static let localManagementDefaultsKey = "managementKey"
@@ -134,6 +135,23 @@ enum KeychainHelper {
             deleteData(service: legacy, account: warpTokensAccount)
         }
         UserDefaults.standard.removeObject(forKey: warpTokensDefaultsKey)
+    }
+
+    static func saveIdentityPackageProxyPassword(_ password: String, reference: String) -> Bool {
+        guard let data = password.data(using: .utf8) else { return false }
+        let saved = saveData(data, service: identityProxyService, account: reference)
+        if !saved {
+            Log.keychain("Failed to save identity package proxy password for reference \(reference)")
+        }
+        return saved
+    }
+
+    static func getIdentityPackageProxyPassword(reference: String) -> String? {
+        readString(service: identityProxyService, account: reference)
+    }
+
+    static func deleteIdentityPackageProxyPassword(reference: String) {
+        deleteData(service: identityProxyService, account: reference)
     }
 
     private static func migrateData(from oldServices: [String], to newService: String, account: String) -> Data? {

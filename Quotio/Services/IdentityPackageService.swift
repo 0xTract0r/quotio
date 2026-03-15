@@ -48,17 +48,33 @@ final class IdentityPackageService {
         persistPackages()
     }
 
-    func deletePackage(id: UUID) {
+    @discardableResult
+    func deletePackage(id: UUID) -> Bool {
+        guard let package = package(id: id) else { return false }
+        guard !package.isBound else { return false }
+
+        if let passwordRef = package.proxy.passwordRef {
+            KeychainHelper.deleteIdentityPackageProxyPassword(reference: passwordRef)
+        }
+
         packages.removeAll { $0.id == id }
-        bindings = bindings.filter { $0.value.packageId != id }
         persistPackages()
-        persistBindings()
+        return true
     }
 
     func updatePackage(_ package: RuntimeIdentityPackage) {
+        updatePackage(package, proxyPassword: nil)
+    }
+
+    func updatePackage(_ package: RuntimeIdentityPackage, proxyPassword: String?) {
         guard let index = packages.firstIndex(where: { $0.id == package.id }) else { return }
         var updated = package
         updated.updatedAt = Date()
+        updated.proxy.passwordRef = syncProxyPassword(
+            packageId: updated.id,
+            existingRef: packages[index].proxy.passwordRef,
+            password: proxyPassword
+        )
         updated.status = normalizedStatus(for: updated)
         packages[index] = updated
         persistPackages()
@@ -75,6 +91,14 @@ final class IdentityPackageService {
 
     func binding(for authFileId: String) -> AccountIdentityBinding? {
         bindings[authFileId]
+    }
+
+    func proxyPassword(for packageId: UUID) -> String? {
+        guard let package = package(id: packageId),
+              let reference = package.proxy.passwordRef else {
+            return nil
+        }
+        return KeychainHelper.getIdentityPackageProxyPassword(reference: reference)
     }
 
     func availablePackages(for authFileId: String?) -> [RuntimeIdentityPackage] {
@@ -172,6 +196,77 @@ final class IdentityPackageService {
         packages[index].status = passed ? (packages[index].isBound ? .bound : .available) : .verificationFailed
         packages[index].updatedAt = Date()
         persistPackages()
+    }
+
+    func importPackages(from rawText: String) -> IdentityPackageImportResult {
+        let lines = rawText.components(separatedBy: .newlines)
+        var importedPackages: [RuntimeIdentityPackage] = []
+        var issues: [IdentityPackageImportIssue] = []
+
+        for (lineOffset, rawLine) in lines.enumerated() {
+            let lineNumber = lineOffset + 1
+            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !trimmed.isEmpty else { continue }
+            guard !trimmed.hasPrefix("#"), !trimmed.hasPrefix("//") else { continue }
+
+            do {
+                let imported = try parseImportedProxyLine(trimmed)
+                let now = Date()
+                let packageID = UUID()
+                let proxyPasswordRef = syncProxyPassword(
+                    packageId: packageID,
+                    existingRef: nil,
+                    password: imported.password
+                )
+
+                let package = RuntimeIdentityPackage(
+                    id: packageID,
+                    name: imported.name,
+                    status: .available,
+                    proxy: IdentityProxyConfig(
+                        scheme: imported.scheme,
+                        host: imported.host,
+                        port: imported.port,
+                        username: imported.username,
+                        passwordRef: proxyPasswordRef
+                    ),
+                    uaProfile: generateUAProfile(),
+                    tlsProfile: generateTLSProfile(),
+                    verification: nil,
+                    binding: nil,
+                    createdAt: now,
+                    updatedAt: now
+                )
+                importedPackages.append(package)
+            } catch let error as IdentityPackageImportError {
+                issues.append(
+                    IdentityPackageImportIssue(
+                        lineNumber: lineNumber,
+                        content: trimmed,
+                        reason: error.localizedDescription
+                    )
+                )
+            } catch {
+                issues.append(
+                    IdentityPackageImportIssue(
+                        lineNumber: lineNumber,
+                        content: trimmed,
+                        reason: error.localizedDescription
+                    )
+                )
+            }
+        }
+
+        if !importedPackages.isEmpty {
+            packages.insert(contentsOf: importedPackages.reversed(), at: 0)
+            persistPackages()
+        }
+
+        return IdentityPackageImportResult(
+            importedCount: importedPackages.count,
+            issues: issues
+        )
     }
 
     func reconcileBindings(with authFiles: [AuthFile]) {
@@ -314,6 +409,99 @@ final class IdentityPackageService {
             return package.status
         case .draft, .available, .bound:
             return package.proxy.isConfigured ? .available : .draft
+        }
+    }
+
+    private func proxyPasswordReference(for packageId: UUID) -> String {
+        "identity-package-proxy-password.\(packageId.uuidString)"
+    }
+
+    private func syncProxyPassword(packageId: UUID, existingRef: String?, password: String?) -> String? {
+        guard let password else {
+            return existingRef
+        }
+
+        let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reference = existingRef ?? proxyPasswordReference(for: packageId)
+
+        guard !trimmedPassword.isEmpty else {
+            if let existingRef {
+                KeychainHelper.deleteIdentityPackageProxyPassword(reference: existingRef)
+            }
+            return nil
+        }
+
+        return KeychainHelper.saveIdentityPackageProxyPassword(trimmedPassword, reference: reference)
+            ? reference
+            : existingRef
+    }
+
+    private func parseImportedProxyLine(_ line: String) throws -> ImportedProxyLine {
+        let sanitized = ProxyURLValidator.sanitize(line)
+        guard ProxyURLValidator.validate(sanitized) == .valid else {
+            throw IdentityPackageImportError.invalidProxyURL
+        }
+
+        guard let components = URLComponents(string: sanitized),
+              let host = components.host,
+              let scheme = IdentityProxyScheme(rawValue: components.scheme?.lowercased() ?? ""),
+              !host.isEmpty else {
+            throw IdentityPackageImportError.invalidProxyURL
+        }
+
+        let port = components.port ?? defaultPort(for: scheme)
+        guard port >= 1 && port <= 65535 else {
+            throw IdentityPackageImportError.invalidPort
+        }
+
+        let username = components.user?.removingPercentEncoding ?? components.user
+        let password = components.password?.removingPercentEncoding ?? components.password
+
+        return ImportedProxyLine(
+            name: defaultImportedPackageName(host: host, port: port),
+            scheme: scheme,
+            host: host,
+            port: port,
+            username: username,
+            password: password
+        )
+    }
+
+    private func defaultImportedPackageName(host: String, port: Int) -> String {
+        "Imported \(host):\(port)"
+    }
+
+    private func defaultPort(for scheme: IdentityProxyScheme) -> Int {
+        switch scheme {
+        case .http:
+            return 80
+        case .https:
+            return 443
+        case .socks5:
+            return 1080
+        }
+    }
+}
+
+private struct ImportedProxyLine {
+    let name: String
+    let scheme: IdentityProxyScheme
+    let host: String
+    let port: Int
+    let username: String?
+    let password: String?
+}
+
+private enum IdentityPackageImportError: LocalizedError {
+    case invalidProxyURL
+    case invalidPort
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidProxyURL:
+            return "只支持显式 scheme 的代理 URL，例如 socks5://user:pass@host:1080"
+        case .invalidPort:
+            return "端口无效"
         }
     }
 }

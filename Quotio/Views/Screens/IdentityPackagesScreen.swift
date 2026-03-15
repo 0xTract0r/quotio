@@ -9,7 +9,10 @@ struct IdentityPackagesScreen: View {
     @Environment(QuotaViewModel.self) private var viewModel
     @State private var selectedPackageID: UUID?
     @State private var draftPackage: RuntimeIdentityPackage?
+    @State private var draftProxyPassword = ""
     @State private var showDeleteConfirmation = false
+    @State private var showImportSheet = false
+    @State private var importResultMessage: String?
 
     private var selectedPackage: RuntimeIdentityPackage? {
         guard let selectedPackageID else { return viewModel.identityPackages.first }
@@ -17,7 +20,16 @@ struct IdentityPackagesScreen: View {
     }
 
     private var hasUnsavedChanges: Bool {
-        draftPackage != selectedPackage
+        draftPackage != selectedPackage || draftProxyPassword != selectedProxyPassword
+    }
+
+    private var selectedProxyPassword: String {
+        guard let selectedPackage else { return "" }
+        return viewModel.identityPackageProxyPassword(for: selectedPackage.id)
+    }
+
+    private var canDeleteSelectedPackage: Bool {
+        selectedPackage?.isBound == false
     }
 
     var body: some View {
@@ -29,9 +41,7 @@ struct IdentityPackagesScreen: View {
                             Text(package.name)
                                 .font(.headline)
                             Spacer()
-                            Text(package.status.displayName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            statusBadge(for: package.status)
                         }
 
                         Text(package.proxy.displayValue)
@@ -79,10 +89,20 @@ struct IdentityPackagesScreen: View {
                                 TextField("Username", text: proxyOptionalBinding(for: \.username))
                                     .textFieldStyle(.roundedBorder)
 
-                                TextField("Password Ref", text: proxyOptionalBinding(for: \.passwordRef))
+                                SecureField("Password", text: $draftProxyPassword)
                                     .textFieldStyle(.roundedBorder)
 
-                                Text("`Password Ref` 当前只是本地字段预留，尚未接 Keychain。")
+                                detailRow(
+                                    label: "Password Storage",
+                                    value: draftPackage.proxy.passwordRef == nil ? "Not stored" : "Stored in Keychain"
+                                )
+
+                                detailRow(
+                                    label: "Password Ref",
+                                    value: draftPackage.proxy.passwordRef ?? "Generated on save"
+                                )
+
+                                Text("代理密码会保存在 Keychain 中；模型里只保留 `passwordRef`。")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -130,12 +150,19 @@ struct IdentityPackagesScreen: View {
                                 Button("Delete", role: .destructive) {
                                     showDeleteConfirmation = true
                                 }
+                                .disabled(!canDeleteSelectedPackage)
 
                                 Button("Save") {
                                     saveDraft()
                                 }
                                 .keyboardShortcut(.defaultAction)
                                 .disabled(!canSaveDraft)
+                            }
+
+                            if !canDeleteSelectedPackage {
+                                Text("已绑定身份包不可直接删除，请先解绑账号。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                         .padding(20)
@@ -151,6 +178,12 @@ struct IdentityPackagesScreen: View {
             .frame(minWidth: 420)
         }
         .navigationTitle("Identity Packages")
+        .sheet(isPresented: $showImportSheet) {
+            ImportIdentityPackagesSheet { rawText in
+                let result = viewModel.importIdentityPackages(from: rawText)
+                importResultMessage = importMessage(for: result)
+            }
+        }
         .onAppear {
             if selectedPackageID == nil {
                 selectedPackageID = viewModel.identityPackages.first?.id
@@ -167,6 +200,15 @@ struct IdentityPackagesScreen: View {
             syncDraftFromSelection()
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    showImportSheet = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .help("Import proxies as identity packages")
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     viewModel.createIdentityPackage()
@@ -184,6 +226,21 @@ struct IdentityPackagesScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This only removes the local identity package record in Quotio.")
+        }
+        .alert(
+            "Import Result",
+            isPresented: Binding(
+                get: { importResultMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        importResultMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importResultMessage ?? "")
         }
     }
 
@@ -250,19 +307,71 @@ struct IdentityPackagesScreen: View {
 
     private func syncDraftFromSelection() {
         draftPackage = selectedPackage
+        draftProxyPassword = selectedProxyPassword
     }
 
     private func saveDraft() {
         guard var draftPackage else { return }
         draftPackage.name = draftPackage.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        viewModel.updateIdentityPackage(draftPackage)
+        viewModel.updateIdentityPackage(draftPackage, proxyPassword: draftProxyPassword)
         syncDraftFromSelection()
     }
 
     private func deleteSelectedPackage() {
         guard let selectedPackageID else { return }
-        viewModel.deleteIdentityPackage(id: selectedPackageID)
+        guard viewModel.deleteIdentityPackage(id: selectedPackageID) else { return }
         self.selectedPackageID = viewModel.identityPackages.first?.id
         syncDraftFromSelection()
+    }
+
+    private func importMessage(for result: IdentityPackageImportResult) -> String {
+        if result.issues.isEmpty {
+            return "Imported \(result.importedCount) identity package(s)."
+        }
+
+        let issuePreview = result.issues.prefix(3).map { issue in
+            "Line \(issue.lineNumber): \(issue.reason)"
+        }.joined(separator: "\n")
+
+        if result.importedCount == 0 {
+            return """
+            No identity packages were imported.
+
+            \(issuePreview)
+            """
+        }
+
+        let remainingCount = result.issues.count - min(result.issues.count, 3)
+        let suffix = remainingCount > 0 ? "\nAnd \(remainingCount) more issue(s)." : ""
+
+        return """
+        Imported \(result.importedCount) identity package(s), skipped \(result.skippedCount).
+
+        \(issuePreview)\(suffix)
+        """
+    }
+
+    private func statusBadge(for status: IdentityPackageStatus) -> some View {
+        Text(status.displayName)
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(statusColor(for: status).opacity(0.14), in: Capsule())
+            .foregroundStyle(statusColor(for: status))
+    }
+
+    private func statusColor(for status: IdentityPackageStatus) -> Color {
+        switch status {
+        case .draft:
+            return .secondary
+        case .available:
+            return .blue
+        case .bound:
+            return .green
+        case .verificationFailed:
+            return .orange
+        case .blocked:
+            return .red
+        }
     }
 }

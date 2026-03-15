@@ -150,3 +150,22 @@ struct RuntimeIdentityPackage: Codable, Identifiable, Hashable, Sendable {
         binding?.displayName ?? "Unbound"
     }
 }
+
+struct IdentityPackageImportIssue: Identifiable, Hashable, Sendable {
+    let lineNumber: Int
+    let content: String
+    let reason: String
+
+    var id: String {
+        "\(lineNumber):\(content):\(reason)"
+    }
+}
+
+struct IdentityPackageImportResult: Hashable, Sendable {
+    let importedCount: Int
+    let issues: [IdentityPackageImportIssue]
+
+    var skippedCount: Int {
+        issues.count
+    }
+}

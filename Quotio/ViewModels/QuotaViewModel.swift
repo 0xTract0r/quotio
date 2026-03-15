@@ -376,9 +376,28 @@ final class QuotaViewModel {
         syncIdentityPackageState()
     }
 
-    func deleteIdentityPackage(id: UUID) {
-        identityPackageService.deletePackage(id: id)
+    func updateIdentityPackage(_ package: RuntimeIdentityPackage, proxyPassword: String?) {
+        identityPackageService.updatePackage(package, proxyPassword: proxyPassword)
         syncIdentityPackageState()
+    }
+
+    func identityPackageProxyPassword(for packageId: UUID) -> String {
+        identityPackageService.proxyPassword(for: packageId) ?? ""
+    }
+
+    func importIdentityPackages(from rawText: String) -> IdentityPackageImportResult {
+        let result = identityPackageService.importPackages(from: rawText)
+        syncIdentityPackageState()
+        return result
+    }
+
+    @discardableResult
+    func deleteIdentityPackage(id: UUID) -> Bool {
+        let deleted = identityPackageService.deletePackage(id: id)
+        if deleted {
+            syncIdentityPackageState()
+        }
+        return deleted
     }
     
     /// Refresh quotas directly without proxy (for Quota-Only Mode)
