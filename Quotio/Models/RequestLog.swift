@@ -10,13 +10,13 @@ import Foundation
 
 // MARK: - Request Log Entry
 
-nonisolated enum FallbackAttemptOutcome: String, Codable, Hashable, Sendable {
+enum FallbackAttemptOutcome: String, Codable, Hashable, Sendable {
     case failed
     case success
     case skipped
 }
 
-nonisolated enum FallbackTriggerReason: Codable, Hashable, Sendable {
+enum FallbackTriggerReason: Codable, Hashable, Sendable {
     case httpStatus(Int)
     case pattern(String)
     case cachedRoute
@@ -36,7 +36,7 @@ nonisolated enum FallbackTriggerReason: Codable, Hashable, Sendable {
     }
 }
 
-nonisolated struct FallbackAttempt: Codable, Hashable, Sendable {
+struct FallbackAttempt: Codable, Hashable, Sendable {
     let provider: String
     let modelId: String
     let outcome: FallbackAttemptOutcome
@@ -55,7 +55,7 @@ nonisolated struct FallbackAttempt: Codable, Hashable, Sendable {
 }
 
 /// Represents a single API request/response pair with associated metadata
-nonisolated struct RequestLog: Identifiable, Codable, Hashable, Sendable {
+struct RequestLog: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let timestamp: Date
 
@@ -166,7 +166,7 @@ nonisolated struct RequestLog: Identifiable, Codable, Hashable, Sendable {
 // MARK: - Aggregate Statistics
 
 /// Aggregated statistics for request history
-nonisolated struct RequestStats: Codable, Sendable {
+struct RequestStats: Codable, Sendable {
     /// Total number of requests
     let totalRequests: Int
     
@@ -247,7 +247,7 @@ struct ModelStats: Codable, Sendable {
 // MARK: - Request History Storage
 
 /// Container for persisted request history
-nonisolated struct RequestHistoryStore: Codable, Sendable {
+struct RequestHistoryStore: Codable, Sendable {
     /// Version for migration support
     let version: Int
     

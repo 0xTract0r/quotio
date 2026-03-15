@@ -376,26 +376,37 @@ actor AntigravityDatabaseService {
                 
             case .unknown:
                 // Dual fallback: try both formats
-                let newFormatResult = Result {
-                    try injectNewFormat(
-                        accessToken: accessToken,
-                        refreshToken: refreshToken,
-                        expiry: expiry,
-                        db: db
-                    )
-                }
-                let oldFormatResult = Result {
-                    try injectOldFormat(
-                        accessToken: accessToken,
-                        refreshToken: refreshToken,
-                        expiry: expiry,
-                        email: email,
-                        db: db
-                    )
-                }
+                let newFormatResult: Error? = {
+                    do {
+                        try injectNewFormat(
+                            accessToken: accessToken,
+                            refreshToken: refreshToken,
+                            expiry: expiry,
+                            db: db
+                        )
+                        return nil
+                    } catch {
+                        return error
+                    }
+                }()
+                let oldFormatResult: Error? = {
+                    do {
+                        try injectOldFormat(
+                            accessToken: accessToken,
+                            refreshToken: refreshToken,
+                            expiry: expiry,
+                            email: email,
+                            db: db
+                        )
+                        return nil
+                    } catch {
+                        return error
+                    }
+                }()
                 
-                if case .failure = newFormatResult, case .failure(let oldErr) = oldFormatResult {
-                    throw oldErr
+                if let newFormatResult, let oldFormatResult {
+                    _ = newFormatResult
+                    throw oldFormatResult
                 }
             }
             

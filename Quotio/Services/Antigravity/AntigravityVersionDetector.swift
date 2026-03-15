@@ -12,7 +12,7 @@ import AppKit
 import Foundation
 
 /// Detects installed Antigravity IDE version for format-aware token injection
-nonisolated enum AntigravityVersionDetector {
+enum AntigravityVersionDetector {
     
     // MARK: - Types
     

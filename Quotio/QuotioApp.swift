@@ -417,6 +417,11 @@ struct ContentView: View {
                         Label(modeManager.isMonitorMode ? "nav.accounts".localized() : "nav.providers".localized(), 
                               systemImage: "person.2.badge.key")
                             .tag(NavigationPage.providers)
+
+                        if modeManager.isLocalProxyMode {
+                            Label("Identity Packages", systemImage: "shield.lefthalf.filled.badge.checkmark")
+                                .tag(NavigationPage.identityPackages)
+                        }
                         
                         // Proxy mode only (local or remote)
                         if modeManager.isProxyMode {
@@ -508,6 +513,8 @@ struct ContentView: View {
                 QuotaScreen()
             case .providers:
                 ProvidersScreen()
+            case .identityPackages:
+                IdentityPackagesScreen()
             case .fallback:
                 FallbackScreen()
             case .agents:
