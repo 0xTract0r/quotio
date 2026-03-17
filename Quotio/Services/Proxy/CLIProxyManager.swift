@@ -192,17 +192,13 @@ final class CLIProxyManager {
     }
     
     init() {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            fatalError("Application Support directory not found")
-        }
-        let quotioDir = appSupport.appendingPathComponent("Quotio")
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let quotioDir = AppRuntimeProfile.appSupportDirectoryURL
         
         try? FileManager.default.createDirectory(at: quotioDir, withIntermediateDirectories: true)
         
         self.binaryPath = quotioDir.appendingPathComponent("CLIProxyAPI").path
         self.configPath = quotioDir.appendingPathComponent("config.yaml").path
-        self.authDir = homeDir.appendingPathComponent(".cli-proxy-api").path
+        self.authDir = AppRuntimeProfile.authDirectoryURL.path
         
         // Always use key from Keychain, generate new if not exists
         // Never read from config because CLIProxyAPI hashes the key on startup
@@ -219,6 +215,8 @@ final class CLIProxyManager {
         let savedPort = UserDefaults.standard.integer(forKey: "proxyPort")
         if savedPort > 0 && savedPort < 65536 {
             self.proxyStatus.port = UInt16(savedPort)
+        } else {
+            self.proxyStatus.port = AppRuntimeProfile.defaultProxyPort
         }
 
         // Note: Bridge mode default is registered in AppDelegate.applicationDidFinishLaunching()

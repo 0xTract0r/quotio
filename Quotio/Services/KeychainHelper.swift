@@ -11,10 +11,10 @@ import Security
 // MARK: - Keychain Helper
 
 enum KeychainHelper {
-    private static let remoteService = "dev.quotio.desktop.remote-management"
-    private static let localService = "dev.quotio.desktop.local-management"
-    private static let warpService = "dev.quotio.desktop.warp"
-    private static let identityProxyService = "dev.quotio.desktop.identity-package.proxy"
+    private static let remoteServiceBase = "dev.quotio.desktop.remote-management"
+    private static let localServiceBase = "dev.quotio.desktop.local-management"
+    private static let warpServiceBase = "dev.quotio.desktop.warp"
+    private static let identityProxyServiceBase = "dev.quotio.desktop.identity-package.proxy"
     private static let localManagementAccount = "local-management-key"
     private static let warpTokensAccount = "warp-tokens"
     private static let localManagementDefaultsKey = "managementKey"
@@ -33,6 +33,11 @@ enum KeychainHelper {
         "proseek.io.vn.Quotio.warp",
         "com.quotio.warp",
     ]
+
+    private static var remoteService: String { AppRuntimeProfile.namespacedKeychainService(remoteServiceBase) }
+    private static var localService: String { AppRuntimeProfile.namespacedKeychainService(localServiceBase) }
+    private static var warpService: String { AppRuntimeProfile.namespacedKeychainService(warpServiceBase) }
+    private static var identityProxyService: String { AppRuntimeProfile.namespacedKeychainService(identityProxyServiceBase) }
 
     static func saveManagementKey(_ key: String, for configId: String) {
         let account = "management-key-\(configId)"
