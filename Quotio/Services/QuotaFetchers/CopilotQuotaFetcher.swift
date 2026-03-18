@@ -5,7 +5,7 @@
 
 import Foundation
 
-nonisolated struct CopilotQuotaSnapshot: Codable, Sendable {
+struct CopilotQuotaSnapshot: Codable, Sendable {
     let entitlement: Int?
     let remaining: Int?
     let percentRemaining: Double?
@@ -32,7 +32,7 @@ nonisolated struct CopilotQuotaSnapshot: Codable, Sendable {
     }
 }
 
-nonisolated struct CopilotQuotaSnapshots: Codable, Sendable {
+struct CopilotQuotaSnapshots: Codable, Sendable {
     let chat: CopilotQuotaSnapshot?
     let completions: CopilotQuotaSnapshot?
     let premiumInteractions: CopilotQuotaSnapshot?
@@ -45,18 +45,18 @@ nonisolated struct CopilotQuotaSnapshots: Codable, Sendable {
 }
 
 /// Quota structure for limited users (free/individual plans)
-nonisolated struct CopilotLimitedUserQuotas: Codable, Sendable {
+struct CopilotLimitedUserQuotas: Codable, Sendable {
     let chat: Int?
     let completions: Int?
 }
 
 /// Monthly quota limits
-nonisolated struct CopilotMonthlyQuotas: Codable, Sendable {
+struct CopilotMonthlyQuotas: Codable, Sendable {
     let chat: Int?
     let completions: Int?
 }
 
-nonisolated struct CopilotEntitlement: Codable, Sendable {
+struct CopilotEntitlement: Codable, Sendable {
     let accessTypeSku: String?
     let copilotPlan: String?
     let chatEnabled: Bool?
@@ -143,7 +143,7 @@ nonisolated struct CopilotEntitlement: Codable, Sendable {
     }
 }
 
-nonisolated struct CopilotAuthFile: Codable, Sendable {
+struct CopilotAuthFile: Codable, Sendable {
     let accessToken: String
     let tokenType: String?
     let scope: String?
@@ -161,7 +161,7 @@ nonisolated struct CopilotAuthFile: Codable, Sendable {
 
 // MARK: - Copilot API Token Response
 
-nonisolated struct CopilotAPITokenResponse: Codable, Sendable {
+struct CopilotAPITokenResponse: Codable, Sendable {
     let token: String
     let expiresAt: Int64?
 
@@ -173,7 +173,7 @@ nonisolated struct CopilotAPITokenResponse: Codable, Sendable {
 
 // MARK: - Copilot Model Info
 
-nonisolated struct CopilotModelInfo: Codable, Sendable {
+struct CopilotModelInfo: Codable, Sendable {
     let id: String
     let name: String?
     let modelPickerEnabled: Bool?
@@ -196,7 +196,7 @@ nonisolated struct CopilotModelInfo: Codable, Sendable {
     }
 }
 
-nonisolated struct CopilotModelsResponse: Codable, Sendable {
+struct CopilotModelsResponse: Codable, Sendable {
     let data: [CopilotModelInfo]
 }
 
@@ -235,7 +235,7 @@ actor CopilotQuotaFetcher {
         }
     }
     
-    func fetchAllCopilotQuotas(authDir: String = "~/.cli-proxy-api") async -> [String: ProviderQuotaData] {
+    func fetchAllCopilotQuotas(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
         
@@ -405,7 +405,7 @@ actor CopilotQuotaFetcher {
     }
 
     /// Fetch available models for all Copilot accounts
-    func fetchAllAvailableModels(authDir: String = "~/.cli-proxy-api") async -> [CopilotModelInfo] {
+    func fetchAllAvailableModels(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [CopilotModelInfo] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 
@@ -428,7 +428,7 @@ actor CopilotQuotaFetcher {
     }
 
     /// Get only the models that are available for the user (model_picker_enabled == true)
-    func fetchUserAvailableModelIds(authDir: String = "~/.cli-proxy-api") async -> Set<String> {
+    func fetchUserAvailableModelIds(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> Set<String> {
         let models = await fetchAllAvailableModels(authDir: authDir)
         return Set(models.filter { $0.isAvailable }.map { $0.id })
     }

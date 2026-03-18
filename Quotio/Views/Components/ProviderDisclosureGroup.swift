@@ -16,6 +16,7 @@ struct ProviderDisclosureGroup: View {
     let accounts: [AccountRowData]
     var onDeleteAccount: ((AccountRowData) -> Void)?
     var onEditAccount: ((AccountRowData) -> Void)?
+    var onConfigureProxy: ((AccountRowData) -> Void)?
     var onSwitchAccount: ((AccountRowData) -> Void)?
     var onToggleDisabled: ((AccountRowData) -> Void)?
     var isAccountActive: ((AccountRowData) -> Bool)?
@@ -34,6 +35,7 @@ struct ProviderDisclosureGroup: View {
                     account: account,
                     onDelete: onDeleteAccount != nil ? { onDeleteAccount?(account) } : nil,
                     onEdit: onEditAccount != nil ? { onEditAccount?(account) } : nil,
+                    onConfigureProxy: onConfigureProxy != nil ? { onConfigureProxy?(account) } : nil,
                     onSwitch: onSwitchAccount != nil ? { onSwitchAccount?(account) } : nil,
                     onToggleDisabled: onToggleDisabled != nil ? { onToggleDisabled?(account) } : nil,
                     isActiveInIDE: isAccountActive?(account) ?? false
@@ -97,6 +99,7 @@ struct ProviderDisclosureGroup: View {
                     status: "ready",
                     statusMessage: nil,
                     isDisabled: false,
+                    canToggleDisabled: true,
                     canDelete: true
                 ),
                 AccountRowData(
@@ -107,6 +110,7 @@ struct ProviderDisclosureGroup: View {
                     status: "cooling",
                     statusMessage: "Rate limited",
                     isDisabled: false,
+                    canToggleDisabled: true,
                     canDelete: true
                 )
             ]
@@ -123,6 +127,7 @@ struct ProviderDisclosureGroup: View {
                     status: nil,
                     statusMessage: nil,
                     isDisabled: false,
+                    canToggleDisabled: false,
                     canDelete: false
                 )
             ]

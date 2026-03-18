@@ -115,6 +115,7 @@ Launch Quotio and click **Start** on the dashboard to initialize the local proxy
 
 ### 2. Connect Accounts
 Go to **Providers** tab → Click on a provider → Authenticate via OAuth or import credentials.
+For each Claude/Codex/Gemini-style account, you can open the account-level proxy editor from **Providers** and assign a dedicated upstream proxy IP.
 
 ### 3. Configure Agents
 Go to **Agents** tab → Select an installed agent → Click **Configure** → Choose Automatic or Manual mode.
@@ -127,6 +128,7 @@ Go to **Agents** tab → Select an installed agent → Click **Configure** → C
 ## ⚙️ Settings
 
 - **Port**: Change the proxy listening port
+- **Upstream Proxy**: Global default proxy, used only when an account does not define its own upstream proxy
 - **Routing Strategy**: Round Robin or Fill First
 - **Auto-start**: Launch proxy automatically when Quotio opens
 - **Notifications**: Toggle alerts for various events

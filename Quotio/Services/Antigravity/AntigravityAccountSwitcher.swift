@@ -257,7 +257,7 @@ final class AntigravityAccountSwitcher {
     }
     
     /// Execute switch using account email to find the auth file
-    func executeSwitchForEmail(_ email: String, authDir: String = "~/.cli-proxy-api") async {
+    func executeSwitchForEmail(_ email: String, authDir: String = RuntimeProfile.authDirectoryTildePath) async {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         
         // Build expected filename: antigravity-user@gmail.com.json

@@ -981,6 +981,10 @@ final class QuotaViewModel {
             
             try await proxyManager.start()
             setupAPIClient()
+            await requestTracker.configureRouteObserver(
+                baseURL: proxyManager.managementURL,
+                authKey: proxyManager.managementKey
+            )
             startAutoRefresh()
             restartWarmupScheduler()
 
@@ -1021,6 +1025,7 @@ final class QuotaViewModel {
         
         // Stop RequestTracker
         requestTracker.stop()
+        requestTracker.resetRouteObserver()
         
         proxyManager.stop()
         restartWarmupScheduler()
@@ -1570,6 +1575,58 @@ final class QuotaViewModel {
             Log.error("toggleAuthFileDisabled: Failed - \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
+    }
+
+    func toggleDirectAuthFileDisabled(_ file: DirectAuthFile) async {
+        do {
+            try await directAuthService.updateDisabled(filePath: file.filePath, disabled: !file.isDisabled)
+            await loadDirectAuthFiles()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadAuthFileProxyURL(_ file: AuthFile) async throws -> String? {
+        guard let client = apiClient else {
+            throw APIError.connectionError("Proxy not running")
+        }
+
+        let data = try await client.downloadAuthFile(name: file.name)
+        return Self.parseProxyURL(from: data)
+    }
+
+    func updateAuthFileProxyURL(_ proxyURL: String?, for file: AuthFile) async throws {
+        guard let client = apiClient else {
+            throw APIError.connectionError("Proxy not running")
+        }
+
+        let trimmedProxyURL = proxyURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        try await client.setAuthFileProxyURL(name: file.name, proxyURL: trimmedProxyURL)
+        await refreshData()
+    }
+
+    func updateDirectAuthFileProxyURL(_ proxyURL: String?, for file: DirectAuthFile) async throws {
+        try await directAuthService.updateProxyURL(filePath: file.filePath, proxyURL: proxyURL)
+        await loadDirectAuthFiles()
+    }
+
+    func deleteDirectAuthFile(_ file: DirectAuthFile) async {
+        do {
+            try await directAuthService.deleteAuthFile(filePath: file.filePath)
+            await loadDirectAuthFiles()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private static func parseProxyURL(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawProxyURL = json["proxy_url"] as? String else {
+            return nil
+        }
+
+        let trimmedProxyURL = rawProxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedProxyURL.isEmpty ? nil : trimmedProxyURL
     }
 
     /// Remove menu bar items that no longer have valid quota data

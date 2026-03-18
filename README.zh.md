@@ -115,6 +115,7 @@ brew install --cask quotio
 
 ### 2. 连接账号
 进入 **Providers** 标签页 → 点击一个提供商 → 通过 OAuth 认证或导入凭据。
+对于 Claude / Codex / Gemini 这类账号，现在可以直接在 **Providers** 里打开账号级代理编辑入口，为每个账号分配独立的上游代理 IP。
 
 ### 3. 配置 Agent
 进入 **Agents** 标签页 → 选择已安装的 Agent → 点击 **Configure** → 选择自动或手动模式。
@@ -127,6 +128,7 @@ brew install --cask quotio
 ## ⚙️ 设置
 
 - **端口**：更改代理监听端口
+- **上游代理**：全局默认代理，仅在账号没有单独配置上游代理时生效
 - **路由策略**：轮询（Round Robin）或先满（Fill First）
 - **自动启动**：Quotio 打开时自动启动代理
 - **通知**：开关各类提醒

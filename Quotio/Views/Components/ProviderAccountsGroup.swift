@@ -187,6 +187,7 @@ struct AllAccountsSection: View {
                     status: "ready",
                     statusMessage: nil,
                     isDisabled: false,
+                    canToggleDisabled: true,
                     canDelete: true
                 ),
                 AccountRowData(
@@ -197,6 +198,7 @@ struct AllAccountsSection: View {
                     status: "ready",
                     statusMessage: nil,
                     isDisabled: false,
+                    canToggleDisabled: true,
                     canDelete: true
                 ),
                 AccountRowData(
@@ -207,7 +209,8 @@ struct AllAccountsSection: View {
                     status: nil,
                     statusMessage: nil,
                     isDisabled: false,
-                    canDelete: false
+                    canToggleDisabled: true,
+                    canDelete: true
                 ),
                 AccountRowData(
                     id: "4",
@@ -217,6 +220,7 @@ struct AllAccountsSection: View {
                     status: nil,
                     statusMessage: nil,
                     isDisabled: false,
+                    canToggleDisabled: false,
                     canDelete: false
                 )
             ],

@@ -25,6 +25,7 @@ struct ProvidersScreen: View {
     @State private var editingWarpToken: WarpService.WarpToken?
     @State private var showAddProviderPopover = false
     @State private var switchingAccount: AccountRowData?
+    @State private var accountProxyEditor: AccountProxyEditorContext?
     @State private var modeManager = OperatingModeManager.shared
 
     private let customProviderService = CustomProviderService.shared
@@ -83,6 +84,7 @@ struct ProvidersScreen: View {
                 status: "ready",
                 statusMessage: nil,
                 isDisabled: false,
+                canToggleDisabled: false,
                 canDelete: true,
                 canEdit: true
             )
@@ -100,6 +102,7 @@ struct ProvidersScreen: View {
                 status: "ready",
                 statusMessage: nil,
                 isDisabled: false,
+                canToggleDisabled: false,
                 canDelete: true,
                 canEdit: true
             )
@@ -225,6 +228,10 @@ struct ProvidersScreen: View {
             )
             .environment(viewModel)
         }
+        .sheet(item: $accountProxyEditor) { context in
+            AccountProxySheet(context: context)
+                .environment(viewModel)
+        }
     }
     
     // MARK: - Toolbar
@@ -292,6 +299,9 @@ struct ProvidersScreen: View {
                             } else if provider == .warp {
                                 handleEditWarpAccount(account)
                             }
+                        },
+                        onConfigureProxy: { account in
+                            handleConfigureAccountProxy(account)
                         },
                         onSwitchAccount: provider == .antigravity ? { account in
                             switchingAccount = account
@@ -416,19 +426,24 @@ struct ProvidersScreen: View {
             return
         }
 
-        // Find the original AuthFile to delete
         if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
             await viewModel.deleteAuthFile(authFile)
+            return
+        }
+
+        if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
+            await viewModel.deleteDirectAuthFile(directAuthFile)
         }
     }
 
     private func toggleAccountDisabled(_ account: AccountRowData) async {
-        // Only proxy accounts can be disabled via API
-        guard account.source == .proxy else { return }
-
-        // Find the original AuthFile to toggle
         if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
             await viewModel.toggleAuthFileDisabled(authFile)
+            return
+        }
+
+        if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
+            await viewModel.toggleDirectAuthFileDisabled(directAuthFile)
         }
     }
 
@@ -447,10 +462,206 @@ struct ProvidersScreen: View {
         }
     }
 
+    private func handleConfigureAccountProxy(_ account: AccountRowData) {
+        if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
+            accountProxyEditor = AccountProxyEditorContext(
+                id: account.id,
+                provider: account.provider,
+                displayName: account.displayName,
+                authFile: authFile,
+                directAuthFile: nil
+            )
+            return
+        }
+
+        if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
+            accountProxyEditor = AccountProxyEditorContext(
+                id: account.id,
+                provider: account.provider,
+                displayName: account.displayName,
+                authFile: nil,
+                directAuthFile: directAuthFile
+            )
+            return
+        }
+
+        viewModel.errorMessage = "providers.accountProxy.missing".localized()
+    }
+
     private func syncCustomProvidersToConfig() {
         // Silent failure - custom provider sync is non-critical
         // Config will be synced on next proxy start
         try? customProviderService.syncToConfigFile(configPath: viewModel.proxyManager.configPath)
+    }
+}
+
+private struct AccountProxyEditorContext: Identifiable {
+    let id: String
+    let provider: AIProvider
+    let displayName: String
+    let authFile: AuthFile?
+    let directAuthFile: DirectAuthFile?
+}
+
+private struct AccountProxySheet: View {
+    @Environment(QuotaViewModel.self) private var viewModel
+    @Environment(\.dismiss) private var dismiss
+
+    let context: AccountProxyEditorContext
+
+    @State private var proxyURL = ""
+    @State private var validation: ProxyURLValidationResult = .empty
+    @State private var isLoading = true
+    @State private var isSaving = false
+    @State private var loadError: String?
+    @State private var saveError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                ProviderIcon(provider: context.provider, size: 28)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("providers.accountProxy.title".localized())
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    Text(context.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if isLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("settings.remote.loading".localized())
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("providers.accountProxy.description".localized())
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: proxyURL) { _, newValue in
+                            validation = ProxyURLValidator.validate(newValue)
+                            saveError = nil
+                        }
+
+                    if validation != .valid && validation != .empty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text((validation.localizationKey ?? "").localized())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("providers.accountProxy.fallback".localized())
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let loadError {
+                        Text(loadError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if let saveError {
+                        Text(saveError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+
+            Spacer()
+
+            HStack {
+                Button("providers.accountProxy.clear".localized()) {
+                    proxyURL = ""
+                    validation = .empty
+                    saveError = nil
+                }
+                .disabled(isLoading || isSaving || proxyURL.isEmpty)
+
+                Spacer()
+
+                Button("action.cancel".localized(), role: .cancel) {
+                    dismiss()
+                }
+
+                Button {
+                    Task { await save() }
+                } label: {
+                    if isSaving {
+                        SmallProgressView()
+                    } else {
+                        Text("action.save".localized())
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isLoading || isSaving || !validation.isValid)
+            }
+        }
+        .padding(24)
+        .frame(width: 460, height: 280)
+        .task {
+            await loadCurrentValue()
+        }
+    }
+
+    private func loadCurrentValue() async {
+        isLoading = true
+        loadError = nil
+
+        do {
+            if let authFile = context.authFile {
+                proxyURL = try await viewModel.loadAuthFileProxyURL(authFile) ?? ""
+            } else if let directAuthFile = context.directAuthFile {
+                proxyURL = directAuthFile.proxyURL ?? ""
+            } else {
+                loadError = "providers.accountProxy.missing".localized()
+            }
+
+            validation = ProxyURLValidator.validate(proxyURL)
+        } catch {
+            loadError = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    private func save() async {
+        guard validation.isValid else {
+            saveError = (validation.localizationKey ?? "").localized()
+            return
+        }
+
+        isSaving = true
+        saveError = nil
+        defer { isSaving = false }
+
+        let sanitizedProxyURL = proxyURL.isEmpty ? nil : ProxyURLValidator.sanitize(proxyURL)
+
+        do {
+            if let authFile = context.authFile {
+                try await viewModel.updateAuthFileProxyURL(sanitizedProxyURL, for: authFile)
+            } else if let directAuthFile = context.directAuthFile {
+                try await viewModel.updateDirectAuthFileProxyURL(sanitizedProxyURL, for: directAuthFile)
+            } else {
+                saveError = "providers.accountProxy.missing".localized()
+                return
+            }
+
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 }
 

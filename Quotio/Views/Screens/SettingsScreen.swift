@@ -472,9 +472,12 @@ struct UnifiedProxySettingsSection: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("settings.upstreamProxy.placeholder".localized())
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("settings.upstreamProxy.placeholder".localized())
+                        Text("settings.upstreamProxy.globalFallback".localized())
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
         } header: {

@@ -9,14 +9,14 @@
 import Foundation
 
 /// API fetch result type
-nonisolated enum ClaudeAPIResult: Sendable {
+enum ClaudeAPIResult: Sendable {
     case success(ClaudeCodeQuotaInfo)
     case authenticationError  // Token expired or invalid - needs re-authentication
     case otherError
 }
 
 /// Quota data from Claude Code OAuth API
-nonisolated struct ClaudeCodeQuotaInfo: Sendable {
+struct ClaudeCodeQuotaInfo: Sendable {
     let accessToken: String?
     let email: String?
 
@@ -55,7 +55,7 @@ nonisolated struct ClaudeCodeQuotaInfo: Sendable {
 actor ClaudeCodeQuotaFetcher {
 
     /// Auth directory for CLI Proxy API
-    private let authDir = "~/.cli-proxy-api"
+    private let authDir = RuntimeProfile.authDirectoryTildePath
 
     /// Anthropic OAuth usage API endpoint
     private let usageURL = "https://api.anthropic.com/api/oauth/usage"

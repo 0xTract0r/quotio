@@ -10,7 +10,7 @@ import SwiftUI
 
 // MARK: - Model Group
 
-nonisolated enum AntigravityModelGroup: String, CaseIterable, Identifiable {
+enum AntigravityModelGroup: String, CaseIterable, Identifiable {
     case claude = "Claude"
     case geminiPro = "Gemini Pro"
     case geminiFlash = "Gemini Flash"
@@ -47,7 +47,7 @@ nonisolated enum AntigravityModelGroup: String, CaseIterable, Identifiable {
     }
 }
 
-nonisolated struct GroupedModelQuota: Identifiable, Sendable {
+struct GroupedModelQuota: Identifiable, Sendable {
     let group: AntigravityModelGroup
     let models: [ModelQuota]
 
@@ -124,7 +124,7 @@ nonisolated struct GroupedModelQuota: Identifiable, Sendable {
 
 // MARK: - Models
 
-nonisolated struct ModelQuota: Codable, Identifiable, Sendable {
+struct ModelQuota: Codable, Identifiable, Sendable {
     let name: String
     let percentage: Double
     let resetTime: String
@@ -267,7 +267,7 @@ nonisolated struct ModelQuota: Codable, Identifiable, Sendable {
     }
 }
 
-nonisolated struct ProviderQuotaData: Codable, Sendable {
+struct ProviderQuotaData: Codable, Sendable {
     var models: [ModelQuota]
     var lastUpdated: Date
     var isForbidden: Bool
@@ -342,7 +342,7 @@ nonisolated struct ProviderQuotaData: Codable, Sendable {
 
 // MARK: - Subscription Info Models
 
-nonisolated struct SubscriptionTier: Codable, Sendable {
+struct SubscriptionTier: Codable, Sendable {
     let id: String
     let name: String
     let description: String
@@ -354,12 +354,12 @@ nonisolated struct SubscriptionTier: Codable, Sendable {
     let userDefinedCloudaicompanionProject: Bool?
 }
 
-nonisolated struct PrivacyNotice: Codable, Sendable {
+struct PrivacyNotice: Codable, Sendable {
     let showNotice: Bool?
     let noticeText: String?
 }
 
-nonisolated struct SubscriptionInfo: Codable, Sendable {
+struct SubscriptionInfo: Codable, Sendable {
     let currentTier: SubscriptionTier?
     let allowedTiers: [SubscriptionTier]?
     let cloudaicompanionProject: String?
@@ -401,20 +401,20 @@ nonisolated struct SubscriptionInfo: Codable, Sendable {
 
 // MARK: - API Response Models
 
-nonisolated private struct QuotaAPIResponse: Codable, Sendable {
+private struct QuotaAPIResponse: Codable, Sendable {
     let models: [String: ModelInfo]
 }
 
-nonisolated private struct ModelInfo: Codable, Sendable {
+private struct ModelInfo: Codable, Sendable {
     let quotaInfo: QuotaInfo?
 }
 
-nonisolated private struct QuotaInfo: Codable, Sendable {
+private struct QuotaInfo: Codable, Sendable {
     let remainingFraction: Double?
     let resetTime: String?
 }
 
-nonisolated private struct TokenRefreshResponse: Codable, Sendable {
+private struct TokenRefreshResponse: Codable, Sendable {
     let accessToken: String
     let expiresIn: Int
     let tokenType: String?
@@ -428,7 +428,7 @@ nonisolated private struct TokenRefreshResponse: Codable, Sendable {
 
 // MARK: - Auth File Model
 
-nonisolated struct AntigravityAuthFile: Codable, Sendable {
+struct AntigravityAuthFile: Codable, Sendable {
     var accessToken: String
     let email: String
     var expired: String?
@@ -687,7 +687,7 @@ actor AntigravityQuotaFetcher {
         return await fetchSubscriptionInfo(accessToken: accessToken)
     }
 
-    func fetchAllSubscriptionInfo(authDir: String = "~/.cli-proxy-api") async -> [String: SubscriptionInfo] {
+    func fetchAllSubscriptionInfo(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: SubscriptionInfo] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 
@@ -768,7 +768,7 @@ actor AntigravityQuotaFetcher {
         return (quota, subscription)
     }
 
-    func fetchAllAntigravityQuotas(authDir: String = "~/.cli-proxy-api") async -> [String: ProviderQuotaData] {
+    func fetchAllAntigravityQuotas(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 
@@ -810,7 +810,7 @@ actor AntigravityQuotaFetcher {
 
     /// Fetch all Antigravity data (quotas + subscriptions) in one call
     /// This avoids duplicate API calls by reusing cached subscription info
-    func fetchAllAntigravityData(authDir: String = "~/.cli-proxy-api") async -> (quotas: [String: ProviderQuotaData], subscriptions: [String: SubscriptionInfo]) {
+    func fetchAllAntigravityData(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> (quotas: [String: ProviderQuotaData], subscriptions: [String: SubscriptionInfo]) {
         // Clear cache at start of refresh cycle
         clearCache()
 
@@ -856,7 +856,7 @@ actor AntigravityQuotaFetcher {
 
     /// Legacy function - now just calls fetchAllAntigravityQuotas
     @available(*, deprecated, message: "Use fetchAllAntigravityData instead")
-    func fetchAllAntigravityQuotasLegacy(authDir: String = "~/.cli-proxy-api") async -> [String: ProviderQuotaData] {
+    func fetchAllAntigravityQuotasLegacy(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 
@@ -888,7 +888,7 @@ actor AntigravityQuotaFetcher {
 
 // MARK: - Errors
 
-nonisolated enum QuotaFetchError: LocalizedError {
+enum QuotaFetchError: LocalizedError {
     case invalidURL
     case invalidResponse
     case forbidden

@@ -27,10 +27,7 @@ final class ProxyStorageManager {
     private static let binaryName = "CLIProxyAPI"
     
     private init() {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            fatalError("Application Support directory not found")
-        }
-        self.proxyDir = appSupport.appendingPathComponent("Quotio/proxy")
+        self.proxyDir = RuntimeProfile.applicationSupportDirectory(fileManager: fileManager).appendingPathComponent("proxy")
         self.currentSymlink = proxyDir.appendingPathComponent("current")
         
         try? fileManager.createDirectory(at: proxyDir, withIntermediateDirectories: true)

@@ -209,7 +209,7 @@ actor OpenAIQuotaFetcher {
         }
     }
 
-    func fetchAllCodexQuotas(authDir: String = "~/.cli-proxy-api") async -> [String: ProviderQuotaData] {
+    func fetchAllCodexQuotas(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
         
@@ -234,7 +234,7 @@ actor OpenAIQuotaFetcher {
     }
 }
 
-nonisolated struct CodexUsageResponse: Codable, Sendable {
+struct CodexUsageResponse: Codable, Sendable {
     let planType: String?
     let rateLimit: RateLimitInfo?
     let codeReviewRateLimit: RateLimitInfo?
@@ -248,7 +248,7 @@ nonisolated struct CodexUsageResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct RateLimitInfo: Codable, Sendable {
+struct RateLimitInfo: Codable, Sendable {
     let allowed: Bool?
     let limitReached: Bool?
     let primaryWindow: WindowInfo?
@@ -262,7 +262,7 @@ nonisolated struct RateLimitInfo: Codable, Sendable {
     }
 }
 
-nonisolated struct WindowInfo: Codable, Sendable {
+struct WindowInfo: Codable, Sendable {
     let usedPercent: Int?
     let limitWindowSeconds: Int?
     let resetAfterSeconds: Int?
@@ -276,7 +276,7 @@ nonisolated struct WindowInfo: Codable, Sendable {
     }
 }
 
-nonisolated struct CreditsInfo: Codable, Sendable {
+struct CreditsInfo: Codable, Sendable {
     let hasCredits: Bool?
     let unlimited: Bool?
     let balance: String?
@@ -288,7 +288,7 @@ nonisolated struct CreditsInfo: Codable, Sendable {
     }
 }
 
-nonisolated struct CodexQuotaData: Codable, Sendable {
+struct CodexQuotaData: Codable, Sendable {
     let planType: String
     let sessionUsedPercent: Int
     let sessionResetAt: Date?
@@ -349,7 +349,7 @@ nonisolated struct CodexQuotaData: Codable, Sendable {
     }
 }
 
-nonisolated struct CodexAuthFile: Codable, Sendable {
+struct CodexAuthFile: Codable, Sendable {
     var accessToken: String
     let accountId: String?
     let email: String?
@@ -391,7 +391,7 @@ nonisolated struct CodexAuthFile: Codable, Sendable {
     }
 }
 
-private nonisolated struct TokenRefreshResponse: Codable, Sendable {
+private struct TokenRefreshResponse: Codable, Sendable {
     let accessToken: String
     
     enum CodingKeys: String, CodingKey {
@@ -399,7 +399,7 @@ private nonisolated struct TokenRefreshResponse: Codable, Sendable {
     }
 }
 
-nonisolated enum CodexQuotaError: LocalizedError {
+enum CodexQuotaError: LocalizedError {
     case invalidResponse
     case invalidURL
     case httpError(Int)

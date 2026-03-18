@@ -33,6 +33,7 @@ struct AccountRowData: Identifiable, Hashable {
     let status: String?           // "ready", "cooling", "error", etc.
     let statusMessage: String?
     let isDisabled: Bool
+    let canToggleDisabled: Bool
     let canDelete: Bool           // Only proxy accounts can be deleted
     let canEdit: Bool             // Whether this account can be edited (GLM only)
     let canSwitch: Bool           // Whether this account can be switched (Antigravity only)
@@ -47,6 +48,7 @@ struct AccountRowData: Identifiable, Hashable {
         status: String?,
         statusMessage: String?,
         isDisabled: Bool,
+        canToggleDisabled: Bool,
         canDelete: Bool,
         canEdit: Bool = false,
         canSwitch: Bool = false
@@ -59,6 +61,7 @@ struct AccountRowData: Identifiable, Hashable {
         self.status = status
         self.statusMessage = statusMessage
         self.isDisabled = isDisabled
+        self.canToggleDisabled = canToggleDisabled
         self.canDelete = canDelete
         self.canEdit = canEdit
         self.canSwitch = canSwitch
@@ -67,6 +70,15 @@ struct AccountRowData: Identifiable, Hashable {
     // For menu bar selection
     var menuBarItem: MenuBarQuotaItem {
         MenuBarQuotaItem(provider: provider.rawValue, accountKey: menuBarAccountKey)
+    }
+
+    var canConfigureProxy: Bool {
+        switch source {
+        case .proxy, .direct:
+            return provider != .glm && provider != .warp
+        case .autoDetected:
+            return false
+        }
     }
 
     // MARK: - Factory Methods
@@ -83,6 +95,7 @@ struct AccountRowData: Identifiable, Hashable {
             status: authFile.status,
             statusMessage: authFile.statusMessage,
             isDisabled: authFile.disabled,
+            canToggleDisabled: true,
             canDelete: true
         )
     }
@@ -98,8 +111,9 @@ struct AccountRowData: Identifiable, Hashable {
             source: .direct,
             status: nil,
             statusMessage: nil,
-            isDisabled: false,
-            canDelete: false
+            isDisabled: directAuthFile.isDisabled,
+            canToggleDisabled: true,
+            canDelete: true
         )
     }
     
@@ -114,6 +128,7 @@ struct AccountRowData: Identifiable, Hashable {
             status: nil,
             statusMessage: nil,
             isDisabled: false,
+            canToggleDisabled: false,
             canDelete: false
         )
     }
@@ -137,6 +152,7 @@ struct AccountRow: View {
     let account: AccountRowData
     var onDelete: (() -> Void)?
     var onEdit: (() -> Void)?
+    var onConfigureProxy: (() -> Void)?
     var onSwitch: (() -> Void)?
     var onToggleDisabled: (() -> Void)?
     var isActiveInIDE: Bool = false
@@ -254,7 +270,7 @@ struct AccountRow: View {
             )
 
             // Disable/Enable toggle button (only for proxy accounts)
-            if account.source == .proxy, let onToggleDisabled = onToggleDisabled {
+            if account.canToggleDisabled, let onToggleDisabled = onToggleDisabled {
                 Button {
                     onToggleDisabled()
                 } label: {
@@ -283,6 +299,18 @@ struct AccountRow: View {
                 }
                 .buttonStyle(.rowAction)
                 .help("action.edit".localized())
+            }
+
+            if account.canConfigureProxy, let onConfigureProxy = onConfigureProxy {
+                Button {
+                    onConfigureProxy()
+                } label: {
+                    Image(systemName: "network")
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.rowAction)
+                .help("providers.accountProxy.edit".localized())
+                .accessibilityLabel("providers.accountProxy.edit".localized())
             }
 
             // Delete button (only for proxy accounts)
@@ -322,7 +350,7 @@ struct AccountRow: View {
             }
 
             // Disable/Enable toggle (only for proxy accounts)
-            if account.source == .proxy, let onToggleDisabled = onToggleDisabled {
+            if account.canToggleDisabled, let onToggleDisabled = onToggleDisabled {
                 Button {
                     onToggleDisabled()
                 } label: {
@@ -342,6 +370,14 @@ struct AccountRow: View {
                     showDeleteConfirmation = true
                 } label: {
                     Label("action.delete".localized(), systemImage: "trash")
+                }
+            }
+
+            if account.canConfigureProxy, let onConfigureProxy = onConfigureProxy {
+                Button {
+                    onConfigureProxy()
+                } label: {
+                    Label("providers.accountProxy.edit".localized(), systemImage: "network")
                 }
             }
         }
@@ -397,6 +433,7 @@ struct AccountRow: View {
                 status: "ready",
                 statusMessage: nil,
                 isDisabled: false,
+                canToggleDisabled: true,
                 canDelete: true
             ),
             onDelete: {}
@@ -411,7 +448,8 @@ struct AccountRow: View {
                 status: nil,
                 statusMessage: nil,
                 isDisabled: false,
-                canDelete: false
+                canToggleDisabled: true,
+                canDelete: true
             )
         )
         
@@ -424,6 +462,7 @@ struct AccountRow: View {
                 status: nil,
                 statusMessage: nil,
                 isDisabled: false,
+                canToggleDisabled: false,
                 canDelete: false
             )
         )

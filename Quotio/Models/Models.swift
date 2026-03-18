@@ -6,9 +6,80 @@
 import Foundation
 import SwiftUI
 
+enum RuntimeProfile {
+    private static let productionBundleIdentifier = "dev.quotio.desktop"
+    private static let productionAppSupportDirectory = "Quotio"
+    private static let productionAuthDirectory = ".cli-proxy-api"
+
+    static var bundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? productionBundleIdentifier
+    }
+
+    static var isPrimaryApp: Bool {
+        bundleIdentifier == productionBundleIdentifier
+    }
+
+    static var applicationSupportDirectoryName: String {
+        if isPrimaryApp {
+            return productionAppSupportDirectory
+        }
+        return "Quotio-" + namespaceSuffix
+    }
+
+    static func applicationSupportDirectory(fileManager: FileManager = .default) -> URL {
+        guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            fatalError("Application Support directory not found")
+        }
+        return appSupport.appendingPathComponent(applicationSupportDirectoryName)
+    }
+
+    static var authDirectoryName: String {
+        if isPrimaryApp {
+            return productionAuthDirectory
+        }
+        return ".cli-proxy-api-" + namespaceSuffix
+    }
+
+    static var authDirectoryPath: String {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(authDirectoryName).path
+    }
+
+    static var authDirectoryTildePath: String {
+        "~/" + authDirectoryName
+    }
+
+    static var keychainServicePrefix: String {
+        bundleIdentifier
+    }
+
+    static var defaultProxyPort: Int {
+        isPrimaryApp ? 8317 : 18317
+    }
+
+    static func queueLabel(_ suffix: String) -> String {
+        bundleIdentifier + "." + suffix
+    }
+
+    private static var namespaceSuffix: String {
+        let rawSuffix: String
+        if bundleIdentifier.hasPrefix(productionBundleIdentifier + ".") {
+            rawSuffix = String(bundleIdentifier.dropFirst(productionBundleIdentifier.count + 1))
+        } else {
+            rawSuffix = bundleIdentifier
+        }
+
+        let sanitized = rawSuffix.replacingOccurrences(
+            of: #"[^A-Za-z0-9._-]+"#,
+            with: "-",
+            options: .regularExpression
+        )
+        return sanitized.isEmpty ? "test" : sanitized
+    }
+}
+
 // MARK: - Provider Types
 
-nonisolated enum AIProvider: String, CaseIterable, Codable, Identifiable {
+enum AIProvider: String, CaseIterable, Codable, Identifiable {
     case gemini = "gemini-cli"
     case claude = "claude"
     case codex = "codex"
@@ -230,9 +301,9 @@ nonisolated enum AIProvider: String, CaseIterable, Codable, Identifiable {
 
 // MARK: - Proxy Status
 
-nonisolated struct ProxyStatus: Codable {
+struct ProxyStatus: Codable {
     var running: Bool = false
-    var port: UInt16 = 8317
+    var port: UInt16 = UInt16(RuntimeProfile.defaultProxyPort)
     
     var endpoint: String {
         "http://localhost:\(port)/v1"
@@ -241,7 +312,7 @@ nonisolated struct ProxyStatus: Codable {
 
 // MARK: - Auth File (from Management API)
 
-nonisolated struct AuthFile: Codable, Identifiable, Hashable, Sendable {
+struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let name: String
     let provider: String
@@ -347,13 +418,13 @@ nonisolated struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
-nonisolated struct AuthFilesResponse: Codable, Sendable {
+struct AuthFilesResponse: Codable, Sendable {
     let files: [AuthFile]
 }
 
 // MARK: - API Keys (Proxy Service Auth)
 
-nonisolated struct APIKeysResponse: Codable, Sendable {
+struct APIKeysResponse: Codable, Sendable {
     let apiKeys: [String]
     
     enum CodingKeys: String, CodingKey {
@@ -363,7 +434,7 @@ nonisolated struct APIKeysResponse: Codable, Sendable {
 
 // MARK: - Usage Statistics
 
-nonisolated struct UsageStats: Codable, Sendable {
+struct UsageStats: Codable, Sendable {
     let usage: UsageData?
     let failedRequests: Int?
     
@@ -373,7 +444,7 @@ nonisolated struct UsageStats: Codable, Sendable {
     }
 }
 
-nonisolated struct UsageData: Codable, Sendable {
+struct UsageData: Codable, Sendable {
     let totalRequests: Int?
     let successCount: Int?
     let failureCount: Int?
@@ -398,24 +469,24 @@ nonisolated struct UsageData: Codable, Sendable {
 
 // MARK: - OAuth Flow
 
-nonisolated struct OAuthURLResponse: Codable, Sendable {
+struct OAuthURLResponse: Codable, Sendable {
     let status: String
     let url: String?
     let state: String?
     let error: String?
 }
 
-nonisolated struct OAuthStatusResponse: Codable, Sendable {
+struct OAuthStatusResponse: Codable, Sendable {
     let status: String
     let error: String?
 }
 
 // MARK: - App Config
 
-nonisolated struct AppConfig: Codable {
+struct AppConfig: Codable {
     var host: String = ""
-    var port: UInt16 = 8317
-    var authDir: String = "~/.cli-proxy-api"
+    var port: UInt16 = UInt16(RuntimeProfile.defaultProxyPort)
+    var authDir: String = RuntimeProfile.authDirectoryTildePath
     var proxyURL: String = ""
     var apiKeys: [String] = []
     var debug: Bool = false
@@ -443,11 +514,11 @@ nonisolated struct AppConfig: Codable {
     }
 }
 
-nonisolated struct RoutingConfig: Codable {
+struct RoutingConfig: Codable {
     var strategy: String = "round-robin"
 }
 
-nonisolated struct QuotaExceededConfig: Codable {
+struct QuotaExceededConfig: Codable {
     var switchProject: Bool = true
     var switchPreviewModel: Bool = true
     
@@ -457,7 +528,7 @@ nonisolated struct QuotaExceededConfig: Codable {
     }
 }
 
-nonisolated struct RemoteManagementConfig: Codable {
+struct RemoteManagementConfig: Codable {
     var allowRemote: Bool = false
     var secretKey: String = ""
     var disableControlPanel: Bool = false
@@ -471,7 +542,7 @@ nonisolated struct RemoteManagementConfig: Codable {
 
 // MARK: - Log Entry
 
-nonisolated struct LogEntry: Identifiable {
+struct LogEntry: Identifiable {
     let id = UUID()
     let timestamp: Date
     let level: LogLevel
@@ -493,7 +564,7 @@ nonisolated struct LogEntry: Identifiable {
 
 // MARK: - Navigation
 
-nonisolated enum NavigationPage: String, CaseIterable, Identifiable {
+enum NavigationPage: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
     case quota = "Quota"
     case providers = "Providers"
@@ -523,7 +594,7 @@ nonisolated enum NavigationPage: String, CaseIterable, Identifiable {
 
 // MARK: - Color Extension
 
-nonisolated extension Color {
+extension Color {
     init?(hex: String) {
         var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
@@ -554,7 +625,7 @@ extension Int {
 
 // MARK: - Proxy URL Validation
 
-nonisolated enum ProxyURLValidationResult: Equatable {
+enum ProxyURLValidationResult: Equatable {
     case valid
     case empty
     case invalidScheme
@@ -585,7 +656,7 @@ nonisolated enum ProxyURLValidationResult: Equatable {
     }
 }
 
-nonisolated enum ProxyURLValidator {
+enum ProxyURLValidator {
     static let supportedSchemes = ["socks5", "http", "https"]
     
     static func validate(_ urlString: String) -> ProxyURLValidationResult {

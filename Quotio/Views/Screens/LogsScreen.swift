@@ -350,6 +350,13 @@ struct RequestRow: View {
                                 .lineLimit(1)
                         }
                     }
+
+                    if let routeSummary = request.routeSummary {
+                        Text(routeSummary)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
                 }
                 .frame(width: 180, alignment: .leading)
 
