@@ -91,7 +91,7 @@ struct BindIdentityPackageSheet: View {
                     ContentUnavailableView(
                         "No Bindable Packages",
                         systemImage: "shield.slash",
-                        description: Text("Create an identity package first, then come back to bind this account.")
+                        description: Text("Only identity packages in Available status can be bound. Configure or unblock a package first.")
                     )
                     .frame(maxWidth: .infinity)
                 } else {

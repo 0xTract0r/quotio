@@ -12,6 +12,7 @@ struct IdentityPackagesScreen: View {
     @State private var draftProxyPassword = ""
     @State private var showDeleteConfirmation = false
     @State private var showImportSheet = false
+    @State private var showGenerateSheet = false
     @State private var importResultMessage: String?
 
     private var selectedPackage: RuntimeIdentityPackage? {
@@ -67,6 +68,9 @@ struct IdentityPackagesScreen: View {
                                     .textFieldStyle(.roundedBorder)
 
                                 detailRow(label: "Status", value: draftPackage.status.displayName)
+                                if let statusReason = draftPackage.statusReason, !statusReason.isEmpty {
+                                    detailRow(label: "Status Note", value: statusReason)
+                                }
                                 detailRow(label: "Bound Account", value: draftPackage.bindingDisplayName)
                                 detailRow(label: "Package ID", value: draftPackage.id.uuidString)
                             }
@@ -137,6 +141,32 @@ struct IdentityPackagesScreen: View {
                                     label: "TLS Digest",
                                     value: draftPackage.verification?.lastTLSDigest ?? "Unknown"
                                 )
+                                if let note = draftPackage.verification?.note, !note.isEmpty {
+                                    detailRow(label: "Verification Note", value: note)
+                                }
+
+                                Text("这些状态按钮只记录 Quotio 本地运维状态，不代表真实运行时已经完成验证或强绑定。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                HStack {
+                                    Button("Mark Verification Failed") {
+                                        markVerificationFailure()
+                                    }
+                                    .disabled(draftPackage.status == .verificationFailed)
+
+                                    Button("Mark Blocked") {
+                                        markBlocked()
+                                    }
+                                    .disabled(draftPackage.status == .blocked)
+
+                                    Spacer()
+
+                                    Button("Clear Local Status") {
+                                        clearOperationalStatus()
+                                    }
+                                    .disabled(!canClearOperationalStatus)
+                                }
                             }
 
                             HStack {
@@ -184,6 +214,12 @@ struct IdentityPackagesScreen: View {
                 importResultMessage = importMessage(for: result)
             }
         }
+        .sheet(isPresented: $showGenerateSheet) {
+            GenerateIdentityPackagesSheet { count, namePrefix in
+                viewModel.createIdentityPackages(count: count, namePrefix: namePrefix)
+                selectedPackageID = viewModel.identityPackages.first?.id
+            }
+        }
         .onAppear {
             if selectedPackageID == nil {
                 selectedPackageID = viewModel.identityPackages.first?.id
@@ -207,6 +243,15 @@ struct IdentityPackagesScreen: View {
                     Image(systemName: "square.and.arrow.down")
                 }
                 .help("Import proxies as identity packages")
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    showGenerateSheet = true
+                } label: {
+                    Image(systemName: "square.stack.3d.up.badge.a")
+                }
+                .help("Batch-generate identity packages")
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -277,6 +322,16 @@ struct IdentityPackagesScreen: View {
         return !draftPackage.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var canClearOperationalStatus: Bool {
+        guard let draftPackage else { return false }
+        switch draftPackage.status {
+        case .verificationFailed, .blocked:
+            return true
+        case .draft, .available, .bound:
+            return false
+        }
+    }
+
     private func binding<Value>(for keyPath: WritableKeyPath<RuntimeIdentityPackage, Value>, default defaultValue: Value) -> Binding<Value> {
         Binding(
             get: { draftPackage?[keyPath: keyPath] ?? defaultValue },
@@ -321,6 +376,24 @@ struct IdentityPackagesScreen: View {
         guard let selectedPackageID else { return }
         guard viewModel.deleteIdentityPackage(id: selectedPackageID) else { return }
         self.selectedPackageID = viewModel.identityPackages.first?.id
+        syncDraftFromSelection()
+    }
+
+    private func markVerificationFailure() {
+        guard let selectedPackageID else { return }
+        viewModel.markIdentityPackageVerificationFailure(id: selectedPackageID)
+        syncDraftFromSelection()
+    }
+
+    private func markBlocked() {
+        guard let selectedPackageID else { return }
+        viewModel.markIdentityPackageBlocked(id: selectedPackageID)
+        syncDraftFromSelection()
+    }
+
+    private func clearOperationalStatus() {
+        guard let selectedPackageID else { return }
+        viewModel.clearIdentityPackageOperationalStatus(id: selectedPackageID)
         syncDraftFromSelection()
     }
 

@@ -51,6 +51,10 @@ enum AppRuntimeProfile {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(authDirectoryName)
     }
 
+    static var authDirectoryPath: String {
+        authDirectoryURL.path
+    }
+
     static func namespacedKeychainService(_ baseService: String) -> String {
         guard let suffix else { return baseService }
         return "\(baseService).\(suffix)"

@@ -349,6 +349,11 @@ final class QuotaViewModel {
         syncIdentityPackageState()
     }
 
+    func createIdentityPackages(count: Int, namePrefix: String? = nil) {
+        identityPackageService.createPackages(count: count, namePrefix: namePrefix)
+        syncIdentityPackageState()
+    }
+
     func identityPackage(for authFile: AuthFile) -> RuntimeIdentityPackage? {
         identityPackageService.package(for: authFile.id)
     }
@@ -378,6 +383,21 @@ final class QuotaViewModel {
 
     func updateIdentityPackage(_ package: RuntimeIdentityPackage, proxyPassword: String?) {
         identityPackageService.updatePackage(package, proxyPassword: proxyPassword)
+        syncIdentityPackageState()
+    }
+
+    func markIdentityPackageVerificationFailure(id: UUID, note: String? = nil) {
+        identityPackageService.markVerificationFailure(packageId: id, note: note)
+        syncIdentityPackageState()
+    }
+
+    func markIdentityPackageBlocked(id: UUID, reason: String? = nil) {
+        identityPackageService.markBlocked(packageId: id, reason: reason)
+        syncIdentityPackageState()
+    }
+
+    func clearIdentityPackageOperationalStatus(id: UUID) {
+        identityPackageService.clearOperationalStatus(packageId: id)
         syncIdentityPackageState()
     }
 

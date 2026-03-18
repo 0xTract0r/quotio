@@ -25,8 +25,8 @@ actor AntigravityDeviceManager {
     private static let storagePath = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Antigravity/User/globalStorage/storage.json")
     
-    private static let profileStorageDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".quotio/antigravity-profiles")
+    private static let profileStorageDir = AppRuntimeProfile.appSupportDirectoryURL
+        .appendingPathComponent("antigravity-profiles", isDirectory: true)
     
     // MARK: - Profile Generation
     

@@ -415,7 +415,7 @@ struct OAuthStatusResponse: Codable, Sendable {
 struct AppConfig: Codable {
     var host: String = ""
     var port: UInt16 = 8317
-    var authDir: String = "~/.cli-proxy-api"
+    var authDir: String = AppRuntimeProfile.authDirectoryPath
     var proxyURL: String = ""
     var apiKeys: [String] = []
     var debug: Bool = false

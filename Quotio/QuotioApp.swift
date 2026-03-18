@@ -55,9 +55,15 @@ final class AppBootstrap {
     }
 
     private func performFullInitialization() async {
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[AppBootstrap] performFullInitialization start")
+        #endif
         // Scan auth files immediately (fast filesystem scan)
         // This allows menu bar to show providers before quota API calls complete
         await viewModel.loadDirectAuthFiles()
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[AppBootstrap] loadDirectAuthFiles completed")
+        #endif
 
         // Setup menu bar immediately so user can open it while data loads
         statusBarManager.setViewModel(viewModel)
@@ -77,6 +83,9 @@ final class AppBootstrap {
 
         // Load data in background (includes proxy auto-start if enabled)
         await viewModel.initialize()
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[AppBootstrap] viewModel.initialize completed")
+        #endif
 
         #if canImport(Sparkle)
         UpdaterService.shared.checkForUpdatesInBackground()

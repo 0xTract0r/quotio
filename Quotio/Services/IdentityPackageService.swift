@@ -36,6 +36,7 @@ final class IdentityPackageService {
                 ? name!.trimmingCharacters(in: .whitespacesAndNewlines)
                 : defaultPackageName(for: packages.count + 1),
             status: .draft,
+            statusReason: nil,
             proxy: .empty,
             uaProfile: generateUAProfile(),
             tlsProfile: generateTLSProfile(),
@@ -45,6 +46,45 @@ final class IdentityPackageService {
             updatedAt: now
         )
         packages.insert(package, at: 0)
+        persistPackages()
+    }
+
+    func createPackages(count: Int, namePrefix: String? = nil) {
+        let batchCount = min(max(count, 1), 100)
+        let trimmedPrefix = namePrefix?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = trimmedPrefix?.isEmpty == false ? trimmedPrefix! : nil
+        let numberWidth = max(2, String(batchCount).count)
+
+        var createdPackages: [RuntimeIdentityPackage] = []
+        createdPackages.reserveCapacity(batchCount)
+
+        for offset in 0..<batchCount {
+            let now = Date()
+            let name: String
+            if let prefix {
+                name = "\(prefix) \(String(format: "%0\(numberWidth)d", offset + 1))"
+            } else {
+                name = defaultPackageName(for: packages.count + offset + 1)
+            }
+
+            createdPackages.append(
+                RuntimeIdentityPackage(
+                    id: UUID(),
+                    name: name,
+                    status: .draft,
+                    statusReason: nil,
+                    proxy: .empty,
+                    uaProfile: generateUAProfile(),
+                    tlsProfile: generateTLSProfile(),
+                    verification: nil,
+                    binding: nil,
+                    createdAt: now,
+                    updatedAt: now
+                )
+            )
+        }
+
+        packages.insert(contentsOf: createdPackages.reversed(), at: 0)
         persistPackages()
     }
 
@@ -103,9 +143,12 @@ final class IdentityPackageService {
 
     func availablePackages(for authFileId: String?) -> [RuntimeIdentityPackage] {
         sortedPackages.filter { package in
-            guard let authFileId else { return !package.isBound }
-            guard let boundAuthFileId = package.binding?.authFileId else { return true }
-            return boundAuthFileId == authFileId
+            if let authFileId, package.binding?.authFileId == authFileId {
+                return true
+            }
+
+            guard !package.isBound else { return false }
+            return package.status == .available
         }
     }
 
@@ -152,6 +195,7 @@ final class IdentityPackageService {
 
         packages[index].binding = boundRef
         packages[index].status = .bound
+        packages[index].statusReason = nil
         packages[index].updatedAt = now
         bindings[authFile.id] = binding
 
@@ -168,6 +212,7 @@ final class IdentityPackageService {
 
         packages[index].binding = nil
         packages[index].status = packages[index].proxy.isConfigured ? .available : .draft
+        packages[index].statusReason = nil
         packages[index].updatedAt = Date()
 
         persistPackages()
@@ -194,6 +239,31 @@ final class IdentityPackageService {
             note: note
         )
         packages[index].status = passed ? (packages[index].isBound ? .bound : .available) : .verificationFailed
+        packages[index].statusReason = passed ? nil : trimmedStatusReason(note)
+        packages[index].updatedAt = Date()
+        persistPackages()
+    }
+
+    func markVerificationFailure(packageId: UUID, note: String? = nil) {
+        markVerificationResult(
+            packageId: packageId,
+            passed: false,
+            note: trimmedStatusReason(note) ?? "Recorded locally in Quotio. Runtime verification still depends on CLIProxyAPIPlus."
+        )
+    }
+
+    func markBlocked(packageId: UUID, reason: String? = nil) {
+        guard let index = packages.firstIndex(where: { $0.id == packageId }) else { return }
+        packages[index].status = .blocked
+        packages[index].statusReason = trimmedStatusReason(reason) ?? "Blocked locally in Quotio and excluded from new bindings."
+        packages[index].updatedAt = Date()
+        persistPackages()
+    }
+
+    func clearOperationalStatus(packageId: UUID) {
+        guard let index = packages.firstIndex(where: { $0.id == packageId }) else { return }
+        packages[index].status = packages[index].isBound ? .bound : (packages[index].proxy.isConfigured ? .available : .draft)
+        packages[index].statusReason = nil
         packages[index].updatedAt = Date()
         persistPackages()
     }
@@ -224,6 +294,7 @@ final class IdentityPackageService {
                     id: packageID,
                     name: imported.name,
                     status: .available,
+                    statusReason: nil,
                     proxy: IdentityProxyConfig(
                         scheme: imported.scheme,
                         host: imported.host,
@@ -320,6 +391,7 @@ final class IdentityPackageService {
 
             if packages[packageIndex].status == .draft || packages[packageIndex].status == .available {
                 packages[packageIndex].status = .bound
+                packages[packageIndex].statusReason = nil
                 didUpdatePackages = true
             }
 
@@ -400,16 +472,21 @@ final class IdentityPackageService {
     }
 
     private func normalizedStatus(for package: RuntimeIdentityPackage) -> IdentityPackageStatus {
-        if package.isBound {
-            return .bound
-        }
-
         switch package.status {
         case .verificationFailed, .blocked:
             return package.status
         case .draft, .available, .bound:
+            if package.isBound {
+                return .bound
+            }
             return package.proxy.isConfigured ? .available : .draft
         }
+    }
+
+    private func trimmedStatusReason(_ rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func proxyPasswordReference(for packageId: UUID) -> String {

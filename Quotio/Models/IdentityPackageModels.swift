@@ -134,6 +134,7 @@ struct RuntimeIdentityPackage: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var name: String
     var status: IdentityPackageStatus
+    var statusReason: String?
     var proxy: IdentityProxyConfig
     var uaProfile: UserAgentProfile
     var tlsProfile: TLSFingerprintProfile
