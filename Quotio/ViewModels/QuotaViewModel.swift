@@ -21,6 +21,7 @@ final class QuotaViewModel {
     @ObservationIgnored private let glmFetcher = GLMQuotaFetcher()
     @ObservationIgnored private let warpFetcher = WarpQuotaFetcher()
     @ObservationIgnored private let directAuthService = DirectAuthFileService()
+    @ObservationIgnored private let accountMetadataStore = AccountMetadataStore.shared
     @ObservationIgnored private let notificationManager = NotificationManager.shared
     @ObservationIgnored private let modeManager = OperatingModeManager.shared
     @ObservationIgnored private let refreshSettings = RefreshSettingsManager.shared
@@ -47,6 +48,7 @@ final class QuotaViewModel {
     @ObservationIgnored private let kiroFetcher = KiroQuotaFetcher()
     
     @ObservationIgnored private var lastKnownAccountStatuses: [String: String] = [:]
+    @ObservationIgnored private var pendingAccountSetup: PendingAccountSetup?
     
     var currentPage: NavigationPage = .dashboard
     var authFiles: [AuthFile] = []
@@ -113,6 +115,14 @@ final class QuotaViewModel {
         case running
         case succeeded
         case failed
+    }
+
+    private struct PendingAccountSetup: Sendable {
+        let provider: AIProvider
+        let remark: String?
+        let proxyURL: String?
+        let existingAuthFileNames: Set<String>
+        let startedAt: Date
     }
     
     // MARK: - IDE Quota Persistence Keys
@@ -1109,14 +1119,50 @@ final class QuotaViewModel {
     private var quotaRefreshInterval: TimeInterval {
         refreshSettings.refreshCadence.intervalSeconds ?? 60
     }
+
+    private var managementUnavailableMessage: String {
+        modeManager.isRemoteProxyMode ? "Remote server not connected" : "Proxy not running"
+    }
+
+    /// 本地代理重启或重建密钥后，旧 client 可能仍持有过期 management key。
+    /// 对本地 401 做一次重建并重试，避免账号代理/禁用/删除等操作偶发失败。
+    private func withManagementClient<T: Sendable>(
+        operationName: String,
+        _ operation: (ManagementAPIClient) async throws -> T
+    ) async throws -> T {
+        guard let client = apiClient else {
+            throw APIError.connectionError(managementUnavailableMessage)
+        }
+
+        do {
+            return try await operation(client)
+        } catch APIError.httpError(401) where !modeManager.isRemoteProxyMode && proxyManager.proxyStatus.running {
+            Log.warning("\(operationName): management key rejected, rebuilding local client and retrying once")
+            setupAPIClient()
+            await requestTracker.configureRouteObserver(
+                baseURL: proxyManager.managementURL,
+                authKey: proxyManager.managementKey
+            )
+
+            guard let refreshedClient = apiClient else {
+                throw APIError.connectionError(managementUnavailableMessage)
+            }
+
+            return try await operation(refreshedClient)
+        }
+    }
     
     func refreshData() async {
-        guard let client = apiClient else { return }
-        
         do {
-            // Serialize requests to avoid connection contention (issue #37)
-            // This reduces pressure on the connection pool
-            let newAuthFiles = try await client.fetchAuthFiles()
+            let snapshot = try await withManagementClient(operationName: "refreshData") { client in
+                // Serialize requests to avoid connection contention (issue #37)
+                // This reduces pressure on the connection pool
+                let newAuthFiles = try await client.fetchAuthFiles()
+                let usageStats = try await client.fetchUsageStats()
+                let apiKeys = try await client.fetchAPIKeys()
+                return (newAuthFiles, usageStats, apiKeys)
+            }
+            let newAuthFiles = snapshot.0
 
             // Only update timestamp if auth files actually changed (account added/removed)
             let oldNames = Set(self.authFiles.map { $0.name })
@@ -1127,8 +1173,8 @@ final class QuotaViewModel {
 
             self.authFiles = newAuthFiles
 
-            self.usageStats = try await client.fetchUsageStats()
-            self.apiKeys = try await client.fetchAPIKeys()
+            self.usageStats = snapshot.1
+            self.apiKeys = snapshot.2
             
             // Clear any previous error on success
             errorMessage = nil
@@ -1354,8 +1400,106 @@ final class QuotaViewModel {
             await refreshQuotaForProvider(provider)
         }
     }
+
+    private func preparePendingAccountSetup(for provider: AIProvider, remark: String?, proxyURL: String?) {
+        let normalizedRemark = remark?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedProxyURL = ProxyURLValidator.validate(proxyURL ?? "").isValid
+            ? (proxyURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? ProxyURLValidator.sanitize(proxyURL ?? "") : nil)
+            : nil
+
+        guard (normalizedRemark?.isEmpty == false) || sanitizedProxyURL != nil else {
+            pendingAccountSetup = nil
+            return
+        }
+
+        let existingAuthFileNames = Set(
+            authFiles
+                .filter { $0.providerType == provider }
+                .map(\.name)
+        )
+
+        pendingAccountSetup = PendingAccountSetup(
+            provider: provider,
+            remark: normalizedRemark?.isEmpty == true ? nil : normalizedRemark,
+            proxyURL: sanitizedProxyURL,
+            existingAuthFileNames: existingAuthFileNames,
+            startedAt: Date()
+        )
+    }
+
+    private func clearPendingAccountSetup(for provider: AIProvider) {
+        guard pendingAccountSetup?.provider == provider else {
+            return
+        }
+        pendingAccountSetup = nil
+    }
+
+    private func applyPendingAccountSetupIfNeeded(for provider: AIProvider) async {
+        guard let pending = pendingAccountSetup, pending.provider == provider else {
+            return
+        }
+        defer { pendingAccountSetup = nil }
+
+        guard let targetAuthFile = resolvePendingAccountTarget(from: pending) else {
+            return
+        }
+
+        if let remark = pending.remark {
+            let metadataKey = AccountMetadataStore.authFileKey(provider: provider, fileName: targetAuthFile.name)
+            accountMetadataStore.setRemark(remark, for: metadataKey)
+        }
+
+        if let proxyURL = pending.proxyURL {
+            do {
+                try await updateAuthFileProxyURL(proxyURL, for: targetAuthFile)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func resolvePendingAccountTarget(from pending: PendingAccountSetup) -> AuthFile? {
+        let providerFiles = authFiles.filter { $0.providerType == pending.provider }
+        let newFiles = providerFiles.filter { !pending.existingAuthFileNames.contains($0.name) }
+
+        if !newFiles.isEmpty {
+            return newFiles.max { lhs, rhs in
+                authFileTimestamp(for: lhs) < authFileTimestamp(for: rhs)
+            }
+        }
+
+        return providerFiles
+            .filter { authFileTimestamp(for: $0) >= pending.startedAt.addingTimeInterval(-5) }
+            .max { lhs, rhs in
+                authFileTimestamp(for: lhs) < authFileTimestamp(for: rhs)
+            }
+    }
+
+    private func authFileTimestamp(for file: AuthFile) -> Date {
+        for candidate in [file.updatedAt, file.createdAt, file.lastRefresh] {
+            guard let candidate else { continue }
+            if let parsed = Self.parseISO8601Timestamp(candidate) {
+                return parsed
+            }
+        }
+        return .distantPast
+    }
+
+    private nonisolated static func parseISO8601Timestamp(_ value: String) -> Date? {
+        let formatterWithFractional = ISO8601DateFormatter()
+        formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatterWithFractional.date(from: value) {
+            return date
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
+    }
     
-    func startOAuth(for provider: AIProvider, projectId: String? = nil, authMethod: AuthCommand? = nil) async {
+    func startOAuth(for provider: AIProvider, projectId: String? = nil, authMethod: AuthCommand? = nil, remark: String? = nil, proxyURL: String? = nil) async {
+        preparePendingAccountSetup(for: provider, remark: remark, proxyURL: proxyURL)
+
         // GitHub Copilot uses Device Code Flow via CLI binary, not Management API
         if provider == .copilot {
             await startCopilotAuth()
@@ -1368,15 +1512,12 @@ final class QuotaViewModel {
             return
         }
 
-        guard let client = apiClient else {
-            oauthState = OAuthState(provider: provider, status: .error, error: "Proxy not running. Please start the proxy first.")
-            return
-        }
-
         oauthState = OAuthState(provider: provider, status: .waiting)
         
         do {
-            let response = try await client.getOAuthURL(for: provider, projectId: projectId)
+            let response = try await withManagementClient(operationName: "startOAuth") { client in
+                try await client.getOAuthURL(for: provider, projectId: projectId)
+            }
             
             guard response.status == "ok", let urlString = response.url, let state = response.state else {
                 oauthState = OAuthState(provider: provider, status: .error, error: response.error)
@@ -1388,6 +1529,9 @@ final class QuotaViewModel {
             await pollOAuthStatus(state: state, provider: provider)
             
         } catch {
+            if apiClient == nil {
+                clearPendingAccountSetup(for: provider)
+            }
             oauthState = OAuthState(provider: provider, status: .error, error: error.localizedDescription)
         }
     }
@@ -1407,6 +1551,7 @@ final class QuotaViewModel {
             
             await pollCopilotAuthCompletion()
         } else {
+            clearPendingAccountSetup(for: .copilot)
             oauthState = OAuthState(provider: .copilot, status: .error, error: result.message)
         }
     }
@@ -1424,6 +1569,7 @@ final class QuotaViewModel {
                 // Allow some time for file operations
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 await refreshData()
+                await applyPendingAccountSetupIfNeeded(for: .kiro)
                 
                 // For import, we assume success if the command succeeded
                 oauthState = OAuthState(provider: .kiro, status: .success)
@@ -1439,6 +1585,7 @@ final class QuotaViewModel {
             
             await pollKiroAuthCompletion()
         } else {
+            clearPendingAccountSetup(for: .kiro)
             oauthState = OAuthState(provider: .kiro, status: .error, error: result.message)
         }
     }
@@ -1454,11 +1601,13 @@ final class QuotaViewModel {
             
             let currentFileCount = authFiles.filter { $0.provider == "github-copilot" || $0.provider == "copilot" }.count
             if currentFileCount > startFileCount {
+                await applyPendingAccountSetupIfNeeded(for: .copilot)
                 oauthState = OAuthState(provider: .copilot, status: .success)
                 return
             }
         }
         
+        clearPendingAccountSetup(for: .copilot)
         oauthState = OAuthState(provider: .copilot, status: .error, error: "Authentication timeout")
     }
     
@@ -1472,29 +1621,33 @@ final class QuotaViewModel {
             
             let currentFileCount = authFiles.filter { $0.provider == "kiro" }.count
             if currentFileCount > startFileCount {
+                await applyPendingAccountSetupIfNeeded(for: .kiro)
                 oauthState = OAuthState(provider: .kiro, status: .success)
                 return
             }
         }
         
+        clearPendingAccountSetup(for: .kiro)
         oauthState = OAuthState(provider: .kiro, status: .error, error: "Authentication timeout")
     }
     
     private func pollOAuthStatus(state: String, provider: AIProvider) async {
-        guard let client = apiClient else { return }
-        
         for _ in 0..<60 {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             
             do {
-                let response = try await client.pollOAuthStatus(state: state)
+                let response = try await withManagementClient(operationName: "pollOAuthStatus") { client in
+                    try await client.pollOAuthStatus(state: state)
+                }
                 
                 switch response.status {
                 case "ok":
-                    oauthState = OAuthState(provider: provider, status: .success)
                     await refreshData()
+                    await applyPendingAccountSetupIfNeeded(for: provider)
+                    oauthState = OAuthState(provider: provider, status: .success)
                     return
                 case "error":
+                    clearPendingAccountSetup(for: provider)
                     oauthState = OAuthState(provider: provider, status: .error, error: response.error)
                     return
                 default:
@@ -1505,18 +1658,20 @@ final class QuotaViewModel {
             }
         }
         
+        clearPendingAccountSetup(for: provider)
         oauthState = OAuthState(provider: provider, status: .error, error: "OAuth timeout")
     }
     
     func cancelOAuth() {
+        pendingAccountSetup = nil
         oauthState = nil
     }
     
     func deleteAuthFile(_ file: AuthFile) async {
-        guard let client = apiClient else { return }
-
         do {
-            try await client.deleteAuthFile(name: file.name)
+            try await withManagementClient(operationName: "deleteAuthFile") { client in
+                try await client.deleteAuthFile(name: file.name)
+            }
 
             let accountKey = file.quotaLookupKey.isEmpty ? file.name : file.quotaLookupKey
 
@@ -1549,7 +1704,7 @@ final class QuotaViewModel {
     }
 
     func toggleAuthFileDisabled(_ file: AuthFile) async {
-        guard let client = apiClient else {
+        guard apiClient != nil else {
             Log.error("toggleAuthFileDisabled: No API client available")
             return
         }
@@ -1558,7 +1713,9 @@ final class QuotaViewModel {
 
         do {
             Log.debug("toggleAuthFileDisabled: Setting \(file.name) disabled=\(newDisabled)")
-            try await client.setAuthFileDisabled(name: file.name, disabled: newDisabled)
+            try await withManagementClient(operationName: "toggleAuthFileDisabled") { client in
+                try await client.setAuthFileDisabled(name: file.name, disabled: newDisabled)
+            }
 
             // Update local persistence
             var disabledSet = loadDisabledAuthFiles()
@@ -1587,22 +1744,36 @@ final class QuotaViewModel {
     }
 
     func loadAuthFileProxyURL(_ file: AuthFile) async throws -> String? {
-        guard let client = apiClient else {
-            throw APIError.connectionError("Proxy not running")
+        let data = try await withManagementClient(operationName: "loadAuthFileProxyURL") { client in
+            try await client.downloadAuthFile(name: file.name)
+        }
+        if let proxyURL = Self.parseProxyURL(from: data) {
+            return proxyURL
         }
 
-        let data = try await client.downloadAuthFile(name: file.name)
-        return Self.parseProxyURL(from: data)
+        return await directAuthFileForProxyFallback(named: file.name)?.proxyURL
     }
 
     func updateAuthFileProxyURL(_ proxyURL: String?, for file: AuthFile) async throws {
-        guard let client = apiClient else {
-            throw APIError.connectionError("Proxy not running")
+        let trimmedProxyURL = proxyURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        try await withManagementClient(operationName: "updateAuthFileProxyURL") { client in
+            try await client.setAuthFileProxyURL(name: file.name, proxyURL: trimmedProxyURL)
         }
 
-        let trimmedProxyURL = proxyURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        try await client.setAuthFileProxyURL(name: file.name, proxyURL: trimmedProxyURL)
+        let expectedProxyURL = trimmedProxyURL.isEmpty ? nil : trimmedProxyURL
+        let persistedProxyURL = try await withManagementClient(operationName: "verifyAuthFileProxyURL") { client in
+            let data = try await client.downloadAuthFile(name: file.name)
+            return Self.parseProxyURL(from: data)
+        }
+
+        if persistedProxyURL != expectedProxyURL,
+           let directAuthFile = await directAuthFileForProxyFallback(named: file.name) {
+            Log.warning("updateAuthFileProxyURL: management API did not persist proxy_url for \(file.name), falling back to direct auth file update")
+            try await directAuthService.updateProxyURL(filePath: directAuthFile.filePath, proxyURL: expectedProxyURL)
+        }
+
         await refreshData()
+        await loadDirectAuthFiles()
     }
 
     func updateDirectAuthFileProxyURL(_ proxyURL: String?, for file: DirectAuthFile) async throws {
@@ -1627,6 +1798,15 @@ final class QuotaViewModel {
 
         let trimmedProxyURL = rawProxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedProxyURL.isEmpty ? nil : trimmedProxyURL
+    }
+
+    private func directAuthFileForProxyFallback(named name: String) async -> DirectAuthFile? {
+        if let cachedMatch = directAuthFiles.first(where: { $0.filename == name }) {
+            return cachedMatch
+        }
+
+        let scannedFiles = await directAuthService.scanAllAuthFiles()
+        return scannedFiles.first(where: { $0.filename == name })
     }
 
     /// Remove menu bar items that no longer have valid quota data

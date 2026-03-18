@@ -14,9 +14,10 @@ import SwiftUI
 struct ProviderDisclosureGroup: View {
     let provider: AIProvider
     let accounts: [AccountRowData]
+    var onMoveAccount: ((IndexSet, Int) -> Void)?
     var onDeleteAccount: ((AccountRowData) -> Void)?
     var onEditAccount: ((AccountRowData) -> Void)?
-    var onConfigureProxy: ((AccountRowData) -> Void)?
+    var onConfigureSettings: ((AccountRowData) -> Void)?
     var onSwitchAccount: ((AccountRowData) -> Void)?
     var onToggleDisabled: ((AccountRowData) -> Void)?
     var isAccountActive: ((AccountRowData) -> Bool)?
@@ -35,13 +36,14 @@ struct ProviderDisclosureGroup: View {
                     account: account,
                     onDelete: onDeleteAccount != nil ? { onDeleteAccount?(account) } : nil,
                     onEdit: onEditAccount != nil ? { onEditAccount?(account) } : nil,
-                    onConfigureProxy: onConfigureProxy != nil ? { onConfigureProxy?(account) } : nil,
+                    onConfigureSettings: onConfigureSettings != nil ? { onConfigureSettings?(account) } : nil,
                     onSwitch: onSwitchAccount != nil ? { onSwitchAccount?(account) } : nil,
                     onToggleDisabled: onToggleDisabled != nil ? { onToggleDisabled?(account) } : nil,
                     isActiveInIDE: isAccountActive?(account) ?? false
                 )
                 .padding(.leading, 4)
             }
+            .onMove(perform: onMoveAccount)
         } label: {
             providerHeader
         }
