@@ -29,6 +29,11 @@ Config/Local.xcconfig
 
 plans/
 
+# Local AI task ledger and scratch context
+.ai/
+.specstory/
+scripts/.specstory/
+
 # Local AI agent context (not shared)
 .context/
 .wallpaper-cache/
