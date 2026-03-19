@@ -106,6 +106,21 @@ brew install --cask quotio
    - 选择 “Quotio” scheme
    - 按下 `Cmd + R` 构建并运行
 
+   也可以直接在终端构建：
+   ```bash
+   xcodebuild -project Quotio.xcodeproj -scheme Quotio -configuration Debug build CODE_SIGNING_ALLOWED=NO
+   ```
+
+4. **构建隔离测试包（可选）：**
+   当你需要第二个 app bundle 和独立运行目录做验证、又不想污染主 Quotio 数据时，使用下面这条命令：
+   ```bash
+   xcodebuild -project Quotio.xcodeproj -scheme Quotio -configuration Debug \
+     build CODE_SIGNING_ALLOWED=NO \
+     PRODUCT_BUNDLE_IDENTIFIER=dev.quotio.desktop.accountproxytest \
+     PRODUCT_NAME=QuotioAccountProxyTest \
+     CONFIGURATION_BUILD_DIR=/tmp/quotio-account-proxy-testdd/Build/Products/Debug
+   ```
+
 > 应用首次启动时会自动下载 `CLIProxyAPI` 二进制文件。
 
 ## 📖 使用方法
@@ -115,6 +130,13 @@ brew install --cask quotio
 
 ### 2. 连接账号
 进入 **Providers** 标签页 → 点击一个提供商 → 通过 OAuth 认证或导入凭据。
+对于 Claude / Codex / Gemini 这类账号，现在可以直接在 **Providers** 里打开账号级设置入口，并且：
+- 为每个账号分配独立的上游代理 IP
+- 给账号添加并显示本地备注
+- 直接看出该账号是否已经配置代理
+- 在同一提供商分组内拖动调整账号顺序
+
+新增账号时，OAuth 弹窗也支持在认证完成前先填写备注和账号级代理。
 
 ### 3. 配置 Agent
 进入 **Agents** 标签页 → 选择已安装的 Agent → 点击 **Configure** → 选择自动或手动模式。
@@ -127,6 +149,7 @@ brew install --cask quotio
 ## ⚙️ 设置
 
 - **端口**：更改代理监听端口
+- **上游代理**：全局默认代理，仅在账号没有单独配置上游代理时生效
 - **路由策略**：轮询（Round Robin）或先满（Fill First）
 - **自动启动**：Quotio 打开时自动启动代理
 - **通知**：开关各类提醒

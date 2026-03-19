@@ -25,6 +25,8 @@ struct ProvidersScreen: View {
     @State private var editingWarpToken: WarpService.WarpToken?
     @State private var showAddProviderPopover = false
     @State private var switchingAccount: AccountRowData?
+    @State private var accountSettingsEditor: AccountSettingsEditorContext?
+    @State private var accountMetadataStore = AccountMetadataStore.shared
     @State private var modeManager = OperatingModeManager.shared
 
     private let customProviderService = CustomProviderService.shared
@@ -49,13 +51,24 @@ struct ProvidersScreen: View {
             // From proxy auth files (proxy running)
             for file in viewModel.authFiles {
                 guard let provider = file.providerType else { continue }
-                let data = AccountRowData.from(authFile: file)
+                let metadataKey = accountMetadataKey(for: file)
+                let data = AccountRowData.from(
+                    authFile: file,
+                    metadataKey: metadataKey,
+                    remark: accountMetadataStore.remark(for: metadataKey),
+                    hasConfiguredProxy: effectiveProxyURL(for: file) != nil
+                )
                 groups[provider, default: []].append(data)
             }
         } else {
             // From direct auth files (proxy not running or quota-only mode)
             for file in viewModel.directAuthFiles {
-                let data = AccountRowData.from(directAuthFile: file)
+                let metadataKey = accountMetadataKey(for: file)
+                let data = AccountRowData.from(
+                    directAuthFile: file,
+                    metadataKey: metadataKey,
+                    remark: accountMetadataStore.remark(for: metadataKey)
+                )
                 groups[file.provider, default: []].append(data)
             }
         }
@@ -65,7 +78,13 @@ struct ProvidersScreen: View {
         for (provider, quotas) in viewModel.providerQuotas {
             if !provider.supportsManualAuth && provider != .glm {
                 for (accountKey, _) in quotas {
-                    let data = AccountRowData.from(provider: provider, accountKey: accountKey)
+                    let metadataKey = AccountMetadataStore.autoDetectedKey(provider: provider, accountKey: accountKey)
+                    let data = AccountRowData.from(
+                        provider: provider,
+                        accountKey: accountKey,
+                        metadataKey: metadataKey,
+                        remark: accountMetadataStore.remark(for: metadataKey)
+                    )
                     groups[provider, default: []].append(data)
                 }
             }
@@ -74,15 +93,20 @@ struct ProvidersScreen: View {
         // Add GLM providers from CustomProviderService
         for glmProvider in customProviderService.providers.filter({ $0.type == .glmCompatibility && $0.isEnabled }) {
             // Use provider name as display name (store provider ID for editing)
+            let metadataKey = AccountMetadataStore.customAccountKey(provider: .glm, id: glmProvider.id.uuidString)
             let data = AccountRowData(
                 id: glmProvider.id.uuidString,
                 provider: .glm,
                 displayName: glmProvider.name.isEmpty ? "GLM" : glmProvider.name,
                 menuBarAccountKey: glmProvider.name,
+                metadataKey: metadataKey,
+                remark: accountMetadataStore.remark(for: metadataKey),
                 source: .direct,
                 status: "ready",
                 statusMessage: nil,
                 isDisabled: false,
+                hasConfiguredProxy: false,
+                canToggleDisabled: false,
                 canDelete: true,
                 canEdit: true
             )
@@ -91,19 +115,28 @@ struct ProvidersScreen: View {
 
         // Add Warp providers from WarpService
         for warpToken in warpService.tokens.filter({ $0.isEnabled }) {
+            let metadataKey = AccountMetadataStore.customAccountKey(provider: .warp, id: warpToken.id.uuidString)
             let data = AccountRowData(
                 id: warpToken.id.uuidString,
                 provider: .warp,
                 displayName: warpToken.name.isEmpty ? "Warp" : warpToken.name,
                 menuBarAccountKey: warpToken.name,
+                metadataKey: metadataKey,
+                remark: accountMetadataStore.remark(for: metadataKey),
                 source: .direct,
                 status: "ready",
                 statusMessage: nil,
                 isDisabled: false,
+                hasConfiguredProxy: false,
+                canToggleDisabled: false,
                 canDelete: true,
                 canEdit: true
             )
             groups[.warp, default: []].append(data)
+        }
+
+        for provider in groups.keys {
+            groups[provider] = sortedAccounts(groups[provider] ?? [], for: provider)
         }
 
         return groups
@@ -225,6 +258,10 @@ struct ProvidersScreen: View {
             )
             .environment(viewModel)
         }
+        .sheet(item: $accountSettingsEditor) { context in
+            AccountSettingsSheet(context: context)
+                .environment(viewModel)
+        }
     }
     
     // MARK: - Toolbar
@@ -243,8 +280,9 @@ struct ProvidersScreen: View {
         ToolbarItem(placement: .automatic) {
             Button {
                 Task {
-        if modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running {
+                    if modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running {
                         await viewModel.refreshData()
+                        await viewModel.loadDirectAuthFiles()
                     } else {
                         await viewModel.loadDirectAuthFiles()
                     }
@@ -283,6 +321,9 @@ struct ProvidersScreen: View {
                     ProviderDisclosureGroup(
                         provider: provider,
                         accounts: groupedAccounts[provider] ?? [],
+                        onMoveAccount: { source, destination in
+                            moveAccounts(in: provider, from: source, to: destination)
+                        },
                         onDeleteAccount: { account in
                             Task { await deleteAccount(account) }
                         },
@@ -292,6 +333,9 @@ struct ProvidersScreen: View {
                             } else if provider == .warp {
                                 handleEditWarpAccount(account)
                             }
+                        },
+                        onConfigureSettings: { account in
+                            handleConfigureAccountSettings(account)
                         },
                         onSwitchAccount: provider == .antigravity ? { account in
                             switchingAccount = account
@@ -391,6 +435,56 @@ struct ProvidersScreen: View {
             selectedProvider = provider
         }
     }
+
+    private func accountMetadataKey(for authFile: AuthFile) -> String {
+        guard let provider = authFile.providerType else {
+            return AccountMetadataStore.authFileKey(provider: .gemini, fileName: authFile.name)
+        }
+        return AccountMetadataStore.authFileKey(provider: provider, fileName: authFile.name)
+    }
+
+    private func accountMetadataKey(for directAuthFile: DirectAuthFile) -> String {
+        AccountMetadataStore.authFileKey(provider: directAuthFile.provider, fileName: directAuthFile.filename)
+    }
+
+    private func effectiveProxyURL(for authFile: AuthFile) -> String? {
+        guard let directAuthFile = viewModel.directAuthFiles.first(where: { $0.filename == authFile.name }) else {
+            return nil
+        }
+        return directAuthFile.proxyURL
+    }
+
+    private func sortedAccounts(_ accounts: [AccountRowData], for provider: AIProvider) -> [AccountRowData] {
+        let orderedKeys = accountMetadataStore.orderedKeys(for: provider)
+        let rankByKey = Dictionary(uniqueKeysWithValues: orderedKeys.enumerated().map { ($1, $0) })
+
+        return accounts.sorted { lhs, rhs in
+            let lhsRank = rankByKey[lhs.metadataKey]
+            let rhsRank = rankByKey[rhs.metadataKey]
+
+            switch (lhsRank, rhsRank) {
+            case let (left?, right?) where left != right:
+                return left < right
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                let leftTitle = lhs.remark ?? lhs.displayName
+                let rightTitle = rhs.remark ?? rhs.displayName
+                return leftTitle.localizedCaseInsensitiveCompare(rightTitle) == .orderedAscending
+            }
+        }
+    }
+
+    private func moveAccounts(in provider: AIProvider, from source: IndexSet, to destination: Int) {
+        guard var accounts = groupedAccounts[provider], !accounts.isEmpty else {
+            return
+        }
+
+        accounts.move(fromOffsets: source, toOffset: destination)
+        accountMetadataStore.setOrderedKeys(accounts.map(\.metadataKey), for: provider)
+    }
     
     private func deleteAccount(_ account: AccountRowData) async {
         // Only proxy accounts can be deleted via API
@@ -402,6 +496,8 @@ struct ProvidersScreen: View {
             // Find the GLM provider by ID and delete it
             if let glmProvider = customProviderService.providers.first(where: { $0.id.uuidString == account.id }) {
                 customProviderService.deleteProvider(id: glmProvider.id)
+                accountMetadataStore.removeRemark(for: account.metadataKey)
+                accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
                 syncCustomProvidersToConfig()
             }
             return
@@ -411,24 +507,35 @@ struct ProvidersScreen: View {
         if account.provider == .warp {
             if let uuid = UUID(uuidString: account.id) {
                 warpService.deleteToken(id: uuid)
+                accountMetadataStore.removeRemark(for: account.metadataKey)
+                accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
                 await viewModel.refreshQuotaForProvider(.warp)
             }
             return
         }
 
-        // Find the original AuthFile to delete
         if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
             await viewModel.deleteAuthFile(authFile)
+            accountMetadataStore.removeRemark(for: account.metadataKey)
+            accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
+            return
+        }
+
+        if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
+            await viewModel.deleteDirectAuthFile(directAuthFile)
+            accountMetadataStore.removeRemark(for: account.metadataKey)
+            accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
         }
     }
 
     private func toggleAccountDisabled(_ account: AccountRowData) async {
-        // Only proxy accounts can be disabled via API
-        guard account.source == .proxy else { return }
-
-        // Find the original AuthFile to toggle
         if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
             await viewModel.toggleAuthFileDisabled(authFile)
+            return
+        }
+
+        if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
+            await viewModel.toggleDirectAuthFileDisabled(directAuthFile)
         }
     }
 
@@ -447,10 +554,259 @@ struct ProvidersScreen: View {
         }
     }
 
+    private func handleConfigureAccountSettings(_ account: AccountRowData) {
+        if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
+            accountSettingsEditor = AccountSettingsEditorContext(
+                id: account.id,
+                provider: account.provider,
+                displayName: account.displayName,
+                metadataKey: account.metadataKey,
+                supportsProxy: account.canConfigureProxy,
+                authFile: authFile,
+                directAuthFile: nil
+            )
+            return
+        }
+
+        if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
+            accountSettingsEditor = AccountSettingsEditorContext(
+                id: account.id,
+                provider: account.provider,
+                displayName: account.displayName,
+                metadataKey: account.metadataKey,
+                supportsProxy: account.canConfigureProxy,
+                authFile: nil,
+                directAuthFile: directAuthFile
+            )
+            return
+        }
+
+        if account.canConfigureProxy {
+            viewModel.errorMessage = "providers.accountProxy.missing".localized()
+            return
+        }
+
+        accountSettingsEditor = AccountSettingsEditorContext(
+            id: account.id,
+            provider: account.provider,
+            displayName: account.displayName,
+            metadataKey: account.metadataKey,
+            supportsProxy: false,
+            authFile: nil,
+            directAuthFile: nil
+        )
+    }
+
     private func syncCustomProvidersToConfig() {
         // Silent failure - custom provider sync is non-critical
         // Config will be synced on next proxy start
         try? customProviderService.syncToConfigFile(configPath: viewModel.proxyManager.configPath)
+    }
+}
+
+private struct AccountSettingsEditorContext: Identifiable {
+    let id: String
+    let provider: AIProvider
+    let displayName: String
+    let metadataKey: String
+    let supportsProxy: Bool
+    let authFile: AuthFile?
+    let directAuthFile: DirectAuthFile?
+}
+
+private struct AccountSettingsSheet: View {
+    @Environment(QuotaViewModel.self) private var viewModel
+    @Environment(\.dismiss) private var dismiss
+
+    let context: AccountSettingsEditorContext
+
+    @State private var accountMetadataStore = AccountMetadataStore.shared
+    @State private var remark = ""
+    @State private var proxyURL = ""
+    @State private var validation: ProxyURLValidationResult = .empty
+    @State private var isLoading = true
+    @State private var isSaving = false
+    @State private var loadError: String?
+    @State private var saveError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                ProviderIcon(provider: context.provider, size: 28)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("providers.accountSettings.title".localized())
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    Text(context.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if isLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("settings.remote.loading".localized())
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("providers.accountSettings.description".localized())
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("providers.accountSettings.remark".localized())
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: remark) { _, _ in
+                                saveError = nil
+                            }
+                    }
+
+                    if context.supportsProxy {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("providers.accountProxy.title".localized())
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+
+                            TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: proxyURL) { _, newValue in
+                                    validation = ProxyURLValidator.validate(newValue)
+                                    saveError = nil
+                                }
+
+                            if validation != .valid && validation != .empty {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                    Text((validation.localizationKey ?? "").localized())
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else {
+                                Text("providers.accountProxy.fallback".localized())
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if let loadError {
+                        Text(loadError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if let saveError {
+                        Text(saveError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+
+            Spacer()
+
+            HStack {
+                if context.supportsProxy {
+                    Button("providers.accountProxy.clear".localized()) {
+                        proxyURL = ""
+                        validation = .empty
+                        saveError = nil
+                    }
+                    .disabled(isLoading || isSaving || proxyURL.isEmpty)
+                }
+
+                Spacer()
+
+                Button("action.cancel".localized(), role: .cancel) {
+                    dismiss()
+                }
+
+                Button {
+                    Task { await save() }
+                } label: {
+                    if isSaving {
+                        SmallProgressView()
+                    } else {
+                        Text("action.save".localized())
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isLoading || isSaving || !validation.isValid)
+            }
+        }
+        .padding(24)
+        .frame(width: 460, height: context.supportsProxy ? 340 : 250)
+        .task {
+            await loadCurrentValue()
+        }
+    }
+
+    private func loadCurrentValue() async {
+        isLoading = true
+        loadError = nil
+        remark = accountMetadataStore.remark(for: context.metadataKey) ?? ""
+
+        do {
+            if context.supportsProxy {
+                if let authFile = context.authFile {
+                    proxyURL = try await viewModel.loadAuthFileProxyURL(authFile) ?? ""
+                } else if let directAuthFile = context.directAuthFile {
+                    proxyURL = directAuthFile.proxyURL ?? ""
+                } else {
+                    loadError = "providers.accountProxy.missing".localized()
+                }
+
+                validation = ProxyURLValidator.validate(proxyURL)
+            } else {
+                proxyURL = ""
+                validation = .empty
+            }
+        } catch {
+            loadError = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    private func save() async {
+        guard validation.isValid else {
+            saveError = (validation.localizationKey ?? "").localized()
+            return
+        }
+
+        isSaving = true
+        saveError = nil
+        defer { isSaving = false }
+
+        let sanitizedProxyURL = proxyURL.isEmpty ? nil : ProxyURLValidator.sanitize(proxyURL)
+
+        do {
+            accountMetadataStore.setRemark(remark, for: context.metadataKey)
+
+            if context.supportsProxy {
+                if let authFile = context.authFile {
+                    try await viewModel.updateAuthFileProxyURL(sanitizedProxyURL, for: authFile)
+                } else if let directAuthFile = context.directAuthFile {
+                    try await viewModel.updateDirectAuthFileProxyURL(sanitizedProxyURL, for: directAuthFile)
+                } else {
+                    saveError = "providers.accountProxy.missing".localized()
+                    return
+                }
+            }
+
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 }
 
@@ -729,6 +1085,9 @@ struct OAuthSheet: View {
     
     @State private var hasStartedAuth = false
     @State private var selectedKiroMethod: AuthCommand = .kiroImport
+    @State private var remark = ""
+    @State private var proxyURL = ""
+    @State private var proxyValidation: ProxyURLValidationResult = .empty
     
     private var isPolling: Bool {
         viewModel.oauthState?.status == .polling || viewModel.oauthState?.status == .waiting
@@ -740,6 +1099,10 @@ struct OAuthSheet: View {
     
     private var isError: Bool {
         viewModel.oauthState?.status == .error
+    }
+
+    private var canStartAuthentication: Bool {
+        !isPolling && proxyValidation.isValid
     }
     
     private var kiroAuthMethods: [AuthCommand] {
@@ -770,6 +1133,42 @@ struct OAuthSheet: View {
                 }
                 .frame(maxWidth: 320)
             }
+
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("providers.accountSettings.remark".localized())
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("providers.accountProxy.title".localized())
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: proxyURL) { _, newValue in
+                            proxyValidation = ProxyURLValidator.validate(newValue)
+                        }
+
+                    if proxyValidation != .valid && proxyValidation != .empty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text((proxyValidation.localizationKey ?? "").localized())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("providers.accountProxy.fallback".localized())
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: 320)
             
             if provider == .kiro {
                 VStack(alignment: .leading, spacing: 6) {
@@ -805,7 +1204,13 @@ struct OAuthSheet: View {
                     Button {
                         hasStartedAuth = false
                         Task {
-                            await viewModel.startOAuth(for: provider, projectId: projectId.isEmpty ? nil : projectId, authMethod: provider == .kiro ? selectedKiroMethod : nil)
+                            await viewModel.startOAuth(
+                                for: provider,
+                                projectId: projectId.isEmpty ? nil : projectId,
+                                authMethod: provider == .kiro ? selectedKiroMethod : nil,
+                                remark: remark,
+                                proxyURL: proxyURL
+                            )
                         }
                     } label: {
                         Label("oauth.retry".localized(), systemImage: "arrow.clockwise")
@@ -816,7 +1221,13 @@ struct OAuthSheet: View {
                     Button {
                         hasStartedAuth = true
                         Task {
-                            await viewModel.startOAuth(for: provider, projectId: projectId.isEmpty ? nil : projectId, authMethod: provider == .kiro ? selectedKiroMethod : nil)
+                            await viewModel.startOAuth(
+                                for: provider,
+                                projectId: projectId.isEmpty ? nil : projectId,
+                                authMethod: provider == .kiro ? selectedKiroMethod : nil,
+                                remark: remark,
+                                proxyURL: proxyURL
+                            )
                         }
                     } label: {
                         if isPolling {
@@ -827,7 +1238,7 @@ struct OAuthSheet: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(provider.color)
-                    .disabled(isPolling)
+                    .disabled(!canStartAuthentication)
                 }
             }
         }
@@ -836,6 +1247,9 @@ struct OAuthSheet: View {
         .frame(minHeight: 350)
         .fixedSize(horizontal: false, vertical: true)
         .animation(.easeInOut(duration: 0.2), value: viewModel.oauthState?.status)
+        .onAppear {
+            proxyValidation = ProxyURLValidator.validate(proxyURL)
+        }
         .onChange(of: viewModel.oauthState?.status) { _, newStatus in
             if newStatus == .success {
                 Task {

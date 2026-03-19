@@ -36,16 +36,17 @@ final class RequestTracker {
     
     /// Storage container
     private var store: RequestHistoryStore = .empty
+
+    /// Route observer for enriching request history with selected account/proxy info
+    @ObservationIgnored
+    private var routeObserver: RequestRouteObserver?
     
     /// Queue for file operations
-    private let fileQueue = DispatchQueue(label: "dev.quotio.desktop.request-tracker-file")
+    private let fileQueue = DispatchQueue(label: RuntimeProfile.queueLabel("request-tracker-file"))
     
     /// Storage file URL
     private var storageURL: URL {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            fatalError("Application Support directory not found")
-        }
-        let quotioDir = appSupport.appendingPathComponent("Quotio")
+        let quotioDir = RuntimeProfile.applicationSupportDirectory()
         try? FileManager.default.createDirectory(at: quotioDir, withIntermediateDirectories: true)
         return quotioDir.appendingPathComponent("request-history.json")
     }
@@ -117,6 +118,21 @@ final class RequestTracker {
         )
 
         addEntry(entry)
+
+        if let routeObserver {
+            Task {
+                let observation = await routeObserver.observeRoute(
+                    requestedProvider: metadata.provider,
+                    resolvedProvider: metadata.resolvedProvider
+                )
+
+                guard let observation else { return }
+
+                await MainActor.run {
+                    self.applyRouteObservation(observation, toEntryID: entry.id)
+                }
+            }
+        }
     }
     
     /// Add a request entry directly
@@ -133,6 +149,16 @@ final class RequestTracker {
         requestHistory = []
         stats = .empty
         saveToDisk()
+    }
+
+    func configureRouteObserver(baseURL: String, authKey: String) async {
+        let observer = RequestRouteObserver(baseURL: baseURL, authKey: authKey)
+        await observer.prime()
+        routeObserver = observer
+    }
+
+    func resetRouteObserver() {
+        routeObserver = nil
     }
     
     /// Get requests filtered by provider
@@ -188,5 +214,148 @@ final class RequestTracker {
                 NSLog("[RequestTracker] Failed to save history: \(error)")
             }
         }
+    }
+
+    private func applyRouteObservation(_ observation: RequestRouteObservation, toEntryID entryID: UUID) {
+        guard let index = store.entries.firstIndex(where: { $0.id == entryID }) else { return }
+        store.entries[index] = store.entries[index].withRouteObservation(observation)
+        requestHistory = store.entries
+        stats = store.calculateStats()
+        saveToDisk()
+    }
+}
+
+actor RequestRouteObserver {
+    private let client: ManagementAPIClient
+    private var lastUpdatedAtByName: [String: Date] = [:]
+    private var cachedGlobalProxyURL: String?
+
+    init(baseURL: String, authKey: String) {
+        self.client = ManagementAPIClient(baseURL: baseURL, authKey: authKey)
+    }
+
+    func prime() async {
+        do {
+            let files = try await client.fetchAuthFiles()
+            updateSnapshot(with: files)
+            cachedGlobalProxyURL = try await fetchGlobalProxyURL()
+        } catch {
+        }
+    }
+
+    func observeRoute(requestedProvider: String?, resolvedProvider: String?) async -> RequestRouteObservation? {
+        let targetProvider = normalizedProviderName(resolvedProvider ?? requestedProvider)
+        guard let targetProvider else { return nil }
+
+        do {
+            let files = try await client.fetchAuthFiles()
+            let providerFiles = files.filter {
+                normalizedProviderName($0.provider) == targetProvider && !$0.disabled && !$0.unavailable
+            }
+            guard !providerFiles.isEmpty else {
+                updateSnapshot(with: files)
+                return nil
+            }
+
+            let selectedFile = selectObservedFile(from: providerFiles)
+            updateSnapshot(with: files)
+
+            guard let selectedFile else { return nil }
+
+            let authFileData = try await client.downloadAuthFile(name: selectedFile.name)
+            let accountProxyURL = parseProxyURL(from: authFileData)
+            let globalProxyURL: String?
+            if let cachedGlobalProxyURL {
+                globalProxyURL = cachedGlobalProxyURL
+            } else {
+                globalProxyURL = try await fetchGlobalProxyURL()
+            }
+            cachedGlobalProxyURL = globalProxyURL
+            let effectiveProxyURL = accountProxyURL ?? globalProxyURL
+
+            return RequestRouteObservation(
+                accountName: accountName(for: selectedFile),
+                authFileName: selectedFile.name,
+                authIndex: selectedFile.authIndex,
+                upstreamProxyURL: effectiveProxyURL
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private func selectObservedFile(from files: [AuthFile]) -> AuthFile? {
+        let changedFiles = files.compactMap { file -> (AuthFile, Date)? in
+            guard let updatedAt = parseDate(file.updatedAt) else { return nil }
+            let previous = lastUpdatedAtByName[file.name]
+            if let previous, updatedAt <= previous {
+                return nil
+            }
+            return (file, updatedAt)
+        }
+
+        if let selected = changedFiles.max(by: { $0.1 < $1.1 })?.0 {
+            return selected
+        }
+
+        return files.max {
+            (parseDate($0.updatedAt) ?? .distantPast) < (parseDate($1.updatedAt) ?? .distantPast)
+        }
+    }
+
+    private func updateSnapshot(with files: [AuthFile]) {
+        for file in files {
+            if let updatedAt = parseDate(file.updatedAt) {
+                lastUpdatedAtByName[file.name] = updatedAt
+            }
+        }
+    }
+
+    private func parseDate(_ value: String?) -> Date? {
+        guard let value, !value.isEmpty else { return nil }
+
+        let formatterWithFractional = ISO8601DateFormatter()
+        formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatterWithFractional.date(from: value) {
+            return date
+        }
+
+        let formatterStandard = ISO8601DateFormatter()
+        formatterStandard.formatOptions = [.withInternetDateTime]
+        return formatterStandard.date(from: value)
+    }
+
+    private func parseProxyURL(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawProxyURL = json["proxy_url"] as? String else {
+            return nil
+        }
+
+        let trimmed = rawProxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func accountName(for file: AuthFile) -> String {
+        if let email = file.email, !email.isEmpty {
+            return email
+        }
+        if let account = file.account, !account.isEmpty {
+            return account
+        }
+        return file.name
+    }
+
+    private func normalizedProviderName(_ provider: String?) -> String? {
+        guard let provider, !provider.isEmpty else { return nil }
+        if provider == "copilot" {
+            return "github-copilot"
+        }
+        return provider
+    }
+
+    private func fetchGlobalProxyURL() async throws -> String? {
+        let proxyURL = try await client.getProxyURL()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return proxyURL.isEmpty ? nil : proxyURL
     }
 }

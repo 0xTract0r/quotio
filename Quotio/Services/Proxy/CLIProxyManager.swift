@@ -192,17 +192,13 @@ final class CLIProxyManager {
     }
     
     init() {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            fatalError("Application Support directory not found")
-        }
-        let quotioDir = appSupport.appendingPathComponent("Quotio")
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let quotioDir = RuntimeProfile.applicationSupportDirectory()
         
         try? FileManager.default.createDirectory(at: quotioDir, withIntermediateDirectories: true)
         
         self.binaryPath = quotioDir.appendingPathComponent("CLIProxyAPI").path
         self.configPath = quotioDir.appendingPathComponent("config.yaml").path
-        self.authDir = homeDir.appendingPathComponent(".cli-proxy-api").path
+        self.authDir = RuntimeProfile.authDirectoryPath
         
         // Always use key from Keychain, generate new if not exists
         // Never read from config because CLIProxyAPI hashes the key on startup

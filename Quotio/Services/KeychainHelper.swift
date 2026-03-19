@@ -11,9 +11,9 @@ import Security
 // MARK: - Keychain Helper
 
 enum KeychainHelper {
-    private static let remoteService = "dev.quotio.desktop.remote-management"
-    private static let localService = "dev.quotio.desktop.local-management"
-    private static let warpService = "dev.quotio.desktop.warp"
+    private static var remoteService: String { RuntimeProfile.keychainServicePrefix + ".remote-management" }
+    private static var localService: String { RuntimeProfile.keychainServicePrefix + ".local-management" }
+    private static var warpService: String { RuntimeProfile.keychainServicePrefix + ".warp" }
     private static let localManagementAccount = "local-management-key"
     private static let warpTokensAccount = "warp-tokens"
     private static let localManagementDefaultsKey = "managementKey"

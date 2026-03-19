@@ -18,6 +18,8 @@ struct DirectAuthFile: Identifiable, Sendable, Hashable {
     let login: String?          // GitHub username (for Copilot)
     let expired: Date?          // Token expiry date
     let accountType: String?    // pro, free, etc.
+    let isDisabled: Bool
+    let proxyURL: String?
     let filePath: String
     let source: AuthFileSource
     let filename: String
@@ -92,7 +94,7 @@ actor DirectAuthFileService {
     
     /// Scan ~/.cli-proxy-api for managed auth files
     private func scanCLIProxyAPIDirectory() async -> [DirectAuthFile] {
-        let path = expandPath("~/.cli-proxy-api")
+        let path = expandPath(RuntimeProfile.authDirectoryTildePath)
         guard let files = try? fileManager.contentsOfDirectory(atPath: path) else {
             return []
         }
@@ -122,6 +124,8 @@ actor DirectAuthFileService {
                 login: nil,
                 expired: nil,
                 accountType: nil,
+                isDisabled: false,
+                proxyURL: nil,
                 filePath: filePath,
                 source: .cliProxyApi,
                 filename: file
@@ -150,6 +154,8 @@ actor DirectAuthFileService {
         var email = json["email"] as? String
         let login = json["login"] as? String
         let accountType = json["account_type"] as? String
+        let isDisabled = json["disabled"] as? Bool ?? false
+        let proxyURL = (json["proxy_url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // For Kiro: if email is empty, try to use provider (e.g., "Google") as identifier
         if provider == .kiro && (email == nil || email?.isEmpty == true) {
@@ -173,6 +179,8 @@ actor DirectAuthFileService {
             login: login,
             expired: expiredDate,
             accountType: accountType,
+            isDisabled: isDisabled,
+            proxyURL: proxyURL?.isEmpty == true ? nil : proxyURL,
             filePath: filePath,
             source: .cliProxyApi,
             filename: filename
@@ -449,6 +457,55 @@ actor DirectAuthFileService {
             try updatedData.write(to: URL(fileURLWithPath: filePath), options: .atomic)
         } catch {
             // Silent failure
+        }
+    }
+
+    func updateProxyURL(filePath: String, proxyURL: String?) throws {
+        guard let data = fileManager.contents(atPath: filePath),
+              var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw DirectAuthFileError.invalidAuthFile
+        }
+
+        let trimmedProxy = proxyURL?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let trimmedProxy, !trimmedProxy.isEmpty {
+            json["proxy_url"] = trimmedProxy
+        } else {
+            json.removeValue(forKey: "proxy_url")
+        }
+
+        let updatedData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try updatedData.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath)
+    }
+
+    func updateDisabled(filePath: String, disabled: Bool) throws {
+        guard let data = fileManager.contents(atPath: filePath),
+              var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw DirectAuthFileError.invalidAuthFile
+        }
+
+        json["disabled"] = disabled
+
+        let updatedData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try updatedData.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath)
+    }
+
+    func deleteAuthFile(filePath: String) throws {
+        guard fileManager.fileExists(atPath: filePath) else { return }
+        try fileManager.removeItem(atPath: filePath)
+    }
+}
+
+enum DirectAuthFileError: LocalizedError {
+    case invalidAuthFile
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidAuthFile:
+            return "Invalid auth file"
         }
     }
 }

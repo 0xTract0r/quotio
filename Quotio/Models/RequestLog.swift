@@ -10,13 +10,13 @@ import Foundation
 
 // MARK: - Request Log Entry
 
-nonisolated enum FallbackAttemptOutcome: String, Codable, Hashable, Sendable {
+enum FallbackAttemptOutcome: String, Codable, Hashable, Sendable {
     case failed
     case success
     case skipped
 }
 
-nonisolated enum FallbackTriggerReason: Codable, Hashable, Sendable {
+enum FallbackTriggerReason: Codable, Hashable, Sendable {
     case httpStatus(Int)
     case pattern(String)
     case cachedRoute
@@ -36,7 +36,7 @@ nonisolated enum FallbackTriggerReason: Codable, Hashable, Sendable {
     }
 }
 
-nonisolated struct FallbackAttempt: Codable, Hashable, Sendable {
+struct FallbackAttempt: Codable, Hashable, Sendable {
     let provider: String
     let modelId: String
     let outcome: FallbackAttemptOutcome
@@ -55,7 +55,7 @@ nonisolated struct FallbackAttempt: Codable, Hashable, Sendable {
 }
 
 /// Represents a single API request/response pair with associated metadata
-nonisolated struct RequestLog: Identifiable, Codable, Hashable, Sendable {
+struct RequestLog: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let timestamp: Date
 
@@ -106,6 +106,18 @@ nonisolated struct RequestLog: Identifiable, Codable, Hashable, Sendable {
     /// Error message if request failed
     let errorMessage: String?
 
+    /// Selected account display name (email/login/account label)
+    let accountName: String?
+
+    /// Selected auth file name
+    let authFileName: String?
+
+    /// Selected auth index from CLIProxyAPI
+    let authIndex: String?
+
+    /// Effective upstream proxy URL used for this request
+    let upstreamProxyURL: String?
+
     /// Fallback attempt trace for virtual model routing
     let fallbackAttempts: [FallbackAttempt]?
 
@@ -140,6 +152,10 @@ nonisolated struct RequestLog: Identifiable, Codable, Hashable, Sendable {
         requestSize: Int = 0,
         responseSize: Int = 0,
         errorMessage: String? = nil,
+        accountName: String? = nil,
+        authFileName: String? = nil,
+        authIndex: String? = nil,
+        upstreamProxyURL: String? = nil,
         fallbackAttempts: [FallbackAttempt]? = nil,
         fallbackStartedFromCache: Bool = false
     ) {
@@ -158,15 +174,52 @@ nonisolated struct RequestLog: Identifiable, Codable, Hashable, Sendable {
         self.requestSize = requestSize
         self.responseSize = responseSize
         self.errorMessage = errorMessage
+        self.accountName = accountName
+        self.authFileName = authFileName
+        self.authIndex = authIndex
+        self.upstreamProxyURL = upstreamProxyURL
         self.fallbackAttempts = fallbackAttempts
         self.fallbackStartedFromCache = fallbackStartedFromCache
     }
+
+    func withRouteObservation(_ observation: RequestRouteObservation) -> RequestLog {
+        RequestLog(
+            id: id,
+            timestamp: timestamp,
+            method: method,
+            endpoint: endpoint,
+            provider: provider,
+            model: model,
+            resolvedModel: resolvedModel,
+            resolvedProvider: resolvedProvider,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            durationMs: durationMs,
+            statusCode: statusCode,
+            requestSize: requestSize,
+            responseSize: responseSize,
+            errorMessage: errorMessage,
+            accountName: observation.accountName,
+            authFileName: observation.authFileName,
+            authIndex: observation.authIndex,
+            upstreamProxyURL: observation.upstreamProxyURL,
+            fallbackAttempts: fallbackAttempts,
+            fallbackStartedFromCache: fallbackStartedFromCache
+        )
+    }
+}
+
+struct RequestRouteObservation: Codable, Hashable, Sendable {
+    let accountName: String?
+    let authFileName: String?
+    let authIndex: String?
+    let upstreamProxyURL: String?
 }
 
 // MARK: - Aggregate Statistics
 
 /// Aggregated statistics for request history
-nonisolated struct RequestStats: Codable, Sendable {
+struct RequestStats: Codable, Sendable {
     /// Total number of requests
     let totalRequests: Int
     
@@ -247,7 +300,7 @@ struct ModelStats: Codable, Sendable {
 // MARK: - Request History Storage
 
 /// Container for persisted request history
-nonisolated struct RequestHistoryStore: Codable, Sendable {
+struct RequestHistoryStore: Codable, Sendable {
     /// Version for migration support
     let version: Int
     
@@ -417,6 +470,27 @@ extension RequestLog {
     var statusBadge: String {
         guard let code = statusCode else { return "?" }
         return "\(code)"
+    }
+
+    var routeSummary: String? {
+        let accountLabel = accountName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let proxyLabel = upstreamProxyURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let accountText = (accountLabel?.isEmpty == false) ? accountLabel! : nil
+        let proxyText: String
+        if let proxyLabel, !proxyLabel.isEmpty {
+            proxyText = proxyLabel
+        } else {
+            proxyText = "Direct"
+        }
+
+        if let accountText {
+            return accountText + " via " + proxyText
+        }
+        if authFileName != nil || upstreamProxyURL != nil {
+            return proxyText
+        }
+        return nil
     }
 }
 

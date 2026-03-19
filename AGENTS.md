@@ -196,6 +196,7 @@ No automated tests. Manual testing:
 # Agentmap Integration
 
 This project uses **agentlens** for AI-optimized documentation.
+`agentlens` is a code-to-doc indexer: it scans the repository and generates a navigable map under `.agentlens/`, including module summaries, symbol outlines, import maps, and memory notes. Treat it as a routing layer that helps you avoid re-reading the whole repo for every task, not as a substitute for checking the target files you are about to change.
 
 ## Reading Protocol
 
@@ -205,6 +206,11 @@ Follow this order to understand the codebase efficiently:
 2. **AI instructions**: `.agentlens/AGENT.md` - How to use the documentation
 3. **Module details**: `.agentlens/modules/{module}/MODULE.md` - File lists and entry points
 4. **Before editing**: Check `.agentlens/modules/{module}/memory.md` for warnings/TODOs
+
+For new feature work, you normally do **not** need to rescan the entire codebase:
+- Use `.agentlens` to route to the relevant module first
+- Read only the target files and nearby dependencies for the feature you are changing
+- Still verify the current implementation in code if the generated docs look older than `HEAD`
 
 ## Documentation Structure
 
@@ -226,6 +232,7 @@ Follow this order to understand the codebase efficiently:
 - Use `.agentlens/modules/{module}/outline.md` to find symbols in large files
 - Check `.agentlens/modules/{module}/imports.md` for dependencies
 - For complex files, see `.agentlens/files/{file-slug}.md`
+- If `.agentlens` freshness is uncertain, treat it as an index and confirm behavior from the actual source before editing
 
 ## Commands
 

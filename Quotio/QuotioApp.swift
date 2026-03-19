@@ -284,6 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: [
             "useBridgeMode": true,
             "showInDock": true,
+            "proxyPort": RuntimeProfile.defaultProxyPort,
             "totalUsageMode": TotalUsageMode.sessionOnly.rawValue,
             "modelAggregationMode": ModelAggregationMode.lowest.rawValue
         ])

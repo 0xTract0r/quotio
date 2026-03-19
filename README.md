@@ -106,6 +106,21 @@ Download the latest `.dmg` from the [Releases](https://github.com/nguyenphutrong
    - Select the "Quotio" scheme
    - Press `Cmd + R` to build and run
 
+   Or build from Terminal:
+   ```bash
+   xcodebuild -project Quotio.xcodeproj -scheme Quotio -configuration Debug build CODE_SIGNING_ALLOWED=NO
+   ```
+
+4. **Build an isolated test app (optional):**
+   Use this when you need a second app bundle and runtime profile for verification without touching your main Quotio state.
+   ```bash
+   xcodebuild -project Quotio.xcodeproj -scheme Quotio -configuration Debug \
+     build CODE_SIGNING_ALLOWED=NO \
+     PRODUCT_BUNDLE_IDENTIFIER=dev.quotio.desktop.accountproxytest \
+     PRODUCT_NAME=QuotioAccountProxyTest \
+     CONFIGURATION_BUILD_DIR=/tmp/quotio-account-proxy-testdd/Build/Products/Debug
+   ```
+
 > The app will automatically download the `CLIProxyAPI` binary on first launch.
 
 ## 📖 Usage
@@ -115,6 +130,13 @@ Launch Quotio and click **Start** on the dashboard to initialize the local proxy
 
 ### 2. Connect Accounts
 Go to **Providers** tab → Click on a provider → Authenticate via OAuth or import credentials.
+For each Claude/Codex/Gemini-style account, you can open the account-level settings editor from **Providers** and:
+- assign a dedicated upstream proxy IP
+- add a local remark shown in the account list
+- see whether the account already has a proxy configured
+- reorder accounts within the same provider by dragging
+
+When adding a new provider account, the OAuth sheet can prefill the remark and account-level proxy before authentication completes.
 
 ### 3. Configure Agents
 Go to **Agents** tab → Select an installed agent → Click **Configure** → Choose Automatic or Manual mode.
@@ -127,6 +149,7 @@ Go to **Agents** tab → Select an installed agent → Click **Configure** → C
 ## ⚙️ Settings
 
 - **Port**: Change the proxy listening port
+- **Upstream Proxy**: Global default proxy, used only when an account does not define its own upstream proxy
 - **Routing Strategy**: Round Robin or Fill First
 - **Auto-start**: Launch proxy automatically when Quotio opens
 - **Notifications**: Toggle alerts for various events

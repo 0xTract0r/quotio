@@ -102,7 +102,7 @@ actor WarmupService {
     }
 }
 
-nonisolated struct AntigravityWarmupRequest: Codable, Sendable {
+struct AntigravityWarmupRequest: Codable, Sendable {
     let project: String
     let requestId: String
     let userAgent: String
@@ -116,7 +116,7 @@ nonisolated struct AntigravityWarmupRequest: Codable, Sendable {
     }
 }
 
-nonisolated struct AntigravityWarmupRequestBody: Codable, Sendable {
+struct AntigravityWarmupRequestBody: Codable, Sendable {
     let sessionId: String
     let contents: [AntigravityWarmupContent]
     let generationConfig: AntigravityWarmupGenerationConfig
@@ -127,16 +127,16 @@ nonisolated struct AntigravityWarmupRequestBody: Codable, Sendable {
     }
 }
 
-nonisolated struct AntigravityWarmupContent: Codable, Sendable {
+struct AntigravityWarmupContent: Codable, Sendable {
     let role: String
     let parts: [AntigravityWarmupPart]
 }
 
-nonisolated struct AntigravityWarmupPart: Codable, Sendable {
+struct AntigravityWarmupPart: Codable, Sendable {
     let text: String
 }
 
-nonisolated struct AntigravityWarmupGenerationConfig: Codable, Sendable {
+struct AntigravityWarmupGenerationConfig: Codable, Sendable {
     let maxOutputTokens: Int
 
     enum CodingKeys: String, CodingKey {
@@ -144,7 +144,7 @@ nonisolated struct AntigravityWarmupGenerationConfig: Codable, Sendable {
     }
 }
 
-nonisolated struct WarmupModelInfo: Codable, Sendable {
+struct WarmupModelInfo: Codable, Sendable {
     let id: String
     let ownedBy: String?
     let provider: String?
@@ -156,7 +156,7 @@ nonisolated struct WarmupModelInfo: Codable, Sendable {
     }
 }
 
-nonisolated enum WarmupError: Error {
+enum WarmupError: Error {
     case invalidURL
     case invalidResponse
     case encodingFailed
