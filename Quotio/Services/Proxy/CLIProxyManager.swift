@@ -49,25 +49,33 @@ final class CLIProxyManager {
     }
 
     private func configuredTestCAFilePath() -> String? {
+        let candidateSources: [(label: String, value: String?)] = [
+            ("process env", ProcessInfo.processInfo.environment[Self.debugTestCAFileEnvironmentKey]),
+            ("defaults", UserDefaults.standard.string(forKey: Self.debugTestCAFileDefaultsKey))
+        ]
+
         let defaults = UserDefaults.standard
         defaults.synchronize()
 
-        guard let rawPath = defaults.string(forKey: Self.debugTestCAFileDefaultsKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawPath.isEmpty else {
-            if defaults.object(forKey: Self.debugTestCAFileDefaultsKey) != nil {
-                NSLog("[CLIProxyManager] debugTestCAFile present but empty")
-            } else {
-                NSLog("[CLIProxyManager] debugTestCAFile not set for this launch")
+        for source in candidateSources {
+            guard let rawPath = source.value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !rawPath.isEmpty else {
+                continue
             }
-            return nil
+            guard FileManager.default.fileExists(atPath: rawPath) else {
+                NSLog("[CLIProxyManager] debugTestCAFile from \(source.label) missing at \(rawPath); skipping test CA injection")
+                continue
+            }
+            NSLog("[CLIProxyManager] debugTestCAFile resolved from \(source.label) for test launch: \(rawPath)")
+            return rawPath
         }
-        guard FileManager.default.fileExists(atPath: rawPath) else {
-            NSLog("[CLIProxyManager] debugTestCAFile missing at \(rawPath); skipping test CA injection")
-            return nil
+
+        if defaults.object(forKey: Self.debugTestCAFileDefaultsKey) != nil {
+            NSLog("[CLIProxyManager] debugTestCAFile present but empty")
+        } else {
+            NSLog("[CLIProxyManager] debugTestCAFile not set for this launch")
         }
-        NSLog("[CLIProxyManager] debugTestCAFile resolved for test launch: \(rawPath)")
-        return rawPath
+        return nil
     }
 
     private func makeProcessEnvironment() -> [String: String] {
