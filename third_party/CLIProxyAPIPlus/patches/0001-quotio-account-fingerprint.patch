@@ -1,0 +1,316 @@
+diff --git a/internal/api/handlers/management/auth_files.go b/internal/api/handlers/management/auth_files.go
+index 30dd7fb..eeabed0 100644
+--- a/internal/api/handlers/management/auth_files.go
++++ b/internal/api/handlers/management/auth_files.go
+@@ -39,6 +39,7 @@ import (
+ 	"github.com/router-for-me/CLIProxyAPI/v6/internal/misc"
+ 	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
+ 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
++	"github.com/router-for-me/CLIProxyAPI/v6/internal/watcher/synthesizer"
+ 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v6/sdk/auth"
+ 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
+ 	log "github.com/sirupsen/logrus"
+@@ -800,6 +801,7 @@ func (h *Handler) registerAuthFromFile(ctx context.Context, path string, data []
+ 		"path":   path,
+ 		"source": path,
+ 	}
++	synthesizer.AddMetadataHeadersToAttrs(metadata, attr)
+ 	auth := &coreauth.Auth{
+ 		ID:         authID,
+ 		Provider:   provider,
+@@ -828,6 +830,54 @@ func (h *Handler) registerAuthFromFile(ctx context.Context, path string, data []
+ 	return err
+ }
+ 
++func sanitizedHeaders(headers map[string]string) map[string]string {
++	if len(headers) == 0 {
++		return nil
++	}
++	out := make(map[string]string, len(headers))
++	for rawKey, rawValue := range headers {
++		key := strings.TrimSpace(rawKey)
++		value := strings.TrimSpace(rawValue)
++		if key == "" || value == "" {
++			continue
++		}
++		out[key] = value
++	}
++	if len(out) == 0 {
++		return nil
++	}
++	return out
++}
++
++func replaceAuthMetadataHeaders(auth *coreauth.Auth, headers map[string]string) {
++	if auth == nil {
++		return
++	}
++	if auth.Metadata == nil {
++		auth.Metadata = make(map[string]any)
++	}
++	if auth.Attributes == nil {
++		auth.Attributes = make(map[string]string)
++	}
++	for key := range auth.Attributes {
++		if strings.HasPrefix(key, "header:") {
++			delete(auth.Attributes, key)
++		}
++	}
++	delete(auth.Metadata, "headers")
++
++	normalized := sanitizedHeaders(headers)
++	if len(normalized) == 0 {
++		return
++	}
++	stored := make(map[string]string, len(normalized))
++	for key, value := range normalized {
++		stored[key] = value
++	}
++	auth.Metadata["headers"] = stored
++	synthesizer.AddMetadataHeadersToAttrs(map[string]any{"headers": stored}, auth.Attributes)
++}
++
+ // PatchAuthFileStatus toggles the disabled state of an auth file
+ func (h *Handler) PatchAuthFileStatus(c *gin.Context) {
+ 	if h.authManager == nil {
+@@ -894,7 +944,7 @@ func (h *Handler) PatchAuthFileStatus(c *gin.Context) {
+ 	c.JSON(http.StatusOK, gin.H{"status": "ok", "disabled": *req.Disabled})
+ }
+ 
+-// PatchAuthFileFields updates editable fields (prefix, proxy_url, priority, note) of an auth file.
++// PatchAuthFileFields updates editable fields (prefix, proxy_url, priority, note, headers) of an auth file.
+ func (h *Handler) PatchAuthFileFields(c *gin.Context) {
+ 	if h.authManager == nil {
+ 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "core auth manager unavailable"})
+@@ -907,6 +957,7 @@ func (h *Handler) PatchAuthFileFields(c *gin.Context) {
+ 		ProxyURL *string `json:"proxy_url"`
+ 		Priority *int    `json:"priority"`
+ 		Note     *string `json:"note"`
++		Headers  map[string]string `json:"headers"`
+ 	}
+ 	if err := c.ShouldBindJSON(&req); err != nil {
+ 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+@@ -949,7 +1000,7 @@ func (h *Handler) PatchAuthFileFields(c *gin.Context) {
+ 		targetAuth.ProxyURL = *req.ProxyURL
+ 		changed = true
+ 	}
+-	if req.Priority != nil || req.Note != nil {
++	if req.Priority != nil || req.Note != nil || req.Headers != nil {
+ 		if targetAuth.Metadata == nil {
+ 			targetAuth.Metadata = make(map[string]any)
+ 		}
+@@ -976,6 +1027,9 @@ func (h *Handler) PatchAuthFileFields(c *gin.Context) {
+ 				targetAuth.Attributes["note"] = trimmedNote
+ 			}
+ 		}
++		if req.Headers != nil {
++			replaceAuthMetadataHeaders(targetAuth, req.Headers)
++		}
+ 		changed = true
+ 	}
+ 
+diff --git a/internal/watcher/synthesizer/file.go b/internal/watcher/synthesizer/file.go
+index b76594c..638ad77 100644
+--- a/internal/watcher/synthesizer/file.go
++++ b/internal/watcher/synthesizer/file.go
+@@ -157,6 +157,7 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) []
+ 			}
+ 		}
+ 	}
++	AddMetadataHeadersToAttrs(metadata, a.Attributes)
+ 	ApplyAuthExcludedModelsMeta(a, cfg, perAccountExcluded, "oauth")
+ 	// For codex auth files, extract plan_type from the JWT id_token.
+ 	if provider == "codex" {
+diff --git a/internal/watcher/synthesizer/helpers.go b/internal/watcher/synthesizer/helpers.go
+index 102dc77..094f657 100644
+--- a/internal/watcher/synthesizer/helpers.go
++++ b/internal/watcher/synthesizer/helpers.go
+@@ -118,3 +118,48 @@ func addConfigHeadersToAttrs(headers map[string]string, attrs map[string]string)
+ 		attrs["header:"+key] = val
+ 	}
+ }
++
++// AddMetadataHeadersToAttrs reads auth-file metadata "headers" and converts it
++// into runtime auth attributes using the "header:" prefix convention.
++func AddMetadataHeadersToAttrs(metadata map[string]any, attrs map[string]string) {
++	if len(metadata) == 0 || attrs == nil {
++		return
++	}
++	rawHeaders, ok := metadata["headers"]
++	if !ok {
++		return
++	}
++	addConfigHeadersToAttrs(metadataHeaders(rawHeaders), attrs)
++}
++
++func metadataHeaders(raw any) map[string]string {
++	switch headers := raw.(type) {
++	case map[string]string:
++		if len(headers) == 0 {
++			return nil
++		}
++		out := make(map[string]string, len(headers))
++		for key, value := range headers {
++			out[key] = value
++		}
++		return out
++	case map[string]any:
++		if len(headers) == 0 {
++			return nil
++		}
++		out := make(map[string]string, len(headers))
++		for rawKey, rawValue := range headers {
++			value, ok := rawValue.(string)
++			if !ok {
++				continue
++			}
++			out[rawKey] = value
++		}
++		if len(out) == 0 {
++			return nil
++		}
++		return out
++	default:
++		return nil
++	}
++}
+diff --git a/internal/watcher/synthesizer/helpers_test.go b/internal/watcher/synthesizer/helpers_test.go
+index 46b9c8a..19e6fdc 100644
+--- a/internal/watcher/synthesizer/helpers_test.go
++++ b/internal/watcher/synthesizer/helpers_test.go
+@@ -287,3 +287,54 @@ func TestAddConfigHeadersToAttrs(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestAddMetadataHeadersToAttrs(t *testing.T) {
++	tests := []struct {
++		name     string
++		metadata map[string]any
++		want     map[string]string
++	}{
++		{
++			name: "headers from metadata map",
++			metadata: map[string]any{
++				"headers": map[string]any{
++					"User-Agent": "codex-test/1.0",
++					"X-Test":     " value ",
++					"Skip":       123,
++				},
++			},
++			want: map[string]string{
++				"header:User-Agent": "codex-test/1.0",
++				"header:X-Test":     "value",
++			},
++		},
++		{
++			name: "headers from string map",
++			metadata: map[string]any{
++				"headers": map[string]string{
++					"User-Agent": "claude-test/1.0",
++				},
++			},
++			want: map[string]string{
++				"header:User-Agent": "claude-test/1.0",
++			},
++		},
++		{
++			name: "missing headers",
++			metadata: map[string]any{
++				"type": "codex",
++			},
++			want: map[string]string{},
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			attrs := make(map[string]string)
++			AddMetadataHeadersToAttrs(tt.metadata, attrs)
++			if !reflect.DeepEqual(attrs, tt.want) {
++				t.Fatalf("expected %v, got %v", tt.want, attrs)
++			}
++		})
++	}
++}
+diff --git a/sdk/proxyutil/proxy.go b/sdk/proxyutil/proxy.go
+index 591ec9d..78aa8bf 100644
+--- a/sdk/proxyutil/proxy.go
++++ b/sdk/proxyutil/proxy.go
+@@ -2,10 +2,13 @@ package proxyutil
+ 
+ import (
+ 	"context"
++	"crypto/tls"
++	"crypto/x509"
+ 	"fmt"
+ 	"net"
+ 	"net/http"
+ 	"net/url"
++	"os"
+ 	"strings"
+ 
+ 	"golang.org/x/net/proxy"
+@@ -89,7 +92,9 @@ func BuildHTTPTransport(raw string) (*http.Transport, Mode, error) {
+ 	case ModeInherit:
+ 		return nil, setting.Mode, nil
+ 	case ModeDirect:
+-		return NewDirectTransport(), setting.Mode, nil
++		transport := NewDirectTransport()
++		applyTestRootCA(transport)
++		return transport, setting.Mode, nil
+ 	case ModeProxy:
+ 		if setting.URL.Scheme == "socks5" {
+ 			var proxyAuth *proxy.Auth
+@@ -102,19 +107,48 @@ func BuildHTTPTransport(raw string) (*http.Transport, Mode, error) {
+ 			if errSOCKS5 != nil {
+ 				return nil, setting.Mode, fmt.Errorf("create SOCKS5 dialer failed: %w", errSOCKS5)
+ 			}
+-			return &http.Transport{
++			transport := &http.Transport{
+ 				Proxy: nil,
+ 				DialContext: func(_ context.Context, network, addr string) (net.Conn, error) {
+ 					return dialer.Dial(network, addr)
+ 				},
+-			}, setting.Mode, nil
++			}
++			applyTestRootCA(transport)
++			return transport, setting.Mode, nil
+ 		}
+-		return &http.Transport{Proxy: http.ProxyURL(setting.URL)}, setting.Mode, nil
++		transport := &http.Transport{Proxy: http.ProxyURL(setting.URL)}
++		applyTestRootCA(transport)
++		return transport, setting.Mode, nil
+ 	default:
+ 		return nil, setting.Mode, nil
+ 	}
+ }
+ 
++func applyTestRootCA(transport *http.Transport) {
++	if transport == nil {
++		return
++	}
++	caFile := strings.TrimSpace(os.Getenv("QUOTIO_TEST_CA_FILE"))
++	if caFile == "" {
++		return
++	}
++	pemData, err := os.ReadFile(caFile)
++	if err != nil {
++		return
++	}
++	rootCAs, _ := x509.SystemCertPool()
++	if rootCAs == nil {
++		rootCAs = x509.NewCertPool()
++	}
++	if ok := rootCAs.AppendCertsFromPEM(pemData); !ok {
++		return
++	}
++	if transport.TLSClientConfig == nil {
++		transport.TLSClientConfig = &tls.Config{}
++	}
++	transport.TLSClientConfig.RootCAs = rootCAs
++}
++
+ // BuildDialer constructs a proxy dialer for settings that operate at the connection layer.
+ func BuildDialer(raw string) (proxy.Dialer, Mode, error) {
+ 	setting, errParse := Parse(raw)

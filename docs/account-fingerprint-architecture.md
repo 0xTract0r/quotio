@@ -171,23 +171,23 @@
 
 ## CLIProxyAPIPlus 源码该放在哪里
 
-当前测试补丁源码在：
+当前已经把“长期维护入口”迁入本项目：
 
-- `/tmp/CLIProxyAPIPlus-quotio`
-
-这不应该继续作为长期真源。
+- [third_party/CLIProxyAPIPlus/README.md](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/third_party/CLIProxyAPIPlus/README.md)
+- [0001-quotio-account-fingerprint.patch](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/third_party/CLIProxyAPIPlus/patches/0001-quotio-account-fingerprint.patch)
+- [manage-cliproxy-plus.sh](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/scripts/manage-cliproxy-plus.sh)
 
 ### 结论
 
-应该把它迁出 `/tmp`，但不建议直接把整份源码随意拷进 Quotio 根目录。
+当前采用的是“项目内 vendored patch source”方案，而不是 Git 子模块。
 
-更合理的长期方案有两个，优先第一种：
+原因：
 
-1. 在 Quotio 仓库外、同级目录维护一个稳定的 sibling repo / worktree
-   - 例如：`../CLIProxyAPIPlus-quotio`
-   - 优点：边界清晰，不把两个项目的 Git 历史混在一起
-2. 作为 `third_party/CLIProxyAPIPlus` 子模块或 vendor 目录纳入管理
-   - 适合明确决定长期跟随维护时使用
+- 目前还没有稳定的远端 fork 可以作为子模块来源
+- 子模块如果指向本地路径或未推送提交，不具备可复现性
+- 现阶段最重要的是把上游基线、补丁和构建流程固化到项目内
+
+后续如果你建立了稳定 fork，再把 `third_party/CLIProxyAPIPlus` 平滑切为真正的子模块会更合适。
 
 ### 不建议继续放在 `/tmp` 的原因
 
@@ -196,15 +196,13 @@
 - 无法稳定记录“补丁基线、引用版本、回滚点”
 - 新会话无法低成本恢复上下文
 
-### 推荐的最小管理要求
+### 当前已经补齐的管理面
 
-无论选上面哪种，都应该补齐：
-
-- 固定路径
-- 上游基线 commit
-- Quotio 依赖的是哪一个 fork / patch
-- 需要重编译时的命令
-- 与 Quotio 联调时用到的脚本和环境变量
+- 固定路径：`third_party/CLIProxyAPIPlus`
+- 上游基线 commit：`7c2ad4c`
+- Quotio patch 文件：项目内持久化
+- 重建命令：`./scripts/manage-cliproxy-plus.sh build`
+- 联调脚本：`scripts/watch-claude-mitm-session.sh`
 
 ## 给后续维护者的结论
 

@@ -7,7 +7,7 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 DEV_BUNDLE_ID="${DEV_BUNDLE_ID:-dev.quotio.desktop.dev}"
 CLIENT_PORT="${CLIENT_PORT:-$(defaults read "$DEV_BUNDLE_ID" proxyPort 2>/dev/null || echo 18417)}"
 CONFIG_PATH="${CONFIG_PATH:-$HOME/Library/Application Support/Quotio-dev/config.yaml}"
-PATCHED_CORE_BIN="${PATCHED_CORE_BIN:-/tmp/CLIProxyAPIPlus-quotio/bin/CLIProxyAPI}"
+PATCHED_CORE_BIN="${PATCHED_CORE_BIN:-$ROOT_DIR/third_party/CLIProxyAPIPlus/work/bin/CLIProxyAPI}"
 FALLBACK_CORE_BIN="${FALLBACK_CORE_BIN:-$HOME/Library/Application Support/Quotio-dev/CLIProxyAPI}"
 
 MITM_DIR="${MITM_DIR:-/tmp/quotio-mitm}"

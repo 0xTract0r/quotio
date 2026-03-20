@@ -74,13 +74,20 @@ git worktree add ../quotio.worktrees/feat-account-fingerprint -b feat/account-fi
 发布前要明确：
 
 - 正式版是否仍依赖现有官方 `CLIProxyAPIPlus`
-- 还是要切到你维护的 patched fork
+- 还是要切到你维护的 patched fork / vendored patch source
 
-如果正式发布要依赖 patched fork，至少要保证：
+当前项目内已经有一份可持续维护入口：
 
-- 源码不再只存在于 `/tmp`
-- 有固定仓库位置和基线 commit
-- 有明确的构建命令
+- [third_party/CLIProxyAPIPlus/README.md](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/third_party/CLIProxyAPIPlus/README.md)
+- [manage-cliproxy-plus.sh](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/scripts/manage-cliproxy-plus.sh)
+
+如果本机 Go 版本偏旧，`manage-cliproxy-plus.sh build` 默认会走 `GOTOOLCHAIN=auto` 自动拉起上游要求的 toolchain。
+
+如果正式发布要依赖 patched CLIProxyAPIPlus，至少要保证：
+
+- 使用项目内 patch source 或稳定 fork，而不是 `/tmp`
+- 有明确基线 commit
+- 有明确构建命令
 - 有回滚路径
 
 ## 4. 正式构建
@@ -141,5 +148,5 @@ git worktree add ../quotio.worktrees/feat-account-fingerprint -b feat/account-fi
 
 1. 在独立 worktree / 分支中整理并提交代码
 2. 保留开发版 runtime 与正式版 runtime 隔离
-3. 明确 CLIProxyAPIPlus 的长期源码落点
+3. 使用项目内 `third_party/CLIProxyAPIPlus` 或稳定 fork 管理 CLIProxyAPIPlus 补丁
 4. 再决定是否发布到正式版

@@ -205,18 +205,24 @@ mkdir -p /tmp/quotio-mitm/home
 - 示例：`"proxy_url": "http://127.0.0.1:19091"`
 - 结束后记得恢复原值
 
-3. 用临时补丁版 CLIProxyAPIPlus 启动测试核心
+3. 用项目内补丁版 CLIProxyAPIPlus 启动测试核心
 
 说明：
 - 当前为了让 Go 进程信任 mitmproxy 自签 CA，需要一个测试专用补丁版 CLIProxyAPIPlus，在 `sdk/proxyutil/proxy.go` 中支持 `QUOTIO_TEST_CA_FILE`
-- 本次验证使用的是 `/tmp/CLIProxyAPIPlus-quotio/bin/CLIProxyAPI`
+- 现在默认使用项目内维护入口 `third_party/CLIProxyAPIPlus`
 - 这是测试验收链路，不属于 Quotio 正式运行依赖
+
+如果还没准备好补丁版 binary，先执行：
+
+```bash
+./scripts/manage-cliproxy-plus.sh build
+```
 
 启动命令：
 
 ```bash
 QUOTIO_TEST_CA_FILE=/tmp/quotio-mitm/home/mitmproxy-ca-cert.pem \
-/tmp/CLIProxyAPIPlus-quotio/bin/CLIProxyAPI \
+./third_party/CLIProxyAPIPlus/work/bin/CLIProxyAPI \
   -config "$HOME/Library/Application Support/Quotio-dev/config.yaml"
 ```
 
@@ -270,7 +276,7 @@ QUOTIO_TEST_CA_FILE=/tmp/quotio-mitm/home/mitmproxy-ca-cert.pem \
 
 - `Quotio Dev.app` 已正常启动
 - 测试 auth 目录里至少有一个启用中的 Claude 账号
-- 本机已有临时补丁版 `CLIProxyAPIPlus` 二进制：`/tmp/CLIProxyAPIPlus-quotio/bin/CLIProxyAPI`
+- 本机已有项目内补丁版 `CLIProxyAPIPlus` 二进制：`third_party/CLIProxyAPIPlus/work/bin/CLIProxyAPI`
 
 调试补充：
 
