@@ -7,9 +7,11 @@ from pathlib import Path
 from mitmproxy import http
 
 
-OUTPUT_PATH = Path(os.environ.get("QUOTIO_MITM_FLOW_FILE", "/tmp/quotio-mitm/flows.jsonl"))
-TARGET_HOST = "api.anthropic.com"
-TARGET_PATH = "/v1/messages"
+OUTPUT_PATH = Path(os.environ.get("QUOTIO_MITM_FLOW_FILE", "/tmp/quotio-mitm/openai-flows.jsonl"))
+TARGETS = (
+    ("api.openai.com", ("/v1/responses", "/v1/chat/completions")),
+    ("chatgpt.com", ("/backend-api/codex/responses",)),
+)
 
 
 def _trim_text(data: bytes, limit: int = 1200) -> str:
@@ -32,12 +34,12 @@ def _format_local_timestamp(iso_utc: str) -> str:
 
 def response(flow: http.HTTPFlow) -> None:
     request = flow.request
-    if request.host != TARGET_HOST:
-        return
-    if not request.path.startswith(TARGET_PATH):
+    if not any(
+        request.host == host and any(request.path.startswith(prefix) for prefix in prefixes)
+        for host, prefixes in TARGETS
+    ):
         return
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).isoformat()
     record = {
         "timestamp": timestamp,
@@ -56,20 +58,23 @@ def response(flow: http.HTTPFlow) -> None:
             "body_prefix": _trim_text(flow.response.raw_content or b"") if flow.response else "",
         },
     }
+
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with OUTPUT_PATH.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     headers = {str(key).lower(): value for key, value in request.headers.items(multi=True)}
-    print("== Captured Anthropic Request ==")
+    print("== Captured OpenAI/Codex Request ==")
     print(f"timestamp_utc: {timestamp}")
     print(f"timestamp_local: {_format_local_timestamp(timestamp)}")
     print(f"url: {request.pretty_url}")
     for key in [
         "user-agent",
-        "x-app",
+        "version",
+        "openai-beta",
+        "x-stainless-lang",
         "x-stainless-package-version",
         "x-stainless-runtime-version",
-        "x-stainless-timeout",
     ]:
         print(f"{key}: {headers.get(key, '')}")
     print(f"request_body_prefix: {record['request']['body_prefix'][:240].replace(chr(10), ' ')}")

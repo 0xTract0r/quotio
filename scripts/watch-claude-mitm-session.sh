@@ -37,6 +37,8 @@ DEV_APP_WAS_RUNNING=0
 RELAUNCHED_APP_PID=""
 AUTOSTART_PROXY_WAS_SET=0
 AUTOSTART_PROXY_ORIGINAL=""
+TEST_CA_ENV_WAS_SET=0
+TEST_CA_ENV_ORIGINAL=""
 DEBUG_TEST_CA_FILE_WAS_SET=0
 DEBUG_TEST_CA_FILE_ORIGINAL=""
 
@@ -413,6 +415,28 @@ restore_autostart_proxy_state() {
   fi
 }
 
+capture_test_ca_env_state() {
+  if [[ -n "${QUOTIO_TEST_CA_FILE+x}" && -n "${QUOTIO_TEST_CA_FILE:-}" ]]; then
+    TEST_CA_ENV_WAS_SET=1
+    TEST_CA_ENV_ORIGINAL="$QUOTIO_TEST_CA_FILE"
+  else
+    TEST_CA_ENV_WAS_SET=0
+    TEST_CA_ENV_ORIGINAL=""
+  fi
+}
+
+set_test_ca_env_temporarily() {
+  export QUOTIO_TEST_CA_FILE="$MITM_HOME/mitmproxy-ca-cert.pem"
+}
+
+restore_test_ca_env_state() {
+  if [[ "$TEST_CA_ENV_WAS_SET" == "1" ]]; then
+    export QUOTIO_TEST_CA_FILE="$TEST_CA_ENV_ORIGINAL"
+  else
+    unset QUOTIO_TEST_CA_FILE
+  fi
+}
+
 current_autostart_proxy_state() {
   defaults read "$DEV_BUNDLE_ID" autoStartProxy 2>/dev/null | tr -d '\n'
 }
@@ -502,12 +526,16 @@ setup_managed_mode() {
 
   echo "[4/6] Restarting devapp with patched managed core"
   capture_autostart_proxy_state
+  capture_test_ca_env_state
   capture_debug_test_ca_file_state
   log_cleanup "captured autoStartProxy original='${AUTOSTART_PROXY_ORIGINAL:-<unset>}' was_set=${AUTOSTART_PROXY_WAS_SET}"
+  log_cleanup "captured QUOTIO_TEST_CA_FILE original='${TEST_CA_ENV_ORIGINAL:-<unset>}' was_set=${TEST_CA_ENV_WAS_SET}"
   log_cleanup "captured debugTestCAFile original='${DEBUG_TEST_CA_FILE_ORIGINAL:-<unset>}' was_set=${DEBUG_TEST_CA_FILE_WAS_SET}"
   enable_autostart_proxy_temporarily
+  set_test_ca_env_temporarily
   set_debug_test_ca_file_temporarily
   log_cleanup "autoStartProxy temporarily enabled current='$(current_autostart_proxy_state || true)'"
+  log_cleanup "QUOTIO_TEST_CA_FILE temporarily set current='${QUOTIO_TEST_CA_FILE:-<unset>}'"
   log_cleanup "debugTestCAFile temporarily set current='$(defaults read "$DEV_BUNDLE_ID" debugTestCAFile 2>/dev/null | tr -d '\n' || true)'"
   terminate_pid "$DEV_APP_PID" "managed-mode devapp restart" 120 || true
   wait_for_port_clear "$CLIENT_PORT" 80 || true
@@ -576,9 +604,47 @@ relaunch_devapp_normally() {
   return 1
 }
 
+restore_direct_core_baseline() {
+  local live_client_pid=""
+  local live_core_pid=""
+
+  log_cleanup "restore_direct_core_baseline begin dev_app_was_running=${DEV_APP_WAS_RUNNING} current_core_bin='${CURRENT_CORE_BIN:-}'"
+
+  live_client_pid="$(lsof -tiTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+  live_core_pid="$(lsof -tiTCP:"$CORE_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+
+  if [[ "$DEV_APP_WAS_RUNNING" == "1" ]]; then
+    if [[ -z "$live_client_pid" || -z "$live_core_pid" ]]; then
+      relaunch_devapp_normally || true
+    fi
+    return 0
+  fi
+
+  if [[ -n "$live_core_pid" ]]; then
+    log_cleanup "direct-core baseline already has core listener pid=${live_core_pid}"
+    return 0
+  fi
+
+  if [[ -n "$CURRENT_CORE_BIN" && -x "$CURRENT_CORE_BIN" ]]; then
+    nohup "$CURRENT_CORE_BIN" -config "$CONFIG_PATH" >/tmp/quotio-original-core.log 2>&1 &
+    log_cleanup "restarted original core from ${CURRENT_CORE_BIN}"
+  elif [[ -x "$FALLBACK_CORE_BIN" ]]; then
+    nohup "$FALLBACK_CORE_BIN" -config "$CONFIG_PATH" >/tmp/quotio-original-core.log 2>&1 &
+    log_cleanup "restarted fallback core from ${FALLBACK_CORE_BIN}"
+  else
+    log_cleanup "no baseline core binary available for direct-core restore"
+  fi
+}
+
 setup_direct_core_mode() {
   echo "[4/6] Replacing dev core on 127.0.0.1:${CORE_PORT}"
   CURRENT_CORE_PID="$(lsof -tiTCP:"$CORE_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$CURRENT_CORE_PID" ]]; then
+    CURRENT_CORE_BIN="$(executable_path_for_pid "$CURRENT_CORE_PID")"
+  fi
+  if [[ -z "$CURRENT_CORE_BIN" && -x "$FALLBACK_CORE_BIN" ]]; then
+    CURRENT_CORE_BIN="$FALLBACK_CORE_BIN"
+  fi
   if [[ -n "$CURRENT_CORE_PID" ]]; then
     kill "$CURRENT_CORE_PID" 2>/dev/null || true
     wait_for_port_clear "$CORE_PORT" 80 || true
@@ -646,13 +712,14 @@ cleanup() {
     fi
 
     relaunch_devapp_normally || true
+    restore_test_ca_env_state
+    log_cleanup "QUOTIO_TEST_CA_FILE restored current='${QUOTIO_TEST_CA_FILE:-<unset>}'"
     restore_debug_test_ca_file_state
     log_cleanup "debugTestCAFile restored current='$(defaults read "$DEV_BUNDLE_ID" debugTestCAFile 2>/dev/null | tr -d '\n' || true)'"
     restore_autostart_proxy_state
     log_cleanup "autoStartProxy restored current='$(current_autostart_proxy_state || true)'"
-  elif [[ -z "$DIRECT_CORE_PID" && -n "$CURRENT_CORE_PID" && -x "$FALLBACK_CORE_BIN" ]]; then
-    nohup "$FALLBACK_CORE_BIN" -config "$CONFIG_PATH" >/tmp/quotio-original-core.log 2>&1 &
-    log_cleanup "restarted fallback core from ${FALLBACK_CORE_BIN}"
+  else
+    restore_direct_core_baseline
   fi
 
   if [[ "$MITM_OWNED_BY_SCRIPT" == "1" && -n "$MITM_PID" ]] && kill -0 "$MITM_PID" 2>/dev/null; then
@@ -685,14 +752,12 @@ require_file "$MITM_SCRIPT" "mitm capture script"
   printf '\n=== watch-claude-mitm-session %s ===\n' "$(date '+%Y-%m-%d %H:%M:%S')"
 } >>"$CLEANUP_LOG"
 
-if [[ "$ALLOW_DIRECT_CORE_DEBUG" != "1" ]]; then
-  DEV_APP_PID="$(lsof -tiTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
-  if [[ -n "$DEV_APP_PID" ]]; then
-    DEV_APP_EXEC="$(executable_path_for_pid "$DEV_APP_PID")"
-    if [[ -n "$DEV_APP_EXEC" && -x "$DEV_APP_EXEC" ]]; then
-      DEV_APP_BUNDLE="$(bundle_path_for_executable "$DEV_APP_EXEC" 2>/dev/null || true)"
-      DEV_APP_WAS_RUNNING=1
-    fi
+DEV_APP_PID="$(lsof -tiTCP:"$CLIENT_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+if [[ -n "$DEV_APP_PID" ]]; then
+  DEV_APP_EXEC="$(executable_path_for_pid "$DEV_APP_PID")"
+  if [[ -n "$DEV_APP_EXEC" && -x "$DEV_APP_EXEC" ]]; then
+    DEV_APP_BUNDLE="$(bundle_path_for_executable "$DEV_APP_EXEC" 2>/dev/null || true)"
+    DEV_APP_WAS_RUNNING=1
   fi
 fi
 

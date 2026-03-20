@@ -1,6 +1,6 @@
 # Quotio 隔离开发测试方案
 
-最后更新：2026-03-20
+最后更新：2026-03-21
 
 ## 目标
 
@@ -15,10 +15,10 @@
 
 项目当前已经有一层运行时隔离，关键入口在：
 
-- [Models.swift](/Users/corylin/Project/ai/quotio/Quotio/Models/Models.swift)
-- [KeychainHelper.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/KeychainHelper.swift)
-- [CLIProxyManager.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/Proxy/CLIProxyManager.swift)
-- [QuotioApp.swift](/Users/corylin/Project/ai/quotio/Quotio/QuotioApp.swift)
+- [`Quotio/Models/Models.swift`](../Quotio/Models/Models.swift)
+- [`Quotio/Services/KeychainHelper.swift`](../Quotio/Services/KeychainHelper.swift)
+- [`Quotio/Services/Proxy/CLIProxyManager.swift`](../Quotio/Services/Proxy/CLIProxyManager.swift)
+- [`Quotio/QuotioApp.swift`](../Quotio/QuotioApp.swift)
 
 只要测试版使用不同于 `dev.quotio.desktop` 的 bundle id，运行时会自动切到独立命名空间：
 
@@ -45,7 +45,7 @@
 - CLI agent 配置文件仍是用户全局路径
   - Claude：`~/.claude/settings.json`
   - Codex：`~/.codex/config.toml`、`~/.codex/auth.json`
-  - 代码位置见 [AgentModels.swift](/Users/corylin/Project/ai/quotio/Quotio/Models/AgentModels.swift) 和 [AgentConfigurationService.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/AgentConfigurationService.swift)
+  - 代码位置见 [`Quotio/Models/AgentModels.swift`](../Quotio/Models/AgentModels.swift) 和 [`Quotio/Services/AgentConfigurationService.swift`](../Quotio/Services/AgentConfigurationService.swift)
 - Cursor / Trae 等 IDE 扫描路径是外部应用全局目录，但当前主要是读，不是由 Quotio 命名空间隔离
 
 这意味着：
@@ -284,7 +284,7 @@ QUOTIO_TEST_CA_FILE=/tmp/quotio-mitm/home/mitmproxy-ca-cert.pem \
 - 脚本运行时会短暂重启 devapp，使它改为托管补丁版核心；抓包结束后再恢复正常测试核心
 - 如果抓包成功但你怀疑恢复不完整，优先看 `/tmp/watch-claude-mitm-cleanup.log`；这里会记录 `proxy_url` 恢复、`autoStartProxy` 恢复、devapp/core 重启和最终 `18417/28417` 监听结果
 - managed mode 会临时写入 dev bundle 的 `debugTestCAFile` defaults key，把 MITM CA 路径显式传给 Quotio 启动的 CLIProxyAPI；脚本退出时会恢复或删除这个键
-- 只有在你明确传 `ALLOW_DIRECT_CORE_DEBUG=1` 时，才会跳过 devapp，直接针对 `28417` 做底层调试；这个模式不保证 `18417` 持续可用
+- 只有在你明确传 `ALLOW_DIRECT_CORE_DEBUG=1` 时，才会跳过 devapp，直接针对 `28417` 做底层调试；脚本运行期间 `18417` 可能短暂不可用，但如果启动脚本前 `Quotio Dev` 已在监听，cleanup 会按基线把 `18417/28417` 一并恢复
 - 如果你不是用真实 Claude Code，而是手工 `curl` devapp bridge 端口做本地复现，优先使用 `http://localhost:18417`，不要硬写 `http://127.0.0.1:18417`；当前 macOS 下 `ProxyBridge` 可能只在 IPv6 `localhost/::1` 侧稳定可达
 
 #### 层级 C：测真实 Claude / Codex CLI
@@ -362,5 +362,5 @@ rm -rf ~/.cli-proxy-api-dev
 
 ## 相关文档
 
-- [账户级请求标识架构说明](/Users/corylin/Project/ai/quotio/docs/account-fingerprint-architecture.md)
-- [开发版转正式版操作说明](/Users/corylin/Project/ai/quotio/docs/dev-to-production-promotion.md)
+- [`docs/account-fingerprint-architecture.md`](./account-fingerprint-architecture.md)
+- [`docs/dev-to-production-promotion.md`](./dev-to-production-promotion.md)

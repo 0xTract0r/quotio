@@ -139,6 +139,29 @@ From code comments - **never violate**:
 - ProxyBridge: target host **always localhost**
 - CLIProxyManager: base URL **always points to CLIProxyAPI directly**
 
+## Runtime Safety
+
+### Production Runtime (CRITICAL)
+
+Treat the following as live production state on the local machine:
+- `~/Library/Application Support/Quotio/`
+- `~/.cli-proxy-api`
+- the running listeners on `18317/28317`
+
+Never do any of the following unless the user explicitly approves that exact action in the current turn:
+- replace `~/Library/Application Support/Quotio/CLIProxyAPI`
+- modify production `config.yaml` for debugging
+- stop, restart, or hot-swap the production core process
+- restart the production app
+
+Important:
+- restarting the production core counts as a production-impacting action even if `Quotio.app` itself is not restarted
+- any CLIProxyAPI / CLIProxyAPIPlus change must be verified in `Quotio Dev` first, with isolated runtime paths and ports
+- required dev-first gate before any production promotion: basic Claude/Codex requests succeed, MITM verification shows expected `MATCH`, and rollback steps are prepared
+- do not perform production runtime experiments from `master`; use a dedicated worktree/branch first
+
+If the user says production traffic must not be interrupted, interpret that as a hard ban on touching the production app or production core process.
+
 ## Key Patterns
 
 ### Parallel Async Fetching
@@ -171,6 +194,53 @@ No automated tests. Manual testing:
 - Check all providers OAuth
 - Validate localization
 
+For proxy-core changes, extend manual testing with:
+- validate the new core in `Quotio Dev` before any production discussion
+- verify Claude/Codex request path end-to-end, not just Quotio UI logs
+- use MITM or equivalent upstream capture for header/fingerprint acceptance
+- keep production verification read-only unless the user explicitly schedules a promotion window
+
+### Proxy/Fingerprint Lessons
+
+- For account-fingerprint work, the acceptance target is the provider-facing upstream request, not the local CLI request into Quotio and not CLIProxyAPI request logs alone.
+- MITM validation scripts must print enough evidence to disambiguate “latest flow” from “old flow”:
+  - flow timestamp
+  - provider URL
+  - key upstream headers
+  - request body prefix
+  - clear note that response output is only a prefix, not the full reply
+- Anthropic and Codex may use different real upstream domains than expected from surface API docs:
+  - Claude validation currently targets `api.anthropic.com/v1/messages`
+  - Codex validation must also consider `chatgpt.com/backend-api/codex/responses`
+- If a validation script reads existing MITM flow files instead of triggering a new request, the script output must say so explicitly.
+- When a claim depends on runtime behavior, prefer one of:
+  - MITM capture of the provider-facing request
+  - direct upstream request logs emitted by the core before `httpClient.Do(...)`
+  Do not claim success from UI state or saved auth metadata alone.
+
+### Production Promotion Rules
+
+- Replacing the on-disk production `CLIProxyAPI` binary does not affect the already running production core process.
+- Any production core promotion must be treated as a two-step operation:
+  1. swap the on-disk binary with backup prepared
+  2. perform exactly one controlled proxy restart in a user-approved window
+- Promotion/rollback automation for production must default to dry-run and require an explicit execution flag.
+- If the user forbids production interruption, do not improvise with process kills or manual binary swaps. Prepare scripts, backups, hashes, rollback steps, and wait for an explicit promotion window.
+
+### Incident Retrospective
+
+- A previous failure mode in this repository was replacing or restarting the production core during active use and breaking local AI traffic.
+- Future tasks touching `CLIProxyAPI`, `CLIProxyAPIPlus`, auth routing, ports, or production verification must leave a recoverable local trail:
+  - update `.ai/todos.md`
+  - document backup/rollback paths
+  - document the exact promotion gate and verification method
+
+## Agent Coordination
+
+- For this repository, subagents should default to the same model tier as the main agent for implementation, verification, architecture review, and any production-affecting judgment.
+- Do not use mini/smaller models for critical code changes, acceptance decisions, release/promotion decisions, or incident handling.
+- Smaller models are only acceptable for low-risk support work such as bounded file discovery or mechanical summarization, and their output must still be reviewed by the main agent before use.
+
 ## Git Workflow
 
 **Never commit to `master`**. Branch naming:
@@ -178,6 +248,15 @@ No automated tests. Manual testing:
 - `bugfix/<desc>` - Bug fixes
 - `refactor/<scope>` - Refactoring
 - `docs/<content>` - Documentation
+
+Additional guardrails:
+- If the current checkout is `master`, do not start implementation there. Create or reuse a dedicated worktree/branch first unless the task is read-only.
+- Do not require a fresh worktree for every tiny change. Small, low-risk edits such as a narrowly scoped doc wording fix or typo fix may stay in the current non-`master` task branch when no parallel work is happening.
+- Default to creating or reusing a dedicated worktree before any non-trivial code change, long-running task, proxy/core change, submodule/dependency change, runtime-isolation change, or mixed AI/human collaboration.
+- Once a task already has a dedicated worktree, continue that task only in the same worktree until it is merged or explicitly abandoned.
+- Any proxy-core change, submodule change, auth/keychain/port change, release-flow change, or production-adjacent debugging must start in a dedicated worktree.
+- Do not continue feature implementation on `master` once a dedicated worktree/branch exists for the task.
+- Do not combine runtime experimentation on the production app with uncommitted feature work in `master`.
 
 ## Dependencies
 

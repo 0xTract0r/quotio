@@ -3,18 +3,18 @@
 set -euo pipefail
 
 CORE_PORT="${CORE_PORT:-28417}"
-FLOW_FILE="${FLOW_FILE:-/tmp/quotio-mitm/flows.jsonl}"
+FLOW_FILE="${FLOW_FILE:-/tmp/quotio-mitm/openai-flows.jsonl}"
 CONFIG_PATH="${CONFIG_PATH:-$HOME/Library/Application Support/Quotio-dev/config.yaml}"
-MODEL="${MODEL:-claude-haiku-4-5-20251001}"
+MODEL="${MODEL:-gpt-5-codex}"
 PROMPT="${PROMPT:-Reply with exactly: ping}"
 TOKEN="${TOKEN:-}"
 AUTH_DIR="${AUTH_DIR:-}"
-CLAUDE_AUTH_FILE="${CLAUDE_AUTH_FILE:-}"
+CODEX_AUTH_FILE="${CODEX_AUTH_FILE:-}"
 SKIP_TRIGGER="${SKIP_TRIGGER:-0}"
 
 if [[ ! -f "$FLOW_FILE" ]]; then
   echo "MITM flow file not found: $FLOW_FILE" >&2
-  echo "Start mitmdump first and point it at scripts/anthropic-mitm-capture.py." >&2
+  echo "Start mitmdump first and point it at scripts/openai-mitm-capture.py." >&2
   exit 1
 fi
 
@@ -31,9 +31,9 @@ if [[ -z "$AUTH_DIR" ]]; then
 fi
 
 EXPECTED_AUTH_PATH=""
-if [[ -n "$CLAUDE_AUTH_FILE" ]]; then
+if [[ -n "$CODEX_AUTH_FILE" ]]; then
   EXPECTED_AUTH_PATH="$(
-    python3 - "$AUTH_DIR" "$CLAUDE_AUTH_FILE" <<'PY'
+    python3 - "$AUTH_DIR" "$CODEX_AUTH_FILE" <<'PY'
 import sys
 from pathlib import Path
 
@@ -51,7 +51,7 @@ PY
   fi
 fi
 
-response_file="$(mktemp -t quotio-claude-mitm-response)"
+response_file="$(mktemp -t quotio-codex-mitm-response)"
 
 cleanup() {
   rm -f "$response_file"
@@ -80,18 +80,17 @@ if [[ "$SKIP_TRIGGER" != "1" ]]; then
 
   before_count="$(wc -l < "$FLOW_FILE" | tr -d ' ')"
 
-  curl -sS -N "http://127.0.0.1:${CORE_PORT}/v1/messages?beta=true" \
+  curl -sS -N "http://127.0.0.1:${CORE_PORT}/v1/responses" \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
-    -H "Accept: text/event-stream" \
-    -d "{\"model\":\"${MODEL}\",\"max_tokens\":16,\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"${PROMPT}\"}]}" \
+    -d "{\"model\":\"${MODEL}\",\"input\":\"${PROMPT}\",\"stream\":false}" \
     >"$response_file"
 
   after_count="$(wc -l < "$FLOW_FILE" | tr -d ' ')"
   if [[ "$after_count" -le "$before_count" ]]; then
     echo "No new MITM capture was written to $FLOW_FILE" >&2
     echo "Response preview:" >&2
-    sed -n '1,20p' "$response_file" >&2
+    sed -n '1,40p' "$response_file" >&2
     exit 1
   fi
 fi
@@ -142,14 +141,7 @@ print(f"  Flow timestamp (UTC): {timestamp}")
 print(f"  Flow timestamp (local): {to_local_time(timestamp)}")
 print(f"  URL: {request['pretty_url']}")
 print(f"  Request body prefix: {request.get('body_prefix', '')[:240].replace(chr(10), ' ')}")
-keys = [
-    "User-Agent",
-    "X-App",
-    "X-Stainless-Package-Version",
-    "X-Stainless-Runtime-Version",
-    "X-Stainless-Timeout",
-]
-for key in keys:
+for key in ["User-Agent", "Version"]:
     normalized_key = key.lower()
     actual = headers.get(normalized_key, "")
     print(f"  {key}: {actual}")
@@ -158,6 +150,7 @@ for key in keys:
         marker = "MATCH" if actual == expected else "MISMATCH"
         print(f"    saved: {expected}")
         print(f"    check: {marker}")
+
 print("MITM captured upstream response:")
 print(f"  Status: {response.get('status_code')}")
 print(f"  Content-Type: {response_headers.get('content-type', '')}")
@@ -171,5 +164,5 @@ PY
 if [[ "$SKIP_TRIGGER" != "1" ]]; then
   echo
   echo "Direct core response preview:"
-  sed -n '1,20p' "$response_file"
+  sed -n '1,40p' "$response_file"
 fi

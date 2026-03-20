@@ -1,6 +1,6 @@
 # 账户级请求标识架构说明
 
-最后更新：2026-03-20
+最后更新：2026-03-21
 
 ## 这次需求的真实目标
 
@@ -38,6 +38,8 @@
 - Claude / Codex 账户不再只处理一个 `User-Agent` 字段，而是保存一整组上游 HTTP headers
 - 这些账户级 headers 已接入 Claude / Codex 的上游运行链路
 - 已用 MITM 独立抓包证明 Claude 上游真实请求确实带上了保存的 header，并收到了真实 SSE 响应
+- 正式版已经完成一次受控 patched core 迁移，并通过 MITM 证明 Claude 真实上游请求已经和保存的账号指纹 `MATCH`
+- Codex 的正式版 MITM 验收脚本也已经落地，并按真实路由 `https://chatgpt.com/backend-api/codex/responses` 收口
 - 新增了一套隔离开发测试方案，保证测试版 Quotio 不影响常驻正式版
 - 新增 `watch-claude-mitm-session.sh`，把“正常开 devapp -> 启动脚本 -> 发一句话 -> 打印真实上游请求”收敛成单脚本工作流
 - 新增 managed-mode 恢复链路，脚本退出后会恢复：
@@ -59,14 +61,57 @@
 - 对 Codex 来说，当前也主要是上游 HTTP / WS headers
 - TLS 指纹是否能 per-account 生效，取决于 CLIProxyAPIPlus 对具体 provider executor 的实现边界
 
-## 当前架构
+## 当前架构与实现落点
+
+### Quotio 主仓库
+
+实现分成 5 个落点：
+
+1. 账户档案与生成
+   - `AccountMetadataStore` 负责定义账户级请求标识模型、默认值与 provider 差异
+   - Claude / Codex 保存的是一整组上游 HTTP headers，而不是单独一个 `User-Agent`
+2. UI 交互
+   - 账户设置页提供生成、查看、保护性重生
+   - 重生前有二次确认，避免误触覆盖已有标识
+3. 本地 auth 写回
+   - 通过 `ManagementAPIClient` / `DirectAuthFileService` 把 `headers`、`proxy_url` 等写回 auth 记录
+   - 这样 CLIProxyAPIPlus 在运行时可以直接读取到账户级 headers / proxy
+4. 验证脚本
+   - Claude：`anthropic-mitm-capture.py`、`verify-claude-mitm-capture*.sh`
+   - Codex：`openai-mitm-capture.py`、`verify-codex-mitm-capture*.sh`
+5. 正式迁移与回滚
+   - `promote-cliproxy-plus-production.sh`
+   - `rollback-cliproxy-plus-production.sh`
+
+### CLIProxyAPIPlus 子模块
+
+真正让“保存的账号指纹出现在上游请求里”的核心逻辑在子模块里：
+
+- Claude：
+  - 在 `PrepareRequest` 和 `applyClaudeHeaders` 中，除了默认 cloaking 头，还会显式读取 auth 记录里的托管 headers
+  - 最终再用这些保存值覆盖上游请求头
+- Codex：
+  - 继续沿用 `applyCodexHeaders` 路径，把 auth 记录中的 `User-Agent` / `Version` 写到上游请求
+- 出站代理：
+  - `newProxyAwareHTTPClient` 优先使用账号级 `auth.ProxyURL`
+  - 因此把单账号 `proxy_url` 指到 MITM，就能抓到 `CLIProxyAPIPlus -> provider` 的真实上游请求
+
+## 最终业务结果
+
+截至当前 worktree，已经可以把这个需求收敛成下面这组可交付结果：
+
+- 每个账户可拥有独立的“上游请求标识”
+- UI 中可生成、查看、保护性重生
+- Claude 正式版已验证：真实上游请求头与保存值 `MATCH`
+- Codex 已具备同口径 MITM 验证工具链
+- 正式迁移有明确备份、回滚、受控 restart 和验收脚本
 
 ### 1. Quotio UI / ViewModel
 
 主要入口：
 
-- [ProvidersScreen.swift](/Users/corylin/Project/ai/quotio/Quotio/Views/Screens/ProvidersScreen.swift)
-- [QuotaViewModel.swift](/Users/corylin/Project/ai/quotio/Quotio/ViewModels/QuotaViewModel.swift)
+- [`Quotio/Views/Screens/ProvidersScreen.swift`](../Quotio/Views/Screens/ProvidersScreen.swift)
+- [`Quotio/ViewModels/QuotaViewModel.swift`](../Quotio/ViewModels/QuotaViewModel.swift)
 
 职责：
 
@@ -78,9 +123,9 @@
 
 主要文件：
 
-- [AccountMetadataStore.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/AccountMetadataStore.swift)
-- [DirectAuthFileService.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/DirectAuthFileService.swift)
-- [ManagementAPIClient.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/ManagementAPIClient.swift)
+- [`Quotio/Services/AccountMetadataStore.swift`](../Quotio/Services/AccountMetadataStore.swift)
+- [`Quotio/Services/DirectAuthFileService.swift`](../Quotio/Services/DirectAuthFileService.swift)
+- [`Quotio/Services/ManagementAPIClient.swift`](../Quotio/Services/ManagementAPIClient.swift)
 
 职责：
 
@@ -92,7 +137,7 @@
 
 主要文件：
 
-- [AccountFingerprintRuntime.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/AccountFingerprintRuntime.swift)
+- [`Quotio/Services/AccountFingerprintRuntime.swift`](../Quotio/Services/AccountFingerprintRuntime.swift)
 - 各 provider quota fetcher / warmup service
 
 职责：
@@ -121,8 +166,8 @@
 
 主要文件：
 
-- [CLIProxyManager.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/Proxy/CLIProxyManager.swift)
-- [watch-claude-mitm-session.sh](/Users/corylin/Project/ai/quotio/scripts/watch-claude-mitm-session.sh)
+- [`Quotio/Services/Proxy/CLIProxyManager.swift`](../Quotio/Services/Proxy/CLIProxyManager.swift)
+- [`scripts/watch-claude-mitm-session.sh`](../scripts/watch-claude-mitm-session.sh)
 
 这次为了让 managed-mode 的 MITM 验收稳定，额外补了一层显式注入：
 
@@ -148,12 +193,27 @@
 
 参考文档：
 
-- [isolated-dev-testing.md](/Users/corylin/Project/ai/quotio/docs/isolated-dev-testing.md)
+- [`docs/isolated-dev-testing.md`](./isolated-dev-testing.md)
 
 ### 当前最靠谱的验收口径
 
 - 不再以 CLIProxyAPI request log 作为唯一证据
 - 以 MITM 抓到的真实上游 `POST /v1/messages` + SSE 为准
+- 对 Codex，则以 MITM 抓到的真实 `chatgpt.com/backend-api/codex/responses` 或 `api.openai.com` 真实上游请求为准
+
+### 为什么 MITM 证据有效
+
+这里抓到的不是 Quotio UI 的本地请求头，也不是从响应里“回显”出来的请求头。
+
+有效性链路是：
+
+1. Quotio 客户端只会把 CLI/IDE 请求转到本地 `18317/28317`
+2. `ProxyBridge` 目标永远是本地 `CLIProxyAPI`
+3. `CLIProxyAPIPlus` executor 在真正 `httpClient.Do(...)` 之前组装上游请求头
+4. executor 出站时优先使用账号级 `proxy_url`
+5. MITM 代理正是挂在这个账号级 `proxy_url` 上
+
+因此 MITM 抓到的是 `CLIProxyAPIPlus -> provider` 的真实上游 HTTP 请求头。
 
 ## 当前边界与风险
 
@@ -174,8 +234,8 @@
 当前已经把“长期维护入口”迁入本项目：
 
 - 子模块路径：`third_party/CLIProxyAPIPlus`
-- 维护说明：[cliproxy-plus-submodule.md](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/docs/cliproxy-plus-submodule.md)
-- 构建脚本：[manage-cliproxy-plus.sh](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/scripts/manage-cliproxy-plus.sh)
+- 维护说明：[`docs/cliproxy-plus-submodule.md`](./cliproxy-plus-submodule.md)
+- 构建脚本：[`scripts/manage-cliproxy-plus.sh`](../scripts/manage-cliproxy-plus.sh)
 
 ### 结论
 
