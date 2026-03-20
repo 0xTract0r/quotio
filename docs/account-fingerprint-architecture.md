@@ -173,21 +173,18 @@
 
 当前已经把“长期维护入口”迁入本项目：
 
-- [third_party/CLIProxyAPIPlus/README.md](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/third_party/CLIProxyAPIPlus/README.md)
-- [0001-quotio-account-fingerprint.patch](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/third_party/CLIProxyAPIPlus/patches/0001-quotio-account-fingerprint.patch)
-- [manage-cliproxy-plus.sh](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/scripts/manage-cliproxy-plus.sh)
+- 子模块路径：`third_party/CLIProxyAPIPlus`
+- 维护说明：[cliproxy-plus-submodule.md](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/docs/cliproxy-plus-submodule.md)
+- 构建脚本：[manage-cliproxy-plus.sh](/Users/corylin/Project/ai/quotio.worktrees/feat-account-fingerprint/scripts/manage-cliproxy-plus.sh)
 
 ### 结论
 
-当前采用的是“项目内 vendored patch source”方案，而不是 Git 子模块。
+当前采用的是 Git submodule 方案。
 
-原因：
+当前子模块已经指向可复现远端：
 
-- 目前还没有稳定的远端 fork 可以作为子模块来源
-- 子模块如果指向本地路径或未推送提交，不具备可复现性
-- 现阶段最重要的是把上游基线、补丁和构建流程固化到项目内
-
-后续如果你建立了稳定 fork，再把 `third_party/CLIProxyAPIPlus` 平滑切为真正的子模块会更合适。
+- `git@github.com:0xTract0r/CLIProxyAPIPlus.git`
+- 分支：`quotio/account-fingerprint`
 
 ### 不建议继续放在 `/tmp` 的原因
 
@@ -199,8 +196,8 @@
 ### 当前已经补齐的管理面
 
 - 固定路径：`third_party/CLIProxyAPIPlus`
-- 上游基线 commit：`7c2ad4c`
-- Quotio patch 文件：项目内持久化
+- 远端 fork：`0xTract0r/CLIProxyAPIPlus`
+- 跟踪分支：`quotio/account-fingerprint`
 - 重建命令：`./scripts/manage-cliproxy-plus.sh build`
 - 联调脚本：`scripts/watch-claude-mitm-session.sh`
 

@@ -209,7 +209,7 @@ mkdir -p /tmp/quotio-mitm/home
 
 说明：
 - 当前为了让 Go 进程信任 mitmproxy 自签 CA，需要一个测试专用补丁版 CLIProxyAPIPlus，在 `sdk/proxyutil/proxy.go` 中支持 `QUOTIO_TEST_CA_FILE`
-- 现在默认使用项目内维护入口 `third_party/CLIProxyAPIPlus`
+- 现在默认使用项目内子模块 `third_party/CLIProxyAPIPlus`
 - 这是测试验收链路，不属于 Quotio 正式运行依赖
 
 如果还没准备好补丁版 binary，先执行：
@@ -222,7 +222,7 @@ mkdir -p /tmp/quotio-mitm/home
 
 ```bash
 QUOTIO_TEST_CA_FILE=/tmp/quotio-mitm/home/mitmproxy-ca-cert.pem \
-./third_party/CLIProxyAPIPlus/work/bin/CLIProxyAPI \
+./build/CLIProxyAPIPlus/CLIProxyAPI \
   -config "$HOME/Library/Application Support/Quotio-dev/config.yaml"
 ```
 
@@ -276,7 +276,7 @@ QUOTIO_TEST_CA_FILE=/tmp/quotio-mitm/home/mitmproxy-ca-cert.pem \
 
 - `Quotio Dev.app` 已正常启动
 - 测试 auth 目录里至少有一个启用中的 Claude 账号
-- 本机已有项目内补丁版 `CLIProxyAPIPlus` 二进制：`third_party/CLIProxyAPIPlus/work/bin/CLIProxyAPI`
+- 本机已有项目内补丁版 `CLIProxyAPIPlus` 二进制：`build/CLIProxyAPIPlus/CLIProxyAPI`
 
 调试补充：
 

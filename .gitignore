@@ -41,7 +41,3 @@ scripts/.specstory/
 .DS_Store
 
 .lattice/
-
-# Vendored CLIProxyAPIPlus working tree and build artifacts
-third_party/CLIProxyAPIPlus/work/*
-!third_party/CLIProxyAPIPlus/work/.gitkeep

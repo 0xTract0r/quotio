@@ -8,66 +8,49 @@ UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/router-for-me/CLIProxyAPIPlus.g
 BASE_COMMIT="${BASE_COMMIT:-7c2ad4c}"
 GO_TOOLCHAIN_MODE="${GO_TOOLCHAIN_MODE:-auto}"
 VENDOR_DIR="${ROOT_DIR}/third_party/CLIProxyAPIPlus"
-WORK_DIR="${VENDOR_DIR}/work"
-SRC_DIR="${WORK_DIR}/src"
-BIN_DIR="${WORK_DIR}/bin"
+BIN_DIR="${ROOT_DIR}/build/CLIProxyAPIPlus"
 BIN_PATH="${BIN_DIR}/CLIProxyAPI"
-PATCH_FILE="${VENDOR_DIR}/patches/0001-quotio-account-fingerprint.patch"
 
 usage() {
   cat <<EOF
 Usage:
   $0 bootstrap
   $0 build
-  $0 refresh-patch
+  $0 status
 EOF
 }
 
-ensure_source_checkout() {
-  mkdir -p "${WORK_DIR}"
-  if [[ ! -d "${SRC_DIR}/.git" ]]; then
-    git clone "${UPSTREAM_URL}" "${SRC_DIR}"
+ensure_submodule_ready() {
+  git submodule update --init --recursive "${VENDOR_DIR}"
+  if [[ ! -d "${VENDOR_DIR}/.git" && ! -f "${VENDOR_DIR}/.git" ]]; then
+    echo "CLIProxyAPIPlus submodule is missing: ${VENDOR_DIR}" >&2
+    exit 1
   fi
-}
-
-apply_patch_if_needed() {
-  if git -C "${SRC_DIR}" apply --check "${PATCH_FILE}" >/dev/null 2>&1; then
-    git -C "${SRC_DIR}" apply "${PATCH_FILE}"
-    echo "Applied patch: ${PATCH_FILE}"
-    return 0
-  fi
-
-  if git -C "${SRC_DIR}" apply --reverse --check "${PATCH_FILE}" >/dev/null 2>&1; then
-    echo "Patch already applied: ${PATCH_FILE}"
-    return 0
-  fi
-
-  echo "Patch state is not cleanly applicable or reversible: ${PATCH_FILE}" >&2
-  exit 1
 }
 
 bootstrap() {
-  ensure_source_checkout
-  git -C "${SRC_DIR}" fetch origin
-  git -C "${SRC_DIR}" checkout "${BASE_COMMIT}"
-  apply_patch_if_needed
-  echo "Source ready at: ${SRC_DIR}"
+  ensure_submodule_ready
+  echo "Submodule ready at: ${VENDOR_DIR}"
+  git -C "${VENDOR_DIR}" rev-parse --short HEAD
 }
 
 build() {
   bootstrap
   mkdir -p "${BIN_DIR}"
   (
-    cd "${SRC_DIR}"
+    cd "${VENDOR_DIR}"
     GOTOOLCHAIN="${GO_TOOLCHAIN_MODE}" go build -o "${BIN_PATH}" ./cmd/server
   )
   echo "Built patched binary: ${BIN_PATH}"
 }
 
-refresh_patch() {
-  ensure_source_checkout
-  git -C "${SRC_DIR}" diff > "${PATCH_FILE}"
-  echo "Refreshed patch file: ${PATCH_FILE}"
+status_cmd() {
+  ensure_submodule_ready
+  git -C "${VENDOR_DIR}" status --short
+  echo "---"
+  git -C "${VENDOR_DIR}" rev-parse --short HEAD
+  echo "---"
+  git -C "${VENDOR_DIR}" remote -v
 }
 
 COMMAND="${1:-}"
@@ -79,8 +62,8 @@ case "${COMMAND}" in
   build)
     build
     ;;
-  refresh-patch)
-    refresh_patch
+  status)
+    status_cmd
     ;;
   *)
     usage
