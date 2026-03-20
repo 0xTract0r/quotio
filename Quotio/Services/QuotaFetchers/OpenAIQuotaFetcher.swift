@@ -109,7 +109,11 @@ actor OpenAIQuotaFetcher {
         return fallbackKey(fromFilename: filename)
     }
     
-    func fetchQuota(accessToken: String, accountId: String?) async throws -> CodexQuotaData {
+    func fetchQuota(
+        accessToken: String,
+        accountId: String?,
+        metadataKey: String?
+    ) async throws -> CodexQuotaData {
         guard let url = URL(string: usageURL) else {
             throw CodexQuotaError.invalidURL
         }
@@ -117,6 +121,7 @@ actor OpenAIQuotaFetcher {
         request.httpMethod = "GET"
         request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
+        AccountFingerprintRuntime.applyUserAgent(to: &request, metadataKey: metadataKey)
         if let accountId, !accountId.isEmpty {
             request.addValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
@@ -146,6 +151,7 @@ actor OpenAIQuotaFetcher {
         let data = try Data(contentsOf: url)
         let authFile = try JSONDecoder().decode(CodexAuthFile.self, from: data)
         let rawJSON = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        let metadataKey = AccountMetadataStore.authFileKey(provider: .codex, fileName: url.lastPathComponent)
         let accountId = extractAccountId(from: authFile, rawJSON: rawJSON)
         let accountKey = resolveAccountKey(
             authFile: authFile,
@@ -164,7 +170,11 @@ actor OpenAIQuotaFetcher {
             }
         }
 
-        let quota = try await fetchQuota(accessToken: accessToken, accountId: accountId)
+        let quota = try await fetchQuota(
+            accessToken: accessToken,
+            accountId: accountId,
+            metadataKey: metadataKey
+        )
         return (accountKey: accountKey, quota: quota)
     }
     

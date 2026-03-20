@@ -808,6 +808,7 @@ final class QuotaViewModel {
             accountKey: accountKey,
             availableModels: availableModels,
             authIndex: authInfo.authIndex,
+            authFileName: authInfo.authFileName,
             apiClient: apiClient
         )
     }
@@ -817,6 +818,7 @@ final class QuotaViewModel {
         accountKey: String,
         availableModels: [WarmupModelInfo],
         authIndex: String,
+        authFileName: String,
         apiClient: ManagementAPIClient
     ) async {
         guard provider == .antigravity else {
@@ -852,6 +854,7 @@ final class QuotaViewModel {
                 try await warmupService.warmup(
                     managementClient: apiClient,
                     authIndex: authIndex,
+                    authFileName: authFileName,
                     model: model
                 )
                 updateWarmupStatus(for: account) { status in
@@ -1776,6 +1779,180 @@ final class QuotaViewModel {
         await loadDirectAuthFiles()
     }
 
+    func loadAuthFileUserAgent(_ file: AuthFile) async throws -> String? {
+        let data = try await withManagementClient(operationName: "loadAuthFileUserAgent") { client in
+            try await client.downloadAuthFile(name: file.name)
+        }
+        if let userAgent = Self.parseUserAgent(from: data, provider: file.providerType) {
+            return userAgent
+        }
+
+        if let directAuthFile = await directAuthFileForProxyFallback(named: file.name) {
+            return Self.readStoredUserAgent(for: directAuthFile.provider, fromFileAt: directAuthFile.filePath)
+        }
+        return nil
+    }
+
+    func updateAuthFileUserAgent(_ userAgent: String?, for file: AuthFile) async throws {
+        switch Self.userAgentStorage(for: file.providerType) {
+        case .authField:
+            guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
+                throw DirectAuthFileError.invalidAuthFile
+            }
+
+            try await directAuthService.updateUserAgent(filePath: directAuthFile.filePath, userAgent: userAgent)
+        case .header:
+            let expectedUserAgent = Self.trimmedNonEmpty(userAgent)
+
+            do {
+                try await withManagementClient(operationName: "updateAuthFileHeaderUserAgent") { client in
+                    try await client.setAuthFileHeader(
+                        name: file.name,
+                        header: "User-Agent",
+                        value: expectedUserAgent
+                    )
+                }
+            } catch let APIError.httpError(statusCode) where statusCode == 400 || statusCode == 404 {
+                guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
+                    throw APIError.httpError(statusCode)
+                }
+                Log.warning("updateAuthFileUserAgent: management API returned \(statusCode) for headers.User-Agent on \(file.name), falling back to direct auth file update")
+                try await directAuthService.updateHeader(
+                    filePath: directAuthFile.filePath,
+                    header: "User-Agent",
+                    value: expectedUserAgent
+                )
+                await refreshData()
+                await loadDirectAuthFiles()
+                return
+            }
+
+            let persistedUserAgent = try await withManagementClient(operationName: "verifyAuthFileHeaderUserAgent") { client in
+                let data = try await client.downloadAuthFile(name: file.name)
+                return Self.parseUserAgent(from: data, provider: file.providerType)
+            }
+
+            if persistedUserAgent != expectedUserAgent {
+                guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
+                    throw APIError.invalidResponse
+                }
+
+                Log.warning("updateAuthFileUserAgent: management API did not persist headers.User-Agent for \(file.name), falling back to direct auth file update")
+                try await directAuthService.updateHeader(
+                    filePath: directAuthFile.filePath,
+                    header: "User-Agent",
+                    value: expectedUserAgent
+                )
+            }
+        case .localOnly:
+            break
+        }
+
+        await refreshData()
+        await loadDirectAuthFiles()
+    }
+
+    func updateAuthFileManagedHeaders(
+        _ headers: [String: String],
+        managedHeaderNames: [String],
+        for file: AuthFile
+    ) async throws {
+        guard Self.userAgentStorage(for: file.providerType) == .header else {
+            return
+        }
+
+        let desiredHeaders = Self.sanitizedHeaders(headers)
+        let managedNames = Self.normalizedHeaderNames(managedHeaderNames)
+
+        let existingHeaders = try await withManagementClient(operationName: "loadAuthFileManagedHeaders") { client in
+            let data = try await client.downloadAuthFile(name: file.name)
+            return Self.parseHeaders(from: data)
+        }
+        let mergedHeaders = Self.mergeManagedHeaders(
+            existing: existingHeaders,
+            desired: desiredHeaders,
+            managedHeaderNames: managedNames
+        )
+
+        do {
+            try await withManagementClient(operationName: "updateAuthFileManagedHeaders") { client in
+                try await client.setAuthFileHeaders(name: file.name, headers: mergedHeaders)
+            }
+        } catch let APIError.httpError(statusCode) where statusCode == 400 || statusCode == 404 {
+            guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
+                throw APIError.httpError(statusCode)
+            }
+            Log.warning("updateAuthFileManagedHeaders: management API returned \(statusCode) for \(file.name), falling back to direct auth file update")
+            try await directAuthService.replaceHeaders(filePath: directAuthFile.filePath, headers: mergedHeaders)
+            await refreshData()
+            await loadDirectAuthFiles()
+            return
+        }
+
+        let persistedHeaders = try await withManagementClient(operationName: "verifyAuthFileManagedHeaders") { client in
+            let data = try await client.downloadAuthFile(name: file.name)
+            return Self.parseHeaders(from: data)
+        }
+        let persistedManagedHeaders = Self.selectManagedHeaders(
+            from: persistedHeaders,
+            managedHeaderNames: managedNames
+        )
+        let expectedManagedHeaders = Self.selectManagedHeaders(
+            from: mergedHeaders,
+            managedHeaderNames: managedNames
+        )
+
+        if Self.normalizedHeaders(persistedManagedHeaders) != Self.normalizedHeaders(expectedManagedHeaders) {
+            guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
+                throw APIError.invalidResponse
+            }
+
+            Log.warning("updateAuthFileManagedHeaders: management API did not persist managed headers for \(file.name), falling back to direct auth file update")
+            try await directAuthService.replaceHeaders(filePath: directAuthFile.filePath, headers: mergedHeaders)
+        }
+
+        await refreshData()
+        await loadDirectAuthFiles()
+    }
+
+    func updateDirectAuthFileUserAgent(_ userAgent: String?, for file: DirectAuthFile) async throws {
+        switch Self.userAgentStorage(for: file.provider) {
+        case .authField:
+            try await directAuthService.updateUserAgent(filePath: file.filePath, userAgent: userAgent)
+        case .header:
+            try await directAuthService.updateHeader(
+                filePath: file.filePath,
+                header: "User-Agent",
+                value: userAgent
+            )
+        case .localOnly:
+            break
+        }
+        await loadDirectAuthFiles()
+    }
+
+    func updateDirectAuthFileManagedHeaders(
+        _ headers: [String: String],
+        managedHeaderNames: [String],
+        for file: DirectAuthFile
+    ) async throws {
+        guard Self.userAgentStorage(for: file.provider) == .header else {
+            return
+        }
+
+        let desiredHeaders = Self.sanitizedHeaders(headers)
+        let managedNames = Self.normalizedHeaderNames(managedHeaderNames)
+        let existingHeaders = Self.readStoredHeaders(fromFileAt: file.filePath)
+        let mergedHeaders = Self.mergeManagedHeaders(
+            existing: existingHeaders,
+            desired: desiredHeaders,
+            managedHeaderNames: managedNames
+        )
+
+        try await directAuthService.replaceHeaders(filePath: file.filePath, headers: mergedHeaders)
+        await loadDirectAuthFiles()
+    }
+
     func updateDirectAuthFileProxyURL(_ proxyURL: String?, for file: DirectAuthFile) async throws {
         try await directAuthService.updateProxyURL(filePath: file.filePath, proxyURL: proxyURL)
         await loadDirectAuthFiles()
@@ -1798,6 +1975,158 @@ final class QuotaViewModel {
 
         let trimmedProxyURL = rawProxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedProxyURL.isEmpty ? nil : trimmedProxyURL
+    }
+
+    private static func parseUserAgent(from data: Data, provider: AIProvider?) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        return parseStoredUserAgent(from: json, provider: provider)
+    }
+
+    private nonisolated static func readStringField(named key: String, fromFileAt path: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawValue = json[key] as? String else {
+            return nil
+        }
+
+        let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedValue.isEmpty ? nil : trimmedValue
+    }
+
+    private enum UserAgentStorage {
+        case authField
+        case header
+        case localOnly
+    }
+
+    private nonisolated static func userAgentStorage(for provider: AIProvider?) -> UserAgentStorage {
+        switch provider {
+        case .antigravity:
+            return .authField
+        case .codex, .claude:
+            return .header
+        default:
+            return .localOnly
+        }
+    }
+
+    private nonisolated static func parseStoredUserAgent(from json: [String: Any], provider: AIProvider?) -> String? {
+        switch userAgentStorage(for: provider) {
+        case .authField:
+            return trimmedNonEmpty(json["user_agent"] as? String)
+        case .header:
+            if let headers = json["headers"] as? [String: Any] {
+                for (key, value) in headers where key.caseInsensitiveCompare("User-Agent") == .orderedSame {
+                    if let stringValue = value as? String,
+                       let trimmed = trimmedNonEmpty(stringValue) {
+                        return trimmed
+                    }
+                }
+            }
+            return trimmedNonEmpty(json["user_agent"] as? String)
+        case .localOnly:
+            return nil
+        }
+    }
+
+    private nonisolated static func parseHeaders(from data: Data) -> [String: String] {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+
+        return parseStoredHeaders(from: json)
+    }
+
+    private nonisolated static func parseStoredHeaders(from json: [String: Any]) -> [String: String] {
+        guard let headers = json["headers"] as? [String: Any] else {
+            return [:]
+        }
+
+        return Dictionary(uniqueKeysWithValues: headers.compactMap { key, value in
+            guard let stringValue = value as? String,
+                  let trimmedKey = trimmedNonEmpty(key),
+                  let trimmedValue = trimmedNonEmpty(stringValue) else {
+                return nil
+            }
+            return (trimmedKey, trimmedValue)
+        })
+    }
+
+    private nonisolated static func readStoredUserAgent(for provider: AIProvider, fromFileAt path: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        return parseStoredUserAgent(from: json, provider: provider)
+    }
+
+    private nonisolated static func readStoredHeaders(fromFileAt path: String) -> [String: String] {
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+
+        return parseStoredHeaders(from: json)
+    }
+
+    private nonisolated static func sanitizedHeaders(_ headers: [String: String]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: headers.compactMap { key, value in
+            guard let trimmedKey = trimmedNonEmpty(key),
+                  let trimmedValue = trimmedNonEmpty(value) else {
+                return nil
+            }
+            return (trimmedKey, trimmedValue)
+        })
+    }
+
+    private nonisolated static func normalizedHeaderNames(_ headerNames: [String]) -> Set<String> {
+        Set(headerNames.compactMap { trimmedNonEmpty($0)?.lowercased() })
+    }
+
+    private nonisolated static func normalizedHeaders(_ headers: [String: String]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: sanitizedHeaders(headers).map { key, value in
+            (key.lowercased(), value)
+        })
+    }
+
+    private nonisolated static func mergeManagedHeaders(
+        existing: [String: String],
+        desired: [String: String],
+        managedHeaderNames: Set<String>
+    ) -> [String: String] {
+        var merged = existing
+
+        for key in merged.keys where managedHeaderNames.contains(key.lowercased()) {
+            merged.removeValue(forKey: key)
+        }
+
+        for (key, value) in desired {
+            merged[key] = value
+        }
+
+        return sanitizedHeaders(merged)
+    }
+
+    private nonisolated static func selectManagedHeaders(
+        from headers: [String: String],
+        managedHeaderNames: Set<String>
+    ) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: headers.compactMap { key, value in
+            guard managedHeaderNames.contains(key.lowercased()) else {
+                return nil
+            }
+            return (key, value)
+        })
+    }
+
+    private nonisolated static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedValue.isEmpty ? nil : trimmedValue
     }
 
     private func directAuthFileForProxyFallback(named name: String) async -> DirectAuthFile? {

@@ -1,0 +1,213 @@
+# 账户级请求标识架构说明
+
+最后更新：2026-03-20
+
+## 这次需求的真实目标
+
+原始诉求是“为每个账户配置独立的 UA 信息、SSL 指纹等，并验证真实请求是否真的用了这些指纹”。
+
+落到当前 Quotio + CLIProxyAPIPlus 这套链路，真正有业务价值的目标不是“改本地 CLI 入站 UA”，而是：
+
+- 让不同 Claude / Codex 账号在转发到上游提供商时，带上不同的上游 HTTP 指纹
+- 让这些指纹能在 Quotio UI 中生成、查看、保护性重生
+- 能用独立证据证明上游真实请求用了这些值，而不是只看 CLIProxyAPI 的自报日志
+- 明确区分“当前能做到的 HTTP 指纹”和“当前做不到的 per-account TLS/SSL 指纹”
+
+## 预期需要做什么
+
+为了满足这个需求，实际需要拆成 4 层：
+
+1. 数据层
+   - 为每个账户保存独立的“上游请求标识”档案
+   - 档案至少要覆盖 `User-Agent` 与一组能稳定区分请求来源的 header
+2. UI 层
+   - 在账户设置页提供生成、查看、再次生成入口
+   - 再次生成必须有保护，避免误触把现有标识覆盖掉
+3. 运行时接入
+   - Quotio 自己发的 quota / warmup / provider 请求要能吃到这些标识
+   - Claude / Codex 经过 CLIProxyAPIPlus 转发到上游时，也要能把账户级 header 真正带出去
+4. 验证层
+   - 不能只看本地日志
+   - 必须能抓到真实上游 `POST /v1/messages` 或等价请求，并核对 header / SSE
+
+## 实际做了什么
+
+### 已完成
+
+- Quotio 账户设置页已经支持为账户生成、查看、保护性重生“上游请求标识”
+- Claude / Codex 账户不再只处理一个 `User-Agent` 字段，而是保存一整组上游 HTTP headers
+- 这些账户级 headers 已接入 Claude / Codex 的上游运行链路
+- 已用 MITM 独立抓包证明 Claude 上游真实请求确实带上了保存的 header，并收到了真实 SSE 响应
+- 新增了一套隔离开发测试方案，保证测试版 Quotio 不影响常驻正式版
+- 新增 `watch-claude-mitm-session.sh`，把“正常开 devapp -> 启动脚本 -> 发一句话 -> 打印真实上游请求”收敛成单脚本工作流
+- 新增 managed-mode 恢复链路，脚本退出后会恢复：
+  - Claude 测试账号的 `proxy_url`
+  - `autoStartProxy`
+  - dev bundle 下的 `debugTestCAFile`
+  - `18417/28417` 监听
+  - 测试 core 二进制
+
+### 没有伪装成“已完成”的部分
+
+- 当前没有做成“所有 provider 都支持 per-account TLS/SSL 指纹”
+- 当前没有做成“Claude / Codex 运行期真正可按账户自定义 TLS ClientHello”
+- 目前真正稳定落地的是“per-account 上游 HTTP 指纹”
+
+这不是偷换需求，而是结合底层链路后的技术收敛：
+
+- 对 Claude 来说，当前最有业务意义且可验证的是上游 HTTP headers
+- 对 Codex 来说，当前也主要是上游 HTTP / WS headers
+- TLS 指纹是否能 per-account 生效，取决于 CLIProxyAPIPlus 对具体 provider executor 的实现边界
+
+## 当前架构
+
+### 1. Quotio UI / ViewModel
+
+主要入口：
+
+- [ProvidersScreen.swift](/Users/corylin/Project/ai/quotio/Quotio/Views/Screens/ProvidersScreen.swift)
+- [QuotaViewModel.swift](/Users/corylin/Project/ai/quotio/Quotio/ViewModels/QuotaViewModel.swift)
+
+职责：
+
+- 在账户设置页展示“上游请求标识”
+- 触发生成 / 查看 / 再生成
+- 把 Claude / Codex 的 header profile 保存到 auth / metadata
+
+### 2. 本地持久化与管理 API 适配
+
+主要文件：
+
+- [AccountMetadataStore.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/AccountMetadataStore.swift)
+- [DirectAuthFileService.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/DirectAuthFileService.swift)
+- [ManagementAPIClient.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/ManagementAPIClient.swift)
+
+职责：
+
+- 保存账户级指纹元数据
+- 兼容直接读写 auth 文件与 management API
+- 对 Claude / Codex 统一写入整组 `headers`
+
+### 3. Quotio 自己的运行时请求
+
+主要文件：
+
+- [AccountFingerprintRuntime.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/AccountFingerprintRuntime.swift)
+- 各 provider quota fetcher / warmup service
+
+职责：
+
+- 把账户级指纹应用到 Quotio 自己发出的 provider 请求
+- 这部分不依赖 CLIProxyAPIPlus，属于 Quotio 本地运行时
+
+### 4. Claude / Codex 上游转发链路
+
+生产链路可以概括为：
+
+`CLI / IDE -> Quotio ProxyBridge -> CLIProxyAPIPlus -> provider upstream`
+
+关键点：
+
+- 用户真正关心的“账号可区分请求指纹”，发生在 `CLIProxyAPIPlus -> provider upstream`
+- 当前已经打通的是账户级 HTTP header profile
+- Claude 的真实上游校验已经通过 MITM 抓到：
+  - `POST https://api.anthropic.com/v1/messages?beta=true`
+  - `User-Agent`
+  - `X-App`
+  - `X-Stainless-*`
+  - `text/event-stream` SSE 响应
+
+### 5. managed-mode 测试 CA 注入
+
+主要文件：
+
+- [CLIProxyManager.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/Proxy/CLIProxyManager.swift)
+- [watch-claude-mitm-session.sh](/Users/corylin/Project/ai/quotio/scripts/watch-claude-mitm-session.sh)
+
+这次为了让 managed-mode 的 MITM 验收稳定，额外补了一层显式注入：
+
+- 脚本临时写入 dev bundle 的 `debugTestCAFile`
+- Quotio 启动 CLIProxyAPI 时会从该 defaults key 读取路径
+- 然后显式注入 `QUOTIO_TEST_CA_FILE`
+- 脚本退出时恢复或删除该 key
+
+这样就不再依赖“GUI app 重启后进程环境是否完整保留”。
+
+## 验证方式
+
+### 已验证事实
+
+- Claude 真实上游请求头已通过 MITM 抓包验证
+- 响应不是伪造文本，而是真实 `text/event-stream` SSE
+- managed-mode 的恢复链路已验证能恢复：
+  - `18417`
+  - `28417`
+  - Claude auth `proxy_url`
+  - `autoStartProxy`
+  - `debugTestCAFile`
+
+参考文档：
+
+- [isolated-dev-testing.md](/Users/corylin/Project/ai/quotio/docs/isolated-dev-testing.md)
+
+### 当前最靠谱的验收口径
+
+- 不再以 CLIProxyAPI request log 作为唯一证据
+- 以 MITM 抓到的真实上游 `POST /v1/messages` + SSE 为准
+
+## 当前边界与风险
+
+### 已落地的范围
+
+- Claude / Codex 账户级 HTTP 指纹
+- Quotio 本地请求的账户级 HTTP 指纹
+- 账户设置页可生成 / 查看 / 保护性重生
+
+### 明确的边界
+
+- 不是所有 provider 都支持同一套 per-account 指纹模型
+- 运行期 TLS 指纹不等于 OAuth 登录链路里的 uTLS 指纹
+- 当前不能把“每账户 SSL 指纹”写成一个已经完全交付的事实
+
+## CLIProxyAPIPlus 源码该放在哪里
+
+当前测试补丁源码在：
+
+- `/tmp/CLIProxyAPIPlus-quotio`
+
+这不应该继续作为长期真源。
+
+### 结论
+
+应该把它迁出 `/tmp`，但不建议直接把整份源码随意拷进 Quotio 根目录。
+
+更合理的长期方案有两个，优先第一种：
+
+1. 在 Quotio 仓库外、同级目录维护一个稳定的 sibling repo / worktree
+   - 例如：`../CLIProxyAPIPlus-quotio`
+   - 优点：边界清晰，不把两个项目的 Git 历史混在一起
+2. 作为 `third_party/CLIProxyAPIPlus` 子模块或 vendor 目录纳入管理
+   - 适合明确决定长期跟随维护时使用
+
+### 不建议继续放在 `/tmp` 的原因
+
+- `/tmp` 不是可持续真源
+- 机器重启、清理临时目录后容易丢
+- 无法稳定记录“补丁基线、引用版本、回滚点”
+- 新会话无法低成本恢复上下文
+
+### 推荐的最小管理要求
+
+无论选上面哪种，都应该补齐：
+
+- 固定路径
+- 上游基线 commit
+- Quotio 依赖的是哪一个 fork / patch
+- 需要重编译时的命令
+- 与 Quotio 联调时用到的脚本和环境变量
+
+## 给后续维护者的结论
+
+这次需求已经从“抽象指纹”收敛成“账户级上游 HTTP 指纹 + 可证明的真实链路接入”。
+
+如果后续要继续往“每账户 TLS 指纹”推进，正确入口不是再改 Quotio UI，而是继续研究并改造 CLIProxyAPIPlus 对 Claude / Codex 运行时 transport / dialer / TLS 握手的实现边界。

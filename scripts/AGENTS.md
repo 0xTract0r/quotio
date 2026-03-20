@@ -7,6 +7,7 @@
 | Command | Purpose |
 |---------|---------|
 | `./scripts/build.sh` | Build release archive |
+| `./scripts/run-dev-app.sh` | Rebuild and launch isolated dev app |
 | `./scripts/package.sh` | Create ZIP + DMG |
 | `./scripts/notarize.sh` | Apple notarization |
 | `./scripts/release.sh` | Full release pipeline |

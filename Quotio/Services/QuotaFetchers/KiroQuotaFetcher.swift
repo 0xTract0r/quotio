@@ -114,7 +114,15 @@ actor KiroQuotaFetcher {
                     // This prevents duplicate accounts in the UI
                     let key = authFile.filename.replacingOccurrences(of: ".json", with: "")
 
-                    let quota = await self.fetchQuota(tokenData: tokenData, filePath: authFile.filePath)
+                    let metadataKey = AccountMetadataStore.authFileKey(
+                        provider: .kiro,
+                        fileName: authFile.filename
+                    )
+                    let quota = await self.fetchQuota(
+                        tokenData: tokenData,
+                        filePath: authFile.filePath,
+                        metadataKey: metadataKey
+                    )
                     return (key, quota)
                 }
             }
@@ -149,7 +157,15 @@ actor KiroQuotaFetcher {
 
             let (needsRefresh, _) = shouldRefreshToken(tokenData)
             if needsRefresh {
-                if let _ = await refreshTokenWithExpiry(tokenData: tokenData, filePath: authFile.filePath) {
+                let metadataKey = AccountMetadataStore.authFileKey(
+                    provider: .kiro,
+                    fileName: authFile.filename
+                )
+                if let _ = await refreshTokenWithExpiry(
+                    tokenData: tokenData,
+                    filePath: authFile.filePath,
+                    metadataKey: metadataKey
+                ) {
                     refreshedCount += 1
                 }
             }
@@ -191,14 +207,22 @@ actor KiroQuotaFetcher {
 
     /// Fetch quota for a single token
     /// Implements reactive token refresh: if API returns 401/403, refresh token and retry once
-    private func fetchQuota(tokenData: AuthTokenData, filePath: String) async -> ProviderQuotaData? {
+    private func fetchQuota(
+        tokenData: AuthTokenData,
+        filePath: String,
+        metadataKey: String?
+    ) async -> ProviderQuotaData? {
         var currentToken = tokenData.accessToken
         var hasAttemptedRefresh = false
         var tokenExpiresAt: Date? = parseExpiryDate(tokenData.expiresAt)
 
         let (needsRefresh, _) = shouldRefreshToken(tokenData)
         if needsRefresh {
-            if let (refreshed, newExpiry) = await refreshTokenWithExpiry(tokenData: tokenData, filePath: filePath) {
+            if let (refreshed, newExpiry) = await refreshTokenWithExpiry(
+                tokenData: tokenData,
+                filePath: filePath,
+                metadataKey: metadataKey
+            ) {
                 currentToken = refreshed
                 tokenExpiresAt = newExpiry
                 hasAttemptedRefresh = true
@@ -215,12 +239,26 @@ actor KiroQuotaFetcher {
 
         let region = tokenData.extras?["region"] ?? defaultRegion
         
-        let result = await fetchUsageAPI(token: currentToken, tokenExpiresAt: tokenExpiresAt, region: region)
+        let result = await fetchUsageAPI(
+            token: currentToken,
+            tokenExpiresAt: tokenExpiresAt,
+            region: region,
+            metadataKey: metadataKey
+        )
 
         // Reactive refresh: If 401/403 and haven't tried refresh yet, refresh and retry
         if (result.statusCode == 401 || result.statusCode == 403) && !hasAttemptedRefresh {
-            if let (refreshed, newExpiry) = await refreshTokenWithExpiry(tokenData: tokenData, filePath: filePath) {
-                let retryResult = await fetchUsageAPI(token: refreshed, tokenExpiresAt: newExpiry, region: region)
+            if let (refreshed, newExpiry) = await refreshTokenWithExpiry(
+                tokenData: tokenData,
+                filePath: filePath,
+                metadataKey: metadataKey
+            ) {
+                let retryResult = await fetchUsageAPI(
+                    token: refreshed,
+                    tokenExpiresAt: newExpiry,
+                    region: region,
+                    metadataKey: metadataKey
+                )
                 return retryResult.quotaData ?? ProviderQuotaData(models: [], lastUpdated: Date(), isForbidden: true, planType: "Unauthorized", tokenExpiresAt: newExpiry)
             }
         }
@@ -246,7 +284,12 @@ actor KiroQuotaFetcher {
         let quotaData: ProviderQuotaData?
     }
 
-    private func fetchUsageAPI(token: String, tokenExpiresAt: Date?, region: String) async -> UsageAPIResult {
+    private func fetchUsageAPI(
+        token: String,
+        tokenExpiresAt: Date?,
+        region: String,
+        metadataKey: String?
+    ) async -> UsageAPIResult {
         let endpoint = usageEndpoint(region: region)
         guard let url = URL(string: "\(endpoint)?isEmailRequired=true&origin=AI_EDITOR") else {
             return UsageAPIResult(statusCode: 0, quotaData: ProviderQuotaData(
@@ -258,8 +301,18 @@ actor KiroQuotaFetcher {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.addValue("aws-sdk-js/3.0.0 KiroIDE-0.1.0 os/macos lang/js md/nodejs/18.0.0", forHTTPHeaderField: "User-Agent")
-        request.addValue("aws-sdk-js/3.0.0", forHTTPHeaderField: "x-amz-user-agent")
+        let resolvedUserAgent = AccountFingerprintRuntime.applyUserAgent(
+            to: &request,
+            metadataKey: metadataKey,
+            fallback: "aws-sdk-js/3.0.0 KiroIDE-0.1.0 os/macos lang/js md/nodejs/18.0.0"
+        )
+        request.addValue(
+            AccountFingerprintRuntime.derivedKiroXAmzUserAgent(
+                from: resolvedUserAgent,
+                fallback: "aws-sdk-js/3.0.0"
+            ),
+            forHTTPHeaderField: "x-amz-user-agent"
+        )
 
         do {
             let (data, response) = try await session.data(for: request)
@@ -310,7 +363,11 @@ actor KiroQuotaFetcher {
 
     /// Refresh Kiro token based on auth method and persist to disk
     /// Returns tuple of (newAccessToken, newExpiryDate)
-    private func refreshTokenWithExpiry(tokenData: AuthTokenData, filePath: String) async -> (String, Date?)? {
+    private func refreshTokenWithExpiry(
+        tokenData: AuthTokenData,
+        filePath: String,
+        metadataKey: String?
+    ) async -> (String, Date?)? {
         guard let refreshToken = tokenData.refreshToken else {
             return nil
         }
@@ -323,7 +380,11 @@ actor KiroQuotaFetcher {
             let region = tokenData.extras?["region"] ?? defaultRegion
             return await refreshSocialTokenWithExpiry(refreshToken: refreshToken, region: region, filePath: filePath)
         } else {
-            return await refreshIdCTokenWithExpiry(tokenData: tokenData, filePath: filePath)
+            return await refreshIdCTokenWithExpiry(
+                tokenData: tokenData,
+                filePath: filePath,
+                metadataKey: metadataKey
+            )
         }
     }
 
@@ -375,7 +436,11 @@ actor KiroQuotaFetcher {
 
     /// Refresh token for IdC auth (AWS Builder ID / Enterprise) using AWS OIDC endpoint
     /// Supports dynamic region from token data (e.g., ap-northeast-2 for Enterprise users)
-    private func refreshIdCTokenWithExpiry(tokenData: AuthTokenData, filePath: String) async -> (String, Date?)? {
+    private func refreshIdCTokenWithExpiry(
+        tokenData: AuthTokenData,
+        filePath: String,
+        metadataKey: String?
+    ) async -> (String, Date?)? {
         guard let refreshToken = tokenData.refreshToken,
               let clientId = tokenData.clientId,
               let clientSecret = tokenData.clientSecret else {
@@ -395,11 +460,21 @@ actor KiroQuotaFetcher {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("oidc.\(region).amazonaws.com", forHTTPHeaderField: "Host")
         request.addValue("keep-alive", forHTTPHeaderField: "Connection")
-        request.addValue("aws-sdk-js/3.738.0 ua/2.1 os/other lang/js md/browser#unknown_unknown api/sso-oidc#3.738.0 m/E KiroIDE", forHTTPHeaderField: "x-amz-user-agent")
         request.addValue("*/*", forHTTPHeaderField: "Accept")
         request.addValue("*", forHTTPHeaderField: "Accept-Language")
         request.addValue("cors", forHTTPHeaderField: "sec-fetch-mode")
-        request.addValue("node", forHTTPHeaderField: "User-Agent")
+        let resolvedUserAgent = AccountFingerprintRuntime.applyUserAgent(
+            to: &request,
+            metadataKey: metadataKey,
+            fallback: "node"
+        )
+        request.addValue(
+            AccountFingerprintRuntime.derivedKiroXAmzUserAgent(
+                from: resolvedUserAgent,
+                fallback: "aws-sdk-js/3.738.0 ua/2.1 os/other lang/js md/browser#unknown_unknown api/sso-oidc#3.738.0 m/E KiroIDE"
+            ),
+            forHTTPHeaderField: "x-amz-user-agent"
+        )
 
         let body: [String: String] = [
             "clientId": clientId,

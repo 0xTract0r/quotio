@@ -10,6 +10,8 @@ import AppKit
 @Observable
 final class CLIProxyManager {
     static let shared = CLIProxyManager()
+    private static let debugTestCAFileDefaultsKey = "debugTestCAFile"
+    private static let debugTestCAFileEnvironmentKey = "QUOTIO_TEST_CA_FILE"
     
     // MARK: - Two-Layer Proxy Architecture
     
@@ -44,6 +46,38 @@ final class CLIProxyManager {
     /// Internal port where CLIProxyAPI runs (when bridge mode is enabled)
     var internalPort: UInt16 {
         ProxyBridge.internalPort(from: proxyStatus.port)
+    }
+
+    private func configuredTestCAFilePath() -> String? {
+        let defaults = UserDefaults.standard
+        defaults.synchronize()
+
+        guard let rawPath = defaults.string(forKey: Self.debugTestCAFileDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawPath.isEmpty else {
+            if defaults.object(forKey: Self.debugTestCAFileDefaultsKey) != nil {
+                NSLog("[CLIProxyManager] debugTestCAFile present but empty")
+            } else {
+                NSLog("[CLIProxyManager] debugTestCAFile not set for this launch")
+            }
+            return nil
+        }
+        guard FileManager.default.fileExists(atPath: rawPath) else {
+            NSLog("[CLIProxyManager] debugTestCAFile missing at \(rawPath); skipping test CA injection")
+            return nil
+        }
+        NSLog("[CLIProxyManager] debugTestCAFile resolved for test launch: \(rawPath)")
+        return rawPath
+    }
+
+    private func makeProcessEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["TERM"] = "xterm-256color"
+        if let testCAFilePath = configuredTestCAFilePath() {
+            NSLog("[CLIProxyManager] Injecting QUOTIO_TEST_CA_FILE for test launch: \(testCAFilePath)")
+            environment[Self.debugTestCAFileEnvironmentKey] = testCAFilePath
+        }
+        return environment
     }
     
     nonisolated static func terminateProxyOnShutdown() {
@@ -844,9 +878,7 @@ final class CLIProxyManager {
         }
         
         // Important: Don't inherit environment that might cause issues
-        var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = "xterm-256color"
-        process.environment = environment
+        process.environment = makeProcessEnvironment()
         
         let bridgeEnabled = useBridgeMode
         let userPort = proxyStatus.port
@@ -1234,9 +1266,7 @@ extension CLIProxyManager {
             newAuthProcess.standardOutput = outputPipe
             newAuthProcess.standardError = errorPipe
             
-            var environment = ProcessInfo.processInfo.environment
-            environment["TERM"] = "xterm-256color"
-            newAuthProcess.environment = environment
+            newAuthProcess.environment = makeProcessEnvironment()
             
             // Thread-safe state container for concurrent access
             final class AuthState: @unchecked Sendable {
@@ -1680,9 +1710,7 @@ extension CLIProxyManager {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
         
-        var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = "xterm-256color"
-        process.environment = environment
+        process.environment = makeProcessEnvironment()
         
         do {
             try process.run()

@@ -461,18 +461,66 @@ actor DirectAuthFileService {
     }
 
     func updateProxyURL(filePath: String, proxyURL: String?) throws {
+        try updateStringField(filePath: filePath, key: "proxy_url", value: proxyURL)
+    }
+
+    func updateUserAgent(filePath: String, userAgent: String?) throws {
+        try updateStringField(filePath: filePath, key: "user_agent", value: userAgent)
+    }
+
+    func updateHeader(filePath: String, header: String, value: String?) throws {
         guard let data = fileManager.contents(atPath: filePath),
               var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw DirectAuthFileError.invalidAuthFile
         }
 
-        let trimmedProxy = proxyURL?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedHeader = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHeader.isEmpty else {
+            throw DirectAuthFileError.invalidAuthFile
+        }
 
-        if let trimmedProxy, !trimmedProxy.isEmpty {
-            json["proxy_url"] = trimmedProxy
+        let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var headers = json["headers"] as? [String: Any] ?? [:]
+
+        for existingKey in headers.keys where existingKey.caseInsensitiveCompare(trimmedHeader) == .orderedSame {
+            headers.removeValue(forKey: existingKey)
+        }
+
+        if let trimmedValue, !trimmedValue.isEmpty {
+            headers[trimmedHeader] = trimmedValue
+        }
+
+        if headers.isEmpty {
+            json.removeValue(forKey: "headers")
         } else {
-            json.removeValue(forKey: "proxy_url")
+            json["headers"] = headers
+        }
+
+        let updatedData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try updatedData.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath)
+    }
+
+    func replaceHeaders(filePath: String, headers: [String: String]) throws {
+        guard let data = fileManager.contents(atPath: filePath),
+              var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw DirectAuthFileError.invalidAuthFile
+        }
+
+        var sanitizedHeaders: [String: String] = [:]
+        for (key, value) in headers {
+            let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedKey.isEmpty else {
+                continue
+            }
+            sanitizedHeaders[trimmedKey] = trimmedValue
+        }
+
+        if sanitizedHeaders.isEmpty {
+            json.removeValue(forKey: "headers")
+        } else {
+            json["headers"] = sanitizedHeaders
         }
 
         let updatedData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
@@ -496,6 +544,25 @@ actor DirectAuthFileService {
     func deleteAuthFile(filePath: String) throws {
         guard fileManager.fileExists(atPath: filePath) else { return }
         try fileManager.removeItem(atPath: filePath)
+    }
+
+    private func updateStringField(filePath: String, key: String, value: String?) throws {
+        guard let data = fileManager.contents(atPath: filePath),
+              var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw DirectAuthFileError.invalidAuthFile
+        }
+
+        let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let trimmedValue, !trimmedValue.isEmpty {
+            json[key] = trimmedValue
+        } else {
+            json.removeValue(forKey: key)
+        }
+
+        let updatedData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try updatedData.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath)
     }
 }
 

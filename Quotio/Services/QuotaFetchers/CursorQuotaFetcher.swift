@@ -179,6 +179,8 @@ actor CursorQuotaFetcher {
               let accessToken = authData.accessToken else {
             return nil
         }
+        let accountKey = authData.email ?? "cursor"
+        let metadataKey = AccountMetadataStore.autoDetectedKey(provider: .cursor, accountKey: accountKey)
         
         // Fetch usage-summary endpoint (has both plan and on-demand info)
         guard let usageURL = URL(string: "\(cursorAPIBase)/auth/usage-summary") else { return nil }
@@ -187,6 +189,11 @@ actor CursorQuotaFetcher {
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        AccountFingerprintRuntime.applyUserAgent(
+            to: &request,
+            metadataKey: metadataKey,
+            fallback: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        )
         
         do {
             let (data, response) = try await session.data(for: request)

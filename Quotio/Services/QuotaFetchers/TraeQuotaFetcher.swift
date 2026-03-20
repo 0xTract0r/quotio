@@ -138,6 +138,8 @@ actor TraeQuotaFetcher {
               let accessToken = authData.accessToken else {
             return nil
         }
+        let accountKey = authData.email ?? authData.userId ?? authData.username ?? "trae"
+        let metadataKey = AccountMetadataStore.autoDetectedKey(provider: .trae, accountKey: accountKey)
         
         // Use the API host from auth data or default
         let apiHost = authData.apiHost ?? "https://api-sg-central.trae.ai"
@@ -154,6 +156,11 @@ actor TraeQuotaFetcher {
         request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
         request.setValue("https://www.trae.ai", forHTTPHeaderField: "Origin")
         request.setValue("https://www.trae.ai/", forHTTPHeaderField: "Referer")
+        AccountFingerprintRuntime.applyUserAgent(
+            to: &request,
+            metadataKey: metadataKey,
+            fallback: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        )
         
         // Request body
         let body = ["require_usage": true]

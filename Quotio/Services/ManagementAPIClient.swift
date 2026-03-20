@@ -259,6 +259,36 @@ actor ManagementAPIClient {
         let body = try JSONEncoder().encode(Request(name: name, proxyURL: proxyURL))
         _ = try await makeRequest("/auth-files/fields", method: "PATCH", body: body)
     }
+
+    func setAuthFileHeaders(name: String, headers: [String: String]) async throws {
+        struct Request: Encodable {
+            let name: String
+            let headers: [String: String]
+        }
+
+        var sanitizedHeaders: [String: String] = [:]
+        for (key, value) in headers {
+            let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedKey.isEmpty else {
+                continue
+            }
+            sanitizedHeaders[trimmedKey] = trimmedValue
+        }
+
+        let body = try JSONEncoder().encode(Request(name: name, headers: sanitizedHeaders))
+        _ = try await makeRequest("/auth-files/fields", method: "PATCH", body: body)
+    }
+
+    func setAuthFileHeader(name: String, header: String, value: String?) async throws {
+        let trimmedHeader = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHeader.isEmpty else {
+            throw APIError.invalidRequest("header name is required")
+        }
+
+        let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        try await setAuthFileHeaders(name: name, headers: [trimmedHeader: trimmedValue])
+    }
     
     func fetchUsageStats() async throws -> UsageStats {
         let data = try await makeRequest("/usage")
@@ -617,6 +647,7 @@ enum APIError: LocalizedError {
     case httpError(Int)
     case decodingError(String)
     case connectionError(String)
+    case invalidRequest(String)
     
     var errorDescription: String? {
         switch self {
@@ -625,6 +656,7 @@ enum APIError: LocalizedError {
         case .httpError(let code): return "HTTP error: \(code)"
         case .decodingError(let msg): return "Decoding error: \(msg)"
         case .connectionError(let msg): return "Connection error: \(msg)"
+        case .invalidRequest(let msg): return msg
         }
     }
 }

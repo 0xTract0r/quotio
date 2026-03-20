@@ -12,8 +12,18 @@ actor WarmupService {
         "https://cloudcode-pa.googleapis.com"
     ]
 
-    func warmup(managementClient: ManagementAPIClient, authIndex: String, model: String) async throws {
+    func warmup(
+        managementClient: ManagementAPIClient,
+        authIndex: String,
+        authFileName: String,
+        model: String
+    ) async throws {
         let upstreamModel = mapAntigravityModelAlias(model)
+        let metadataKey = AccountMetadataStore.authFileKey(provider: .antigravity, fileName: authFileName)
+        let resolvedUserAgent = AccountFingerprintRuntime.storedUserAgent(
+            for: metadataKey,
+            fallback: "antigravity/1.104.0"
+        ) ?? "antigravity/1.104.0"
         let payload = AntigravityWarmupRequest(
             project: "warmup-" + String(UUID().uuidString.prefix(5)).lowercased(),
             requestId: "agent-" + UUID().uuidString.lowercased(),
@@ -44,7 +54,7 @@ actor WarmupService {
                 header: [
                     "Authorization": "Bearer $TOKEN$",
                     "Content-Type": "application/json",
-                    "User-Agent": "antigravity/1.104.0"
+                    "User-Agent": resolvedUserAgent
                 ],
                 data: body
             ))

@@ -497,6 +497,7 @@ struct ProvidersScreen: View {
             if let glmProvider = customProviderService.providers.first(where: { $0.id.uuidString == account.id }) {
                 customProviderService.deleteProvider(id: glmProvider.id)
                 accountMetadataStore.removeRemark(for: account.metadataKey)
+                accountMetadataStore.removeFingerprintProfile(for: account.metadataKey)
                 accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
                 syncCustomProvidersToConfig()
             }
@@ -508,6 +509,7 @@ struct ProvidersScreen: View {
             if let uuid = UUID(uuidString: account.id) {
                 warpService.deleteToken(id: uuid)
                 accountMetadataStore.removeRemark(for: account.metadataKey)
+                accountMetadataStore.removeFingerprintProfile(for: account.metadataKey)
                 accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
                 await viewModel.refreshQuotaForProvider(.warp)
             }
@@ -517,6 +519,7 @@ struct ProvidersScreen: View {
         if let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) {
             await viewModel.deleteAuthFile(authFile)
             accountMetadataStore.removeRemark(for: account.metadataKey)
+            accountMetadataStore.removeFingerprintProfile(for: account.metadataKey)
             accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
             return
         }
@@ -524,6 +527,7 @@ struct ProvidersScreen: View {
         if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
             await viewModel.deleteDirectAuthFile(directAuthFile)
             accountMetadataStore.removeRemark(for: account.metadataKey)
+            accountMetadataStore.removeFingerprintProfile(for: account.metadataKey)
             accountMetadataStore.removeAccountFromOrder(account.metadataKey, for: account.provider)
         }
     }
@@ -623,96 +627,106 @@ private struct AccountSettingsSheet: View {
     @State private var accountMetadataStore = AccountMetadataStore.shared
     @State private var remark = ""
     @State private var proxyURL = ""
+    @State private var fingerprintProfile: AccountFingerprintProfile?
     @State private var validation: ProxyURLValidationResult = .empty
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var loadError: String?
     @State private var saveError: String?
+    @State private var showFingerprintDetails = false
+    @State private var showRegenerateConfirmation = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                ProviderIcon(provider: context.provider, size: 28)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 12) {
+                        ProviderIcon(provider: context.provider, size: 28)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("providers.accountSettings.title".localized())
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                    Text(context.displayName)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if isLoading {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("settings.remote.loading".localized())
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("providers.accountSettings.description".localized())
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("providers.accountSettings.remark".localized())
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-
-                        TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: remark) { _, _ in
-                                saveError = nil
-                            }
-                    }
-
-                    if context.supportsProxy {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("providers.accountProxy.title".localized())
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("providers.accountSettings.title".localized())
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                            Text(context.displayName)
                                 .font(.subheadline)
-                                .fontWeight(.medium)
-
-                            TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
-                                .textFieldStyle(.roundedBorder)
-                                .onChange(of: proxyURL) { _, newValue in
-                                    validation = ProxyURLValidator.validate(newValue)
-                                    saveError = nil
-                                }
-
-                            if validation != .valid && validation != .empty {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
-                                    Text((validation.localizationKey ?? "").localized())
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } else {
-                                Text("providers.accountProxy.fallback".localized())
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                                .foregroundStyle(.secondary)
                         }
                     }
 
-                    if let loadError {
-                        Text(loadError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
+                    if isLoading {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("settings.remote.loading".localized())
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("providers.accountSettings.description".localized())
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
 
-                    if let saveError {
-                        Text(saveError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("providers.accountSettings.remark".localized())
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+
+                                TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onChange(of: remark) { _, _ in
+                                        saveError = nil
+                                    }
+                            }
+
+                            if context.supportsProxy {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("providers.accountProxy.title".localized())
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+
+                                    TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
+                                        .textFieldStyle(.roundedBorder)
+                                        .onChange(of: proxyURL) { _, newValue in
+                                            validation = ProxyURLValidator.validate(newValue)
+                                            saveError = nil
+                                        }
+
+                                    if validation != .valid && validation != .empty {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundStyle(.orange)
+                                            Text((validation.localizationKey ?? "").localized())
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    } else {
+                                        Text("providers.accountProxy.fallback".localized())
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+
+                            fingerprintSection
+
+                            if let loadError {
+                                Text(loadError)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+
+                            if let saveError {
+                                Text(saveError)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
                     }
                 }
+                .padding(24)
             }
 
-            Spacer()
+            Divider()
 
             HStack {
                 if context.supportsProxy {
@@ -742,18 +756,206 @@ private struct AccountSettingsSheet: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isLoading || isSaving || !validation.isValid)
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
         }
-        .padding(24)
-        .frame(width: 460, height: context.supportsProxy ? 340 : 250)
+        .frame(width: 540, height: 620)
         .task {
             await loadCurrentValue()
         }
+        .confirmationDialog("重新生成上游请求标识？", isPresented: $showRegenerateConfirmation) {
+            Button("重新生成", role: .destructive) {
+                regenerateFingerprintProfile()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("重新生成会替换当前账户的上游 HTTP 标识档案。需点击保存后才会真正写入 auth 配置。")
+        }
+    }
+
+    @ViewBuilder
+    private var fingerprintSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("上游请求标识")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                if fingerprintProfile != nil {
+                    Button(showFingerprintDetails ? "收起详情" : "查看详情") {
+                        showFingerprintDetails.toggle()
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+
+            Text(runtimeImpactDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let fingerprintProfile {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 10) {
+                        LabeledContent("最近生成") {
+                            Text(fingerprintProfile.generatedAt.formatted(date: .abbreviated, time: .shortened))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        LabeledContent("UA 摘要") {
+                            Text(fingerprintProfile.userAgent.family + " / " + fingerprintProfile.userAgent.appVersion)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        LabeledContent("HTTP 摘要") {
+                            Text(httpSummaryText(for: fingerprintProfile))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        LabeledContent("TLS 边界") {
+                            Text(fingerprintProfile.tls.transport)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if showFingerprintDetails {
+                            VStack(alignment: .leading, spacing: 10) {
+                                detailBlock(title: "User-Agent", value: fingerprintProfile.userAgent.value)
+                                detailList(title: "UA 说明", values: fingerprintProfile.userAgent.notes)
+                                if !managedUpstreamHeaders(for: fingerprintProfile).isEmpty {
+                                    detailHeaders(title: "上游 HTTP 头", headers: managedUpstreamHeaders(for: fingerprintProfile))
+                                }
+                                if let upstreamNotes = fingerprintProfile.upstreamHTTP?.notes, !upstreamNotes.isEmpty {
+                                    detailList(title: "HTTP 说明", values: upstreamNotes)
+                                }
+                                detailBlock(title: "TLS 预设", value: fingerprintProfile.tls.preset)
+                                detailBlock(title: "TLS 传输", value: fingerprintProfile.tls.transport)
+                                detailBlock(title: "ALPN", value: fingerprintProfile.tls.alpn.joined(separator: ", "))
+                                detailList(title: "TLS 说明", values: fingerprintProfile.tls.notes)
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                Text("尚未为该账户生成上游请求标识档案。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                if fingerprintProfile == nil {
+                    Button("生成标识") {
+                        regenerateFingerprintProfile()
+                    }
+                } else {
+                    Button("重新生成") {
+                        showRegenerateConfirmation = true
+                    }
+                }
+
+                if fingerprintProfile != nil {
+                    Text("变更会在点击保存后写入本地配置与 auth 记录。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func detailBlock(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+        }
+    }
+
+    private func detailList(title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(values, id: \.self) { value in
+                Text("• " + value)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func detailHeaders(title: String, headers: [String: String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(headers.keys.sorted(), id: \.self) { key in
+                if let value = headers[key] {
+                    Text(key + ": " + value)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func managedUpstreamHeaders(for profile: AccountFingerprintProfile) -> [String: String] {
+        if let headers = profile.upstreamHTTP?.headers, !headers.isEmpty {
+            return headers
+        }
+
+        switch context.provider {
+        case .claude, .codex:
+            return ["User-Agent": profile.userAgent.value]
+        default:
+            return [:]
+        }
+    }
+
+    private func httpSummaryText(for profile: AccountFingerprintProfile) -> String {
+        let headers = managedUpstreamHeaders(for: profile)
+        guard !headers.isEmpty else {
+            return "仅本地保存档案"
+        }
+
+        return String(headers.count) + " 项托管请求头"
+    }
+
+    private var runtimeImpactDescription: String {
+        switch context.provider {
+        case .antigravity:
+            return "保存后会把 UA 写入 Antigravity auth 文件，后续通过 CLIProxyAPIPlus 发起的 Antigravity 请求会实际使用它。"
+        case .codex:
+            return "这里生成的是账户级上游 HTTP 头档案。保存后会写入 auth 记录的 `headers`，只有提供商真正能看到这些上游头；本地 CLI 入站头不属于验收目标。"
+        case .kiro:
+            return "Kiro 已有 CLIProxyAPIPlus 内建的账号级动态指纹。这里保存的是本地档案，不会覆写其全局指纹配置。"
+        case .claude:
+            return "这里生成的是账户级上游 HTTP 头档案。保存后会写入 auth 记录的 `headers`，Anthropic 侧真正可见的是这些上游头与账号代理出口；TLS 仍不是按账号生效。"
+        default:
+            return "当前 Quotio 会保存这份账户档案，但并非所有 provider 都有通用的每账户上游写入口。"
+        }
+    }
+
+    private func regenerateFingerprintProfile() {
+        fingerprintProfile = AccountFingerprintProfile.generate(
+            for: context.provider,
+            metadataKey: context.metadataKey
+        )
+        showFingerprintDetails = true
+        saveError = nil
     }
 
     private func loadCurrentValue() async {
         isLoading = true
         loadError = nil
         remark = accountMetadataStore.remark(for: context.metadataKey) ?? ""
+        fingerprintProfile = accountMetadataStore.fingerprintProfile(for: context.metadataKey)
 
         do {
             if context.supportsProxy {
@@ -791,6 +993,7 @@ private struct AccountSettingsSheet: View {
 
         do {
             accountMetadataStore.setRemark(remark, for: context.metadataKey)
+            accountMetadataStore.setFingerprintProfile(fingerprintProfile, for: context.metadataKey)
 
             if context.supportsProxy {
                 if let authFile = context.authFile {
@@ -800,6 +1003,35 @@ private struct AccountSettingsSheet: View {
                 } else {
                     saveError = "providers.accountProxy.missing".localized()
                     return
+                }
+            }
+
+            if let fingerprintProfile {
+                switch context.provider {
+                case .antigravity:
+                    if let authFile = context.authFile {
+                        try await viewModel.updateAuthFileUserAgent(fingerprintProfile.userAgent.value, for: authFile)
+                    } else if let directAuthFile = context.directAuthFile {
+                        try await viewModel.updateDirectAuthFileUserAgent(fingerprintProfile.userAgent.value, for: directAuthFile)
+                    }
+                case .codex, .claude:
+                    let managedHeaderNames = AccountFingerprintProfile.managedHeaderNames(for: context.provider)
+                    let headers = managedUpstreamHeaders(for: fingerprintProfile)
+                    if let authFile = context.authFile {
+                        try await viewModel.updateAuthFileManagedHeaders(
+                            headers,
+                            managedHeaderNames: managedHeaderNames,
+                            for: authFile
+                        )
+                    } else if let directAuthFile = context.directAuthFile {
+                        try await viewModel.updateDirectAuthFileManagedHeaders(
+                            headers,
+                            managedHeaderNames: managedHeaderNames,
+                            for: directAuthFile
+                        )
+                    }
+                default:
+                    break
                 }
             }
 

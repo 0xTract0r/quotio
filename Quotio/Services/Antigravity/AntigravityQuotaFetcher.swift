@@ -558,8 +558,8 @@ actor AntigravityQuotaFetcher {
         }
     }
 
-    func fetchQuota(accessToken: String) async throws -> ProviderQuotaData {
-        let projectId = await fetchProjectId(accessToken: accessToken)
+    func fetchQuota(accessToken: String, metadataKey: String? = nil) async throws -> ProviderQuotaData {
+        let projectId = await fetchProjectId(accessToken: accessToken, metadataKey: metadataKey)
 
         guard let url = URL(string: quotaAPIURL) else {
             throw QuotaFetchError.invalidURL
@@ -567,7 +567,11 @@ actor AntigravityQuotaFetcher {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.addValue(userAgent, forHTTPHeaderField: "User-Agent")
+        AccountFingerprintRuntime.applyUserAgent(
+            to: &request,
+            metadataKey: metadataKey,
+            fallback: userAgent
+        )
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
         var payload: [String: Any] = [:]
@@ -624,26 +628,30 @@ actor AntigravityQuotaFetcher {
         throw lastError ?? QuotaFetchError.unknown
     }
 
-    private func fetchProjectId(accessToken: String) async -> String? {
+    private func fetchProjectId(accessToken: String, metadataKey: String? = nil) async -> String? {
         // Use cached subscription info if available, otherwise fetch
         if let cached = subscriptionCache[accessToken] {
             return cached.cloudaicompanionProject
         }
-        let result = await fetchSubscriptionInfo(accessToken: accessToken)
+        let result = await fetchSubscriptionInfo(accessToken: accessToken, metadataKey: metadataKey)
         if let info = result {
             subscriptionCache[accessToken] = info
         }
         return result?.cloudaicompanionProject
     }
 
-    func fetchSubscriptionInfo(accessToken: String) async -> SubscriptionInfo? {
+    func fetchSubscriptionInfo(accessToken: String, metadataKey: String? = nil) async -> SubscriptionInfo? {
         guard let url = URL(string: loadProjectAPIURL) else {
             return nil
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.addValue(userAgent, forHTTPHeaderField: "User-Agent")
+        AccountFingerprintRuntime.applyUserAgent(
+            to: &request,
+            metadataKey: metadataKey,
+            fallback: userAgent
+        )
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let payload = ["metadata": ["ideType": "ANTIGRAVITY"]]
@@ -667,6 +675,7 @@ actor AntigravityQuotaFetcher {
 
     func fetchSubscriptionInfoForAuthFile(at path: String) async -> SubscriptionInfo? {
         let url = URL(fileURLWithPath: path)
+        let metadataKey = AccountMetadataStore.authFileKey(provider: .antigravity, fileName: url.lastPathComponent)
         guard let data = try? Data(contentsOf: url),
               let authFile = try? JSONDecoder().decode(AntigravityAuthFile.self, from: data) else {
             return nil
@@ -684,7 +693,7 @@ actor AntigravityQuotaFetcher {
             }
         }
 
-        return await fetchSubscriptionInfo(accessToken: accessToken)
+        return await fetchSubscriptionInfo(accessToken: accessToken, metadataKey: metadataKey)
     }
 
     func fetchAllSubscriptionInfo(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: SubscriptionInfo] {
@@ -715,6 +724,7 @@ actor AntigravityQuotaFetcher {
 
     func fetchQuotaForAuthFile(at path: String) async throws -> ProviderQuotaData {
         let url = URL(fileURLWithPath: path)
+        let metadataKey = AccountMetadataStore.authFileKey(provider: .antigravity, fileName: url.lastPathComponent)
         let data = try Data(contentsOf: url)
         let authFile = try JSONDecoder().decode(AntigravityAuthFile.self, from: data)
 
@@ -730,13 +740,14 @@ actor AntigravityQuotaFetcher {
             }
         }
 
-        return try await fetchQuota(accessToken: accessToken)
+        return try await fetchQuota(accessToken: accessToken, metadataKey: metadataKey)
     }
 
     /// Fetch both quota and subscription for an auth file in one operation
     /// This reuses the subscription info fetched during quota fetch (via fetchProjectId)
     func fetchQuotaAndSubscriptionForAuthFile(at path: String) async -> (quota: ProviderQuotaData?, subscription: SubscriptionInfo?) {
         let url = URL(fileURLWithPath: path)
+        let metadataKey = AccountMetadataStore.authFileKey(provider: .antigravity, fileName: url.lastPathComponent)
         guard let data = try? Data(contentsOf: url),
               let authFile = try? JSONDecoder().decode(AntigravityAuthFile.self, from: data) else {
             return (nil, nil)
@@ -757,7 +768,7 @@ actor AntigravityQuotaFetcher {
         // Fetch quota - this internally calls fetchProjectId which fetches and caches subscription
         var quota: ProviderQuotaData? = nil
         do {
-            quota = try await fetchQuota(accessToken: accessToken)
+            quota = try await fetchQuota(accessToken: accessToken, metadataKey: metadataKey)
         } catch {
             // Quota fetch failed, but we might still have subscription in cache
         }

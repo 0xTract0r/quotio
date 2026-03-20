@@ -11,7 +11,13 @@
 //
 // ========================
 
-// Development Bundle Identifier (separate from production)
+// Development Bundle Identifier (must differ from dev.quotio.desktop)
+// Any non-production bundle id automatically switches RuntimeProfile to:
+// - UserDefaults domain: <bundle id>
+// - Application Support: ~/Library/Application Support/Quotio-<suffix>
+// - Auth directory: ~/.cli-proxy-api-<suffix>
+// - Keychain services: <bundle id>.*
+// - Default proxy port: 18317 (internal CLIProxyAPI becomes 28317)
 PRODUCT_BUNDLE_IDENTIFIER = dev.quotio.desktop.dev
 
 // Development App Name (to distinguish in Dock/Finder)

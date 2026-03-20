@@ -213,7 +213,11 @@ actor ClaudeCodeQuotaFetcher {
 
     /// Fetch usage data from Anthropic OAuth API
     /// - Returns: ClaudeAPIResult indicating success, auth error, or other error
-    private func fetchUsageFromAPI(accessToken: String, email: String?) async -> ClaudeAPIResult {
+    private func fetchUsageFromAPI(
+        accessToken: String,
+        email: String?,
+        metadataKey: String?
+    ) async -> ClaudeAPIResult {
         guard let url = URL(string: usageURL) else {
             return .otherError
         }
@@ -223,6 +227,7 @@ actor ClaudeCodeQuotaFetcher {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.addValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+        AccountFingerprintRuntime.applyUserAgent(to: &request, metadataKey: metadataKey)
 
         do {
             let (data, response) = try await session.data(for: request)
@@ -327,6 +332,10 @@ actor ClaudeCodeQuotaFetcher {
     ///   - forceRefresh: If true, bypass cache
     private func fetchQuotaFromAuthFile(at path: String, forceRefresh: Bool = false) async -> (email: String, data: ProviderQuotaData)? {
         let fileManager = FileManager.default
+        let metadataKey = AccountMetadataStore.authFileKey(
+            provider: .claude,
+            fileName: URL(fileURLWithPath: path).lastPathComponent
+        )
 
         guard let data = fileManager.contents(atPath: path),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -357,7 +366,11 @@ actor ClaudeCodeQuotaFetcher {
         }
 
         // Fetch usage from API using the token
-        let result = await fetchUsageFromAPI(accessToken: accessToken, email: email)
+        let result = await fetchUsageFromAPI(
+            accessToken: accessToken,
+            email: email,
+            metadataKey: metadataKey
+        )
 
         switch result {
         case .success(let info):
