@@ -253,6 +253,15 @@
 - 无法稳定记录“补丁基线、引用版本、回滚点”
 - 新会话无法低成本恢复上下文
 
+### 项目级规则
+
+后续任何 `CLIProxyAPIPlus` 实现都应遵守：
+
+- 开发真源固定为 `third_party/CLIProxyAPIPlus`
+- 方案 worktree 和实现 worktree 分离；文档分支不继续承接实现
+- 如果当前 worktree 子模块未初始化，先修复子模块状态，不要绕到 `/tmp/...` 继续开发
+- `/tmp/...` 仅允许作为历史核对证据，不允许作为提交、构建、推广的真实来源
+
 ### 当前已经补齐的管理面
 
 - 固定路径：`third_party/CLIProxyAPIPlus`
@@ -266,3 +275,7 @@
 这次需求已经从“抽象指纹”收敛成“账户级上游 HTTP 指纹 + 可证明的真实链路接入”。
 
 如果后续要继续往“每账户 TLS 指纹”推进，正确入口不是再改 Quotio UI，而是继续研究并改造 CLIProxyAPIPlus 对 Claude / Codex 运行时 transport / dialer / TLS 握手的实现边界。
+
+实施时还应遵守一条额外约束：
+
+- 不要在当前文档 worktree 上继续实现；应新开实现 worktree，并以项目子模块为唯一开发真源
