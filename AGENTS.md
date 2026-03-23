@@ -162,6 +162,39 @@ Important:
 
 If the user says production traffic must not be interrupted, interpret that as a hard ban on touching the production app or production core process.
 
+## CLIProxyAPIPlus Source Of Truth
+
+Treat the project submodule as the only development source of truth for `CLIProxyAPIPlus`:
+
+- canonical path: `third_party/CLIProxyAPIPlus`
+- canonical build entry: `./scripts/manage-cliproxy-plus.sh build`
+- canonical Quotio-side binary output: `build/CLIProxyAPIPlus/CLIProxyAPI`
+
+Never treat any of the following as an implementation source of truth:
+
+- `/tmp/...`
+- ad-hoc cloned directories outside the repository
+- previously patched standalone binaries with no matching submodule commit
+
+Allowed use of external copies such as `/tmp/...`:
+
+- read-only historical comparison
+- emergency diff/reference when the submodule is temporarily unavailable
+
+Disallowed use of external copies such as `/tmp/...`:
+
+- making new code changes there
+- treating them as the branch to continue from
+- building release/promotable artifacts from them
+- citing them in docs as the future implementation path
+
+For any future `CLIProxyAPIPlus` implementation task:
+
+- start from a dedicated implementation worktree, not from a docs-only branch
+- initialize `third_party/CLIProxyAPIPlus` in that worktree before coding
+- commit changes in the submodule first, then update the submodule pointer in the main repo
+- if the submodule is missing/uninitialized, stop and fix the submodule state rather than drifting to `/tmp`
+
 ## Key Patterns
 
 ### Parallel Async Fetching
@@ -257,6 +290,7 @@ Additional guardrails:
 - Any proxy-core change, submodule change, auth/keychain/port change, release-flow change, or production-adjacent debugging must start in a dedicated worktree.
 - Do not continue feature implementation on `master` once a dedicated worktree/branch exists for the task.
 - Do not combine runtime experimentation on the production app with uncommitted feature work in `master`.
+- A docs-only worktree/branch is not a valid place to continue implementation. If a task moves from planning to coding, open a new implementation worktree and keep the docs branch read-only.
 
 ## Dependencies
 
