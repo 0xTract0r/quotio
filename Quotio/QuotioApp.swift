@@ -55,6 +55,13 @@ final class AppBootstrap {
     }
 
     private func performFullInitialization() async {
+        if RuntimeProfile.proxyOnlyTestMode {
+            statusBarManager.setViewModel(viewModel)
+            updateStatusBar()
+            await viewModel.startProxy()
+            return
+        }
+
         // Scan auth files immediately (fast filesystem scan)
         // This allows menu bar to show providers before quota API calls complete
         await viewModel.loadDirectAuthFiles()
@@ -79,7 +86,9 @@ final class AppBootstrap {
         await viewModel.initialize()
 
         #if canImport(Sparkle)
+        if !RuntimeProfile.disableUpdateChecks {
         UpdaterService.shared.checkForUpdatesInBackground()
+        }
         #endif
     }
 
@@ -289,7 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
 
         // Apply initial dock visibility based on saved preference
-        let showInDock = UserDefaults.standard.bool(forKey: "showInDock")
+        let showInDock = RuntimeProfile.showInDockOverride ?? UserDefaults.standard.bool(forKey: "showInDock")
         NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
 
         // CRITICAL: Initialize app services immediately on launch.

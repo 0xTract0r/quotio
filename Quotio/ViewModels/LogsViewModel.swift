@@ -14,6 +14,10 @@ import Observation
 @Observable
 final class LogsViewModel {
     private var apiClient: ManagementAPIClient?
+    private let ignoredManagementLogFragments = [
+        #"GET     "/v0/management/logs"#,
+        #"GET     "/v0/management/logs?"#
+    ]
     
     var logs: [LogEntry] = []
     @ObservationIgnored private var lastLogTimestamp: Int?
@@ -35,7 +39,8 @@ final class LogsViewModel {
         do {
             let response = try await client.fetchLogs(after: lastLogTimestamp)
             if let lines = response.lines {
-                let newEntries: [LogEntry] = lines.map { line in
+                let newEntries: [LogEntry] = lines.compactMap { line in
+                    guard !shouldIgnoreLogLine(line) else { return nil }
                     let level: LogEntry.LogLevel
                     if line.contains("error") || line.contains("ERROR") {
                         level = .error
@@ -78,5 +83,9 @@ final class LogsViewModel {
         logs.removeAll()
         lastLogTimestamp = nil
         apiClient = nil
+    }
+
+    private func shouldIgnoreLogLine(_ line: String) -> Bool {
+        ignoredManagementLogFragments.contains { line.contains($0) }
     }
 }

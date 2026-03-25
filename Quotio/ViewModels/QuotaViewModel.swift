@@ -262,10 +262,15 @@ final class QuotaViewModel {
     }
     
     private func initializeFullMode() async {
+        if RuntimeProfile.proxyOnlyTestMode {
+            await startProxy()
+            return
+        }
+
         // Always refresh quotas directly first (works without proxy)
         await refreshQuotasUnified()
         
-        let autoStartProxy = UserDefaults.standard.bool(forKey: "autoStartProxy")
+        let autoStartProxy = RuntimeProfile.autoStartProxyOverride ?? UserDefaults.standard.bool(forKey: "autoStartProxy")
         if autoStartProxy && proxyManager.isBinaryInstalled {
             await startProxy()
             // Note: checkForProxyUpgrade() is now called inside startProxy()
@@ -537,7 +542,7 @@ final class QuotaViewModel {
         for file in authFiles where file.providerType == .kiro {
             // The fetcher returns data keyed by clean filename
             let filenameKey = cleanName(file.name)
-            
+
             if let data = rawQuotas[filenameKey] {
                 // Store under the key the UI expects (AuthFile.quotaLookupKey)
                 let targetKey = file.quotaLookupKey.isEmpty ? file.name : file.quotaLookupKey
@@ -978,14 +983,17 @@ final class QuotaViewModel {
             proxyManager.proxyBridge.onRequestCompleted = { [weak self] metadata in
                 self?.requestTracker.addRequest(from: metadata)
             }
-            
+
             try await proxyManager.start()
             setupAPIClient()
+            requestTracker.start()
+
+            if RuntimeProfile.proxyOnlyTestMode {
+                return
+            }
+
             startAutoRefresh()
             restartWarmupScheduler()
-
-            // Start RequestTracker
-            requestTracker.start()
 
             await refreshData()
 

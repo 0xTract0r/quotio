@@ -491,7 +491,7 @@ actor ManagementAPIClient {
 
 // MARK: - Latest Version Response
 
-nonisolated struct LatestVersionResponse: Codable, Sendable {
+struct LatestVersionResponse: Codable, Sendable {
     let latestVersion: String
     
     enum CodingKeys: String, CodingKey {
@@ -540,7 +540,7 @@ private final class SessionDelegate: NSObject, URLSessionDelegate, URLSessionTas
 
 // MARK: - Response Types
 
-nonisolated struct LogsResponse: Codable, Sendable {
+struct LogsResponse: Codable, Sendable {
     let lines: [String]?
     let lineCount: Int?
     let latestTimestamp: Int?
@@ -552,11 +552,11 @@ nonisolated struct LogsResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct AuthFileModelsResponse: Codable, Sendable {
+struct AuthFileModelsResponse: Codable, Sendable {
     let models: [AuthFileModelInfo]
 }
 
-nonisolated struct AuthFileModelInfo: Codable, Sendable {
+struct AuthFileModelInfo: Codable, Sendable {
     let id: String
     let ownedBy: String?
     let type: String?
@@ -567,7 +567,7 @@ nonisolated struct AuthFileModelInfo: Codable, Sendable {
     }
 }
 
-nonisolated struct APICallRequest: Codable, Sendable {
+struct APICallRequest: Codable, Sendable {
     let authIndex: String?
     let method: String
     let url: String
@@ -580,7 +580,7 @@ nonisolated struct APICallRequest: Codable, Sendable {
     }
 }
 
-nonisolated struct APICallResponse: Codable, Sendable {
+struct APICallResponse: Codable, Sendable {
     let statusCode: Int
     let header: [String: [String]]?
     let body: String?
@@ -591,7 +591,7 @@ nonisolated struct APICallResponse: Codable, Sendable {
     }
 }
 
-nonisolated enum APIError: LocalizedError {
+enum APIError: LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(Int)
@@ -611,7 +611,7 @@ nonisolated enum APIError: LocalizedError {
 
 // MARK: - Remote Configuration Response Types
 
-nonisolated struct RemoteProxyConfig: Codable, Sendable {
+struct RemoteProxyConfig: Codable, Sendable {
     let debug: Bool?
     let proxyURL: String?
     let routingStrategy: String?
@@ -633,7 +633,7 @@ nonisolated struct RemoteProxyConfig: Codable, Sendable {
     }
 }
 
-nonisolated struct RemoteProxyQuotaExceededConfig: Codable, Sendable {
+struct RemoteProxyQuotaExceededConfig: Codable, Sendable {
     let switchProject: Bool?
     let switchPreviewModel: Bool?
     
@@ -643,11 +643,11 @@ nonisolated struct RemoteProxyQuotaExceededConfig: Codable, Sendable {
     }
 }
 
-nonisolated struct DebugResponse: Codable, Sendable {
+struct DebugResponse: Codable, Sendable {
     let debug: Bool
 }
 
-nonisolated struct ProxyURLResponse: Codable, Sendable {
+struct ProxyURLResponse: Codable, Sendable {
     let proxyURL: String
     
     enum CodingKeys: String, CodingKey {
@@ -655,7 +655,7 @@ nonisolated struct ProxyURLResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct LoggingToFileResponse: Codable, Sendable {
+struct LoggingToFileResponse: Codable, Sendable {
     let loggingToFile: Bool
     
     enum CodingKeys: String, CodingKey {
@@ -663,7 +663,7 @@ nonisolated struct LoggingToFileResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct RequestLogResponse: Codable, Sendable {
+struct RequestLogResponse: Codable, Sendable {
     let requestLog: Bool
     
     enum CodingKeys: String, CodingKey {
@@ -671,7 +671,7 @@ nonisolated struct RequestLogResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct RequestRetryResponse: Codable, Sendable {
+struct RequestRetryResponse: Codable, Sendable {
     let requestRetry: Int
     
     enum CodingKeys: String, CodingKey {
@@ -679,7 +679,7 @@ nonisolated struct RequestRetryResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct MaxRetryIntervalResponse: Codable, Sendable {
+struct MaxRetryIntervalResponse: Codable, Sendable {
     let maxRetryInterval: Int
     
     enum CodingKeys: String, CodingKey {
@@ -687,7 +687,7 @@ nonisolated struct MaxRetryIntervalResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct SwitchProjectResponse: Codable, Sendable {
+struct SwitchProjectResponse: Codable, Sendable {
     let switchProject: Bool
     
     enum CodingKeys: String, CodingKey {
@@ -695,7 +695,7 @@ nonisolated struct SwitchProjectResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct SwitchPreviewModelResponse: Codable, Sendable {
+struct SwitchPreviewModelResponse: Codable, Sendable {
     let switchPreviewModel: Bool
     
     enum CodingKeys: String, CodingKey {
@@ -703,7 +703,7 @@ nonisolated struct SwitchPreviewModelResponse: Codable, Sendable {
     }
 }
 
-nonisolated struct RoutingStrategyResponse: Codable, Sendable {
+struct RoutingStrategyResponse: Codable, Sendable {
     let strategy: String
     
     init(from decoder: Decoder) throws {

@@ -79,13 +79,14 @@ struct LogsScreen: View {
                     authKey: viewModel.proxyManager.managementKey
                 )
             }
-            
-            while !Task.isCancelled {
-                if selectedTab == .proxyLogs {
-                    await logsViewModel.refreshLogs()
-                }
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+            if selectedTab == .proxyLogs {
+                await logsViewModel.refreshLogs()
             }
+        }
+        .task(id: selectedTab) {
+            guard selectedTab == .proxyLogs else { return }
+            await logsViewModel.refreshLogs()
         }
     }
     
@@ -245,9 +246,7 @@ struct LogsScreen: View {
             }
             .onChange(of: logsViewModel.logs.count) { _, _ in
                 if autoScroll, let last = filteredLogs.last {
-                    withAnimation {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
         }

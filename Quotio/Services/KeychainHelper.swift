@@ -11,9 +11,9 @@ import Security
 // MARK: - Keychain Helper
 
 enum KeychainHelper {
-    private static let remoteService = "dev.quotio.desktop.remote-management"
-    private static let localService = "dev.quotio.desktop.local-management"
-    private static let warpService = "dev.quotio.desktop.warp"
+    private static var remoteService: String { namespacedService("dev.quotio.desktop.remote-management") }
+    private static var localService: String { namespacedService("dev.quotio.desktop.local-management") }
+    private static var warpService: String { namespacedService("dev.quotio.desktop.warp") }
     private static let localManagementAccount = "local-management-key"
     private static let warpTokensAccount = "warp-tokens"
     private static let localManagementDefaultsKey = "managementKey"
@@ -32,6 +32,11 @@ enum KeychainHelper {
         "proseek.io.vn.Quotio.warp",
         "com.quotio.warp",
     ]
+
+    private static func namespacedService(_ base: String) -> String {
+        guard let namespace = RuntimeProfile.keychainNamespace else { return base }
+        return "\(base).\(namespace)"
+    }
 
     static func saveManagementKey(_ key: String, for configId: String) {
         let account = "management-key-\(configId)"
@@ -62,6 +67,9 @@ enum KeychainHelper {
     }
 
     static func saveLocalManagementKey(_ key: String) -> Bool {
+        if RuntimeProfile.localManagementKeyOverride != nil {
+            return true
+        }
         guard let data = key.data(using: .utf8) else { return false }
         let saved = saveData(data, service: localService, account: localManagementAccount)
         if !saved {
@@ -71,6 +79,9 @@ enum KeychainHelper {
     }
 
     static func getLocalManagementKey() -> String? {
+        if let override = RuntimeProfile.localManagementKeyOverride {
+            return override
+        }
         if let key = readString(service: localService, account: localManagementAccount) {
             return key
         }
@@ -93,6 +104,7 @@ enum KeychainHelper {
     }
 
     static func deleteLocalManagementKey() {
+        guard RuntimeProfile.localManagementKeyOverride == nil else { return }
         deleteData(service: localService, account: localManagementAccount)
         for legacy in legacyLocalServices {
             deleteData(service: legacy, account: localManagementAccount)

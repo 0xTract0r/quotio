@@ -208,21 +208,30 @@ final class OperatingModeManager {
     // MARK: - Initialization
     
     private init() {
-        // Check for migration from legacy modes first
-        let needsMigration = Self.checkNeedsMigration()
-        
-        if needsMigration {
+        if let overrideMode = RuntimeProfile.operatingModeOverride {
+            self.currentMode = overrideMode
+            self.hasCompletedOnboarding = RuntimeProfile.skipOnboarding || overrideMode == .localProxy || overrideMode == .monitor || overrideMode == .remoteProxy
+        } else {
+            // Check for migration from legacy modes first
+            let needsMigration = Self.checkNeedsMigration()
+
+            if needsMigration {
             let migratedMode = Self.performMigration()
             self.currentMode = migratedMode
             self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-        } else if let stored = UserDefaults.standard.string(forKey: "operatingMode"),
-                  let mode = OperatingMode(rawValue: stored) {
-            self.currentMode = mode
-            self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-        } else {
-            // New installation - default to monitor mode
-            self.currentMode = .monitor
-            self.hasCompletedOnboarding = false
+            } else if let stored = UserDefaults.standard.string(forKey: "operatingMode"),
+                      let mode = OperatingMode(rawValue: stored) {
+                self.currentMode = mode
+                self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+            } else {
+                // New installation - default to monitor mode
+                self.currentMode = .monitor
+                self.hasCompletedOnboarding = false
+            }
+        }
+
+        if RuntimeProfile.skipOnboarding {
+            self.hasCompletedOnboarding = true
         }
         
         // Load remote config if in remote mode

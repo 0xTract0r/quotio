@@ -1,6 +1,6 @@
 # Build & Release Scripts
 
-11 bash scripts for building, packaging, notarizing, and releasing Quotio.
+12 bash scripts for building, packaging, notarizing, releasing, and runtime verification.
 
 ## Quick Reference
 
@@ -12,6 +12,7 @@
 | `./scripts/release.sh` | Full release pipeline |
 | `./scripts/quick-release.sh` | Interactive release helper |
 | `./scripts/bump-version.sh` | Version management |
+| `./scripts/verify-runtime-isolation.sh` | Launch isolated Debug app and verify log/cpu regression fixes |
 
 ## Build Pipeline
 
@@ -84,6 +85,30 @@ Moves unreleased entries to versioned section.
 ./scripts/update-changelog.sh 1.2.3
 ```
 
+### verify-runtime-isolation.sh
+Starts an isolated Debug Quotio instance under `/tmp`, copies the current production `CLIProxyAPI`
+binary into the isolated runtime, enables management log capture, and verifies that:
+- `/v0/management/debug` no longer emits recurring `401`
+- `/v0/management/logs` no longer self-polls while idle
+- idle CPU stays near zero for both Quotio and the isolated core
+
+```bash
+./scripts/verify-runtime-isolation.sh
+# Output: /tmp/quotio-runtime-verify/summary.txt
+```
+
+Common overrides:
+```bash
+QUOTIO_VERIFY_UI_SMOKE=0 ./scripts/verify-runtime-isolation.sh
+QUOTIO_VERIFY_PORT=18127 ./scripts/verify-runtime-isolation.sh
+QUOTIO_VERIFY_RUNTIME_DIR=/tmp/quotio-runtime-verify-alt ./scripts/verify-runtime-isolation.sh
+```
+
+Notes:
+- The script never touches production `18317/28317`; default isolated ports are `18027/28027`
+- If Accessibility permission is unavailable, the UI smoke step is skipped automatically and the script falls back to read-only verification
+- The isolated runtime directory is kept by default for post-run inspection; set `QUOTIO_VERIFY_KEEP_RUNTIME=0` to auto-clean it
+
 ### config.sh
 Shared utilities (sourced by other scripts).
 - Colorized output functions
@@ -111,6 +136,11 @@ Auto-updates CHANGELOG.md from conventional commits on master.
 | `TEAM_ID` | notarize.sh | Apple Team ID |
 | `APP_PASSWORD` | notarize.sh | App-specific password |
 | `SPARKLE_KEY` | appcast | EdDSA private key path |
+| `QUOTIO_VERIFY_PORT` | verify-runtime-isolation.sh | Isolated client-facing proxy port; internal port is `+10000` |
+| `QUOTIO_VERIFY_RUNTIME_DIR` | verify-runtime-isolation.sh | Isolated runtime root under `/tmp` |
+| `QUOTIO_VERIFY_WAIT_SECONDS` | verify-runtime-isolation.sh | Idle observation window before collecting log evidence |
+| `QUOTIO_VERIFY_UI_SMOKE` | verify-runtime-isolation.sh | Set to `0` to skip the Accessibility-driven Logs screen smoke step |
+| `QUOTIO_VERIFY_KEEP_RUNTIME` | verify-runtime-isolation.sh | Set to `0` to remove the isolated runtime directory on exit |
 
 ## Conventions
 
