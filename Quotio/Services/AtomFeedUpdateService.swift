@@ -6,6 +6,7 @@
 //  Uses conditional requests (If-None-Match) to minimize bandwidth and avoid rate limits.
 //
 
+import AppKit
 import Foundation
 import Observation
 
@@ -80,6 +81,8 @@ final class AtomFeedUpdateService {
 
     private var pollingTask: Task<Void, Never>?
     private var isPollingEnabled: Bool = false
+    private var currentVersionProvider: (() -> String?)?
+    @ObservationIgnored private var appDidBecomeActiveObserver: NSObjectProtocol?
 
     /// Shared URLSession for all feed requests (avoids creating new sessions per request)
     @ObservationIgnored
@@ -103,6 +106,10 @@ final class AtomFeedUpdateService {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
+
+    private init() {
+        setupAppActivationObserver()
+    }
 
     // MARK: - Public API
 
@@ -216,6 +223,7 @@ final class AtomFeedUpdateService {
     func startPolling(getCurrentVersion: @escaping () -> String?) {
         guard !isPollingEnabled else { return }
         isPollingEnabled = true
+        currentVersionProvider = getCurrentVersion
 
         NSLog("[AtomFeedUpdateService] Starting background polling (interval: \(Self.pollingIntervalSeconds)s)")
 
@@ -225,6 +233,10 @@ final class AtomFeedUpdateService {
 
             while !Task.isCancelled {
                 guard let self = self else { break }
+                guard NSApplication.shared.isActive else {
+                    try? await Task.sleep(nanoseconds: Self.pollingIntervalSeconds * 1_000_000_000)
+                    continue
+                }
 
                 await self.performPollingCheck(getCurrentVersion: getCurrentVersion)
 
@@ -239,9 +251,33 @@ final class AtomFeedUpdateService {
         isPollingEnabled = false
         pollingTask?.cancel()
         pollingTask = nil
+        currentVersionProvider = nil
         // Invalidate URLSession to release connections
         urlSession.invalidateAndCancel()
         NSLog("[AtomFeedUpdateService] Stopped background polling")
+    }
+
+    private func setupAppActivationObserver() {
+        appDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.checkOnActivationIfNeeded()
+            }
+        }
+    }
+
+    private func checkOnActivationIfNeeded() async {
+        guard isPollingEnabled, !isChecking, let provider = currentVersionProvider else { return }
+
+        if let lastCheck = lastCLIProxyCheck,
+           Date().timeIntervalSince(lastCheck) < TimeInterval(Self.pollingIntervalSeconds) {
+            return
+        }
+
+        await performPollingCheck(getCurrentVersion: provider)
     }
 
     /// Perform a single polling check and update observable state.

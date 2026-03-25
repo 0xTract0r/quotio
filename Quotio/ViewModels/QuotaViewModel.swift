@@ -98,6 +98,8 @@ final class QuotaViewModel {
     @ObservationIgnored private var lastLogTimestamp: Int?
     @ObservationIgnored private var isWarmupRunning = false
     @ObservationIgnored private var warmupRunningAccounts: Set<WarmupAccountKey> = []
+    @ObservationIgnored private nonisolated(unsafe) var appDidBecomeActiveObserver: NSObjectProtocol?
+    @ObservationIgnored private var lastResumeRefreshTime: Date = Date()
 
     struct WarmupStatus: Sendable {
         var isRunning: Bool = false
@@ -177,9 +179,16 @@ final class QuotaViewModel {
         loadPersistedIDEQuotas()
         setupRefreshCadenceCallback()
         setupWarmupCallback()
+        setupAppActivationObserver()
         restartWarmupScheduler()
         lastProxyURL = normalizedProxyURL(UserDefaults.standard.string(forKey: "proxyURL"))
         setupProxyURLObserver()
+    }
+
+    deinit {
+        if let observer = appDidBecomeActiveObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     private func setupProxyURLObserver() {
@@ -228,6 +237,37 @@ final class QuotaViewModel {
             Task { @MainActor [weak self] in
                 self?.restartAutoRefresh()
             }
+        }
+    }
+
+    private func setupAppActivationObserver() {
+        appDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.refreshOnAppResumeIfNeeded()
+            }
+        }
+    }
+
+    private func refreshOnAppResumeIfNeeded() async {
+        let now = Date()
+        guard now.timeIntervalSince(lastResumeRefreshTime) >= 15 else { return }
+        guard !isStartingProxyFlow, !isLoading, !isLoadingQuotas else { return }
+
+        lastResumeRefreshTime = now
+
+        if modeManager.isRemoteProxyMode || proxyManager.proxyStatus.running {
+            await refreshData()
+        } else if modeManager.isMonitorMode {
+            await loadDirectAuthFiles()
+            _ = await kiroFetcher.refreshAllTokensIfNeeded()
+            await refreshQuotasDirectly()
+        } else {
+            _ = await kiroFetcher.refreshAllTokensIfNeeded()
+            await refreshQuotasUnified()
         }
     }
     
@@ -603,6 +643,7 @@ final class QuotaViewModel {
         refreshTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: intervalNs)
+                guard NSApplication.shared.isActive else { continue }
                 _ = await kiroFetcher.refreshAllTokensIfNeeded()
                 await refreshQuotasDirectly()
             }
@@ -620,6 +661,7 @@ final class QuotaViewModel {
         refreshTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: intervalNs)
+                guard NSApplication.shared.isActive else { continue }
                 if !proxyManager.proxyStatus.running {
                     _ = await kiroFetcher.refreshAllTokensIfNeeded()
                     await refreshQuotasUnified()
@@ -1090,6 +1132,7 @@ final class QuotaViewModel {
             
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: intervalNs)
+                guard NSApplication.shared.isActive else { continue }
                 
                 await refreshData()
                 
