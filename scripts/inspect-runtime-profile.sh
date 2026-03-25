@@ -4,7 +4,7 @@ set -euo pipefail
 PRODUCTION_BUNDLE_ID="dev.quotio.desktop"
 PRODUCTION_APP_SUPPORT="Quotio"
 PRODUCTION_AUTH_DIR=".cli-proxy-api"
-PRODUCTION_PROXY_PORT=8317
+PRODUCTION_PROXY_PORT=18317
 
 bundle_id="${1:-dev.quotio.desktop.dev}"
 
@@ -27,7 +27,7 @@ else
   [[ -n "$namespace_suffix" ]] || namespace_suffix="test"
   app_support_name="Quotio-$namespace_suffix"
   auth_dir_name=".cli-proxy-api-$namespace_suffix"
-  proxy_port=18317
+  proxy_port=18017
 fi
 
 internal_port=$((proxy_port + 10000))

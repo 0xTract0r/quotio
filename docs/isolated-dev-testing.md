@@ -26,8 +26,8 @@
 - `Application Support`：正式版是 `~/Library/Application Support/Quotio`，测试版会变成 `~/Library/Application Support/Quotio-<suffix>`
 - `auth` 目录：正式版是 `~/.cli-proxy-api`，测试版会变成 `~/.cli-proxy-api-<suffix>`
 - `Keychain`：服务名前缀是 bundle id，测试版不会复用正式版的本地管理密钥
-- 默认代理端口：正式版 `8317`，非正式 bundle id 默认 `18317`
-- 默认内部 CLIProxyAPI 端口：由桥接规则自动推导，测试版 `18317 -> 28317`
+- 默认代理端口：正式版 `18317`，非正式 bundle id 默认 `18017`
+- 默认内部 CLIProxyAPI 端口：由桥接规则自动推导，测试版 `18017 -> 28017`
 
 例如 `PRODUCT_BUNDLE_IDENTIFIER = dev.quotio.desktop.dev` 时：
 
@@ -35,8 +35,8 @@
 - Application Support：`~/Library/Application Support/Quotio-dev`
 - auth 目录：`~/.cli-proxy-api-dev`
 - Keychain 服务：`dev.quotio.desktop.dev.local-management`
-- 用户入口端口：`18317`
-- 内部 CLIProxyAPI 端口：`28317`
+- 用户入口端口：`18017`
+- 内部 CLIProxyAPI 端口：`28017`
 
 ## 仍然共享的面
 
@@ -134,9 +134,9 @@ defaults write dev.quotio.desktop.dev proxyPort -int <recommended-port>
 
 预期结果：
 
-- 正式版继续监听 `8317`
-- 测试版监听 `18317`
-- 测试版内部 CLIProxyAPI 监听 `28317`
+- 正式版继续监听 `18317`
+- 测试版监听 `18017`
+- 测试版内部 CLIProxyAPI 监听 `28017`
 - 正式版仍使用 `~/Library/Application Support/Quotio` 和 `~/.cli-proxy-api`
 - 测试版使用 `~/Library/Application Support/Quotio-dev` 和 `~/.cli-proxy-api-dev`
 

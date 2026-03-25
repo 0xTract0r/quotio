@@ -409,6 +409,12 @@ struct ContentView: View {
     @Environment(QuotaViewModel.self) private var viewModel
     @AppStorage("loggingToFile") private var loggingToFile = true
     @State private var modeManager = OperatingModeManager.shared
+
+    private var appVersionLabel: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "v" + version + " (" + build + ")"
+    }
     
     var body: some View {
         @Bindable var vm = viewModel
@@ -479,7 +485,10 @@ struct ContentView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 10)
+
+                    AppVersionStatusRow(versionLabel: appVersionLabel)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
                 }
                 .background(.regularMaterial)
             }
@@ -576,6 +585,25 @@ struct RemoteStatusRow: View {
         case .connecting: return "status.connecting".localized()
         case .disconnected: return "status.disconnected".localized()
         case .error: return "status.error".localized()
+        }
+    }
+}
+
+struct AppVersionStatusRow: View {
+    let versionLabel: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "tag")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Text(versionLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            Spacer()
         }
     }
 }

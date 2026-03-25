@@ -3,8 +3,8 @@ set -euo pipefail
 
 PRIMARY_BUNDLE_ID="${PRIMARY_BUNDLE_ID:-dev.quotio.desktop}"
 DEV_BUNDLE_ID="${DEV_BUNDLE_ID:-dev.quotio.desktop.dev}"
-DEFAULT_PRIMARY_PORT=8317
-DEFAULT_DEV_PORT=18317
+DEFAULT_PRIMARY_PORT=18317
+DEFAULT_DEV_PORT=18017
 WRITE_DEFAULTS=false
 
 if [[ "${1:-}" == "--write" ]]; then
@@ -43,7 +43,7 @@ else
 fi
 
 candidate_ports=""
-for port in 18317 18417 18517 18617 18717 18817 18917 19017 20017 21017; do
+for port in 18017 18117 18217 18417 18517 18617 18717 18817 18917 19017; do
   candidate_ports+="$port"$'\n'
 done
 

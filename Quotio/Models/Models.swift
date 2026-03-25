@@ -76,7 +76,7 @@ enum RuntimeProfile {
         if let override = intValue(for: "QUOTIO_PROXY_PORT"), override > 0, override < 65536 {
             return override
         }
-        return isPrimaryApp ? 8317 : 18317
+        return isPrimaryApp ? 18317 : 18017
     }
 
     static var localManagementKeyOverride: String? {

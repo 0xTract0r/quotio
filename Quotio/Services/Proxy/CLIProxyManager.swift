@@ -90,7 +90,14 @@ final class CLIProxyManager {
     
     nonisolated static func terminateProxyOnShutdown() {
         let savedPort = UserDefaults.standard.integer(forKey: "proxyPort")
-        let port = (savedPort > 0 && savedPort < 65536) ? UInt16(savedPort) : 8080
+        let port: UInt16
+        if let overridePort = RuntimeProfile.proxyPortOverride {
+            port = overridePort
+        } else if savedPort > 0 && savedPort < 65536 {
+            port = UInt16(savedPort)
+        } else {
+            port = UInt16(RuntimeProfile.defaultProxyPort)
+        }
         let useBridge = UserDefaults.standard.bool(forKey: "useBridgeMode")
         
         // Kill user-facing port
@@ -208,7 +215,10 @@ final class CLIProxyManager {
         set {
             guard newValue != proxyStatus.port else { return }
             proxyStatus.port = newValue
-            UserDefaults.standard.set(Int(newValue), forKey: "proxyPort")
+            // 带运行时端口覆盖的测试实例不应污染共享偏好域
+            if RuntimeProfile.proxyPortOverride == nil {
+                UserDefaults.standard.set(Int(newValue), forKey: "proxyPort")
+            }
             updateConfigPort(newValue)
             restartProxyIfRunning()
         }
