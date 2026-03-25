@@ -123,6 +123,26 @@ Download the latest `.dmg` from the [Releases](https://github.com/nguyenphutrong
 
 > The app will automatically download the `CLIProxyAPI` binary on first launch.
 
+### Runtime Verification for Developers
+
+When you need to verify local proxy regressions without touching the production app or production
+ports, run:
+
+```bash
+./scripts/verify-runtime-isolation.sh
+```
+
+This launches an isolated Debug Quotio instance under `/tmp`, uses separate runtime paths and test
+ports (`18027/28027` by default), then checks that recurring `/v0/management/debug` `401` noise is
+gone, `/v0/management/logs` is not self-polling while idle, and idle CPU stays near zero.
+
+Useful overrides:
+
+```bash
+QUOTIO_VERIFY_UI_SMOKE=0 ./scripts/verify-runtime-isolation.sh
+QUOTIO_VERIFY_PORT=18127 ./scripts/verify-runtime-isolation.sh
+```
+
 ## 📖 Usage
 
 ### 1. Start the Server

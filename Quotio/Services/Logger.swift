@@ -11,7 +11,6 @@ import os.log
 
 /// Unified logger for Quotio with privacy controls.
 /// All logging is disabled in Release builds to prevent sensitive data leakage.
-/// Marked nonisolated to be callable from any actor context.
 enum Log {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "dev.quotio.desktop"
 

@@ -327,15 +327,15 @@ struct CodexQuotaData: Codable, Sendable {
         }
     }
     
-    nonisolated var sessionRemainingPercent: Double {
+    var sessionRemainingPercent: Double {
         Double(100 - sessionUsedPercent)
     }
     
-    nonisolated var weeklyRemainingPercent: Double {
+    var weeklyRemainingPercent: Double {
         Double(100 - weeklyUsedPercent)
     }
     
-    nonisolated func toProviderQuotaData() -> ProviderQuotaData {
+    func toProviderQuotaData() -> ProviderQuotaData {
         var models: [ModelQuota] = []
         
         models.append(ModelQuota(
@@ -383,7 +383,7 @@ struct CodexAuthFile: Codable, Sendable {
         case proxyUrl = "proxy_url"
     }
     
-    nonisolated var isExpired: Bool {
+    var isExpired: Bool {
         guard let expired = expired else { return true }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

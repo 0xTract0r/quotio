@@ -22,7 +22,7 @@ struct CopilotQuotaSnapshot: Codable, Sendable {
         case unlimited
     }
     
-    nonisolated func calculatePercent(defaultTotal: Int) -> Double {
+    func calculatePercent(defaultTotal: Int) -> Double {
         if let percent = percentRemaining {
             return min(100, max(0, percent))
         }
@@ -84,7 +84,7 @@ struct CopilotEntitlement: Codable, Sendable {
         case monthlyQuotas = "monthly_quotas"
     }
     
-    nonisolated var planDisplayName: String {
+    var planDisplayName: String {
         let sku = accessTypeSku?.lowercased() ?? ""
         let plan = copilotPlan?.lowercased() ?? ""
 
@@ -122,7 +122,7 @@ struct CopilotEntitlement: Codable, Sendable {
         return copilotPlan?.capitalized ?? accessTypeSku?.capitalized ?? "Unknown"
     }
     
-    nonisolated var resetDate: Date? {
+    var resetDate: Date? {
         let dateString = quotaResetDateUtc ?? quotaResetDate ?? limitedUserResetDate
         guard let dateString = dateString else { return nil }
         

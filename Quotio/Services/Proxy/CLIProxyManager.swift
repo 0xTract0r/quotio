@@ -242,9 +242,9 @@ final class CLIProxyManager {
         self.configPath = quotioDir.appendingPathComponent("config.yaml").path
         self.authDir = RuntimeProfile.authDirectoryPath
         
-        // Always use key from Keychain, generate new if not exists
-        // Never read from config because CLIProxyAPI hashes the key on startup
-        if let savedKey = KeychainHelper.getLocalManagementKey(), !savedKey.hasPrefix("$2a$") {
+        if let overrideKey = RuntimeProfile.localManagementKeyOverride, !overrideKey.hasPrefix("$2a$") {
+            self.managementKey = overrideKey
+        } else if let savedKey = KeychainHelper.getLocalManagementKey(), !savedKey.hasPrefix("$2a$") {
             self.managementKey = savedKey
         } else {
             let newKey = UUID().uuidString
@@ -254,9 +254,13 @@ final class CLIProxyManager {
             }
         }
         
-        let savedPort = UserDefaults.standard.integer(forKey: "proxyPort")
-        if savedPort > 0 && savedPort < 65536 {
-            self.proxyStatus.port = UInt16(savedPort)
+        if let overridePort = RuntimeProfile.proxyPortOverride {
+            self.proxyStatus.port = overridePort
+        } else {
+            let savedPort = UserDefaults.standard.integer(forKey: "proxyPort")
+            if savedPort > 0 && savedPort < 65536 {
+                self.proxyStatus.port = UInt16(savedPort)
+            }
         }
 
         // Note: Bridge mode default is registered in AppDelegate.applicationDidFinishLaunching()
@@ -1599,7 +1603,7 @@ extension CLIProxyManager {
             throw ProxyUpgradeError.dryRunFailed("Test port not available")
         }
         
-        let compatResult = await compatibilityChecker.fullCheck(port: testPort)
+        let compatResult = await compatibilityChecker.fullCheck(port: testPort, authKey: managementKey)
         
         if !compatResult.isCompatible {
             // Compatibility failed, rollback

@@ -62,6 +62,9 @@ enum KeychainHelper {
     }
 
     static func saveLocalManagementKey(_ key: String) -> Bool {
+        if RuntimeProfile.localManagementKeyOverride != nil {
+            return true
+        }
         guard let data = key.data(using: .utf8) else { return false }
         let saved = saveData(data, service: localService, account: localManagementAccount)
         if !saved {
@@ -71,6 +74,9 @@ enum KeychainHelper {
     }
 
     static func getLocalManagementKey() -> String? {
+        if let override = RuntimeProfile.localManagementKeyOverride {
+            return override
+        }
         if let key = readString(service: localService, account: localManagementAccount) {
             return key
         }
@@ -93,6 +99,7 @@ enum KeychainHelper {
     }
 
     static func deleteLocalManagementKey() {
+        guard RuntimeProfile.localManagementKeyOverride == nil else { return }
         deleteData(service: localService, account: localManagementAccount)
         for legacy in legacyLocalServices {
             deleteData(service: legacy, account: localManagementAccount)

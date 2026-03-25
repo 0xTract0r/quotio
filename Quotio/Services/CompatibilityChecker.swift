@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Network
 
 /// Service for checking proxy compatibility with Quotio.
 /// Simplified to just verify proxy responds to API requests.
@@ -27,12 +28,12 @@ actor CompatibilityChecker {
     ///   - port: The port the proxy is running on
     ///   - host: The host (defaults to 127.0.0.1)
     /// - Returns: Compatibility check result
-    func checkCompatibility(port: UInt16, host: String = "127.0.0.1") async -> CompatibilityCheckResult {
+    func checkCompatibility(port: UInt16, host: String = "127.0.0.1", authKey: String? = nil) async -> CompatibilityCheckResult {
         let baseURL = "http://\(host):\(port)"
         
         // Try to call a simple management endpoint
         do {
-            let isResponding = try await checkManagementEndpoint(baseURL: baseURL)
+            let isResponding = try await checkManagementEndpoint(baseURL: baseURL, authKey: authKey)
             return isResponding ? .compatible : .proxyNotResponding
         } catch {
             return .connectionError(error.localizedDescription)
@@ -45,29 +46,7 @@ actor CompatibilityChecker {
     ///   - host: The host (defaults to 127.0.0.1)
     /// - Returns: true if the proxy responds
     func isHealthy(port: UInt16, host: String = "127.0.0.1") async -> Bool {
-        let baseURL = "http://\(host):\(port)"
-        
-        // Try debug endpoint first (always exists in management API)
-        guard let url = URL(string: "\(baseURL)/v0/management/debug") else {
-            return false
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 3
-        
-        do {
-            let (_, response) = try await session.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return false
-            }
-            
-            // 401/403 means the proxy is running but needs auth - still healthy
-            return 200...499 ~= httpResponse.statusCode
-        } catch {
-            return false
-        }
+        await isPortReachable(port: port, host: host)
     }
     
     /// Perform a full compatibility check including health.
@@ -75,27 +54,31 @@ actor CompatibilityChecker {
     ///   - port: The port the proxy is running on
     ///   - host: The host (defaults to 127.0.0.1)
     /// - Returns: Compatibility check result (checks health first, then compatibility)
-    func fullCheck(port: UInt16, host: String = "127.0.0.1") async -> CompatibilityCheckResult {
+    func fullCheck(port: UInt16, host: String = "127.0.0.1", authKey: String? = nil) async -> CompatibilityCheckResult {
         // First check if proxy is healthy
         guard await isHealthy(port: port, host: host) else {
             return .proxyNotRunning
         }
         
         // Then check compatibility (which is now just verifying it responds)
-        return await checkCompatibility(port: port, host: host)
+        return await checkCompatibility(port: port, host: host, authKey: authKey)
     }
     
     // MARK: - Private Helpers
     
-    private func checkManagementEndpoint(baseURL: String) async throws -> Bool {
+    private func checkManagementEndpoint(baseURL: String, authKey: String?) async throws -> Bool {
         guard let url = URL(string: "\(baseURL)/v0/management/debug") else {
             throw APIError.invalidURL
         }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 3
         request.addValue("application/json", forHTTPHeaderField: "Accept"
         )
+        if let authKey, !authKey.isEmpty {
+            request.addValue("Bearer \(authKey)", forHTTPHeaderField: "Authorization")
+        }
         
         let (_, response) = try await session.data(for: request)
         
@@ -105,6 +88,48 @@ actor CompatibilityChecker {
         
         // Any response (even 401/403) means the proxy is running
         return 200...499 ~= httpResponse.statusCode
+    }
+
+    private func isPortReachable(port: UInt16, host: String) async -> Bool {
+        await withCheckedContinuation { continuation in
+            final class ResumeState: @unchecked Sendable {
+                var hasResumed = false
+            }
+
+            let endpointHost = NWEndpoint.Host(host)
+            guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
+                continuation.resume(returning: false)
+                return
+            }
+
+            let connection = NWConnection(host: endpointHost, port: endpointPort, using: .tcp)
+            let queue = DispatchQueue(label: "dev.quotio.compatibility-check")
+            let resumeState = ResumeState()
+
+            let finish: @Sendable (Bool) -> Void = { value in
+                guard !resumeState.hasResumed else { return }
+                resumeState.hasResumed = true
+                connection.cancel()
+                continuation.resume(returning: value)
+            }
+
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    finish(true)
+                case .failed(_), .cancelled:
+                    finish(false)
+                default:
+                    break
+                }
+            }
+
+            queue.asyncAfter(deadline: .now() + 3) {
+                finish(false)
+            }
+
+            connection.start(queue: queue)
+        }
     }
 }
 

@@ -375,8 +375,7 @@ actor AntigravityDatabaseService {
                 )
                 
             case .unknown:
-                // Dual fallback: try both formats
-                var newFormatError: Error?
+                // 顺序回退，避免同一个 SQLite 句柄被并发闭包捕获
                 do {
                     try injectNewFormat(
                         accessToken: accessToken,
@@ -385,11 +384,6 @@ actor AntigravityDatabaseService {
                         db: db
                     )
                 } catch {
-                    newFormatError = error
-                }
-                
-                var oldFormatError: Error?
-                do {
                     try injectOldFormat(
                         accessToken: accessToken,
                         refreshToken: refreshToken,
@@ -397,12 +391,6 @@ actor AntigravityDatabaseService {
                         email: email,
                         db: db
                     )
-                } catch {
-                    oldFormatError = error
-                }
-                
-                if newFormatError != nil, let oldFormatError {
-                    throw oldFormatError
                 }
             }
             
