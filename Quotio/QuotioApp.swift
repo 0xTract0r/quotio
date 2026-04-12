@@ -62,9 +62,15 @@ final class AppBootstrap {
             return
         }
 
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[AppBootstrap] performFullInitialization start")
+        #endif
         // Scan auth files immediately (fast filesystem scan)
         // This allows menu bar to show providers before quota API calls complete
         await viewModel.loadDirectAuthFiles()
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[AppBootstrap] loadDirectAuthFiles completed")
+        #endif
 
         // Setup menu bar immediately so user can open it while data loads
         statusBarManager.setViewModel(viewModel)
@@ -84,6 +90,9 @@ final class AppBootstrap {
 
         // Load data in background (includes proxy auto-start if enabled)
         await viewModel.initialize()
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[AppBootstrap] viewModel.initialize completed")
+        #endif
 
         #if canImport(Sparkle)
         if !RuntimeProfile.disableUpdateChecks {
@@ -433,6 +442,11 @@ struct ContentView: View {
                         Label(modeManager.isMonitorMode ? "nav.accounts".localized() : "nav.providers".localized(), 
                               systemImage: "person.2.badge.key")
                             .tag(NavigationPage.providers)
+
+                        if modeManager.isLocalProxyMode {
+                            Label("Identity Packages", systemImage: "shield.lefthalf.filled.badge.checkmark")
+                                .tag(NavigationPage.identityPackages)
+                        }
                         
                         // Proxy mode only (local or remote)
                         if modeManager.isProxyMode {
@@ -527,6 +541,8 @@ struct ContentView: View {
                 QuotaScreen()
             case .providers:
                 ProvidersScreen()
+            case .identityPackages:
+                IdentityPackagesScreen()
             case .fallback:
                 FallbackScreen()
             case .agents:

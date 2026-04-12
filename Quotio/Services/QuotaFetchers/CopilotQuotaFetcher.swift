@@ -235,7 +235,7 @@ actor CopilotQuotaFetcher {
         }
     }
     
-    func fetchAllCopilotQuotas(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
+    func fetchAllCopilotQuotas(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
         
@@ -405,7 +405,7 @@ actor CopilotQuotaFetcher {
     }
 
     /// Fetch available models for all Copilot accounts
-    func fetchAllAvailableModels(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [CopilotModelInfo] {
+    func fetchAllAvailableModels(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> [CopilotModelInfo] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 
@@ -428,7 +428,7 @@ actor CopilotQuotaFetcher {
     }
 
     /// Get only the models that are available for the user (model_picker_enabled == true)
-    func fetchUserAvailableModelIds(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> Set<String> {
+    func fetchUserAvailableModelIds(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> Set<String> {
         let models = await fetchAllAvailableModels(authDir: authDir)
         return Set(models.filter { $0.isAvailable }.map { $0.id })
     }

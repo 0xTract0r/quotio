@@ -27,7 +27,7 @@ final class ProxyStorageManager {
     private static let binaryName = "CLIProxyAPI"
     
     private init() {
-        self.proxyDir = RuntimeProfile.applicationSupportDirectory(fileManager: fileManager).appendingPathComponent("proxy")
+        self.proxyDir = AppRuntimeProfile.appSupportDirectoryURL.appendingPathComponent("proxy")
         self.currentSymlink = proxyDir.appendingPathComponent("current")
         
         try? fileManager.createDirectory(at: proxyDir, withIntermediateDirectories: true)

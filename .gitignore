@@ -41,3 +41,5 @@ scripts/.specstory/
 .DS_Store
 
 .lattice/
+
+.specstory/

@@ -576,7 +576,7 @@ struct OAuthStatusResponse: Codable, Sendable {
 struct AppConfig: Codable {
     var host: String = ""
     var port: UInt16 = UInt16(RuntimeProfile.defaultProxyPort)
-    var authDir: String = RuntimeProfile.authDirectoryTildePath
+    var authDir: String = AppRuntimeProfile.authDirectoryPath
     var proxyURL: String = ""
     var apiKeys: [String] = []
     var debug: Bool = false
@@ -658,6 +658,7 @@ enum NavigationPage: String, CaseIterable, Identifiable {
     case dashboard = "Dashboard"
     case quota = "Quota"
     case providers = "Providers"
+    case identityPackages = "IdentityPackages"
     case fallback = "Fallback"
     case agents = "Agents"
     case apiKeys = "API Keys"
@@ -672,6 +673,7 @@ enum NavigationPage: String, CaseIterable, Identifiable {
         case .dashboard: return "gauge.with.dots.needle.33percent"
         case .quota: return "chart.bar.fill"
         case .providers: return "person.2.badge.key"
+        case .identityPackages: return "shield.lefthalf.filled.badge.checkmark"
         case .fallback: return "arrow.triangle.branch"
         case .agents: return "terminal"
         case .apiKeys: return "key.horizontal"

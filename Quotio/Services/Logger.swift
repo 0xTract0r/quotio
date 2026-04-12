@@ -11,6 +11,7 @@ import os.log
 
 /// Unified logger for Quotio with privacy controls.
 /// All logging is disabled in Release builds to prevent sensitive data leakage.
+/// Marked nonisolated to be callable from any actor context.
 enum Log {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "dev.quotio.desktop"
 
@@ -121,3 +122,50 @@ enum Log {
         return mask(localPart, visibleChars: 2) + domain
     }
 }
+
+#if DEBUG
+enum RuntimeIsolationDebugLog {
+    private static let argumentName = "--runtime-isolation-debug-log-path"
+    private static let defaultsKey = "runtimeIsolationDebugLogPath"
+
+    static func write(_ message: String) {
+        guard let logPath = resolvedPath else { return }
+
+        let fileManager = FileManager.default
+        let directory = (logPath as NSString).deletingLastPathComponent
+        if !directory.isEmpty {
+            try? fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        }
+
+        if !fileManager.fileExists(atPath: logPath) {
+            fileManager.createFile(atPath: logPath, contents: nil)
+        }
+
+        guard let handle = FileHandle(forWritingAtPath: logPath),
+              let data = "\(message)\n".data(using: .utf8) else {
+            return
+        }
+
+        do {
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+            try handle.close()
+        } catch {
+            try? handle.close()
+        }
+    }
+
+    private static var resolvedPath: String? {
+        let arguments = CommandLine.arguments
+        if let index = arguments.firstIndex(of: argumentName), arguments.indices.contains(index + 1) {
+            return NSString(string: arguments[index + 1]).expandingTildeInPath
+        }
+
+        if let value = UserDefaults.standard.string(forKey: defaultsKey), !value.isEmpty {
+            return NSString(string: value).expandingTildeInPath
+        }
+
+        return nil
+    }
+}
+#endif

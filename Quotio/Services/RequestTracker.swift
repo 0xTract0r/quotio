@@ -46,9 +46,7 @@ final class RequestTracker {
     
     /// Storage file URL
     private var storageURL: URL {
-        let quotioDir = RuntimeProfile.applicationSupportDirectory()
-        try? FileManager.default.createDirectory(at: quotioDir, withIntermediateDirectories: true)
-        return quotioDir.appendingPathComponent("request-history.json")
+        AppRuntimeProfile.appSupportDirectoryURL.appendingPathComponent("request-history.json")
     }
     
     // MARK: - Initialization

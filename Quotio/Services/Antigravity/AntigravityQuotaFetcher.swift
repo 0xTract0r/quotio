@@ -696,7 +696,7 @@ actor AntigravityQuotaFetcher {
         return await fetchSubscriptionInfo(accessToken: accessToken, metadataKey: metadataKey)
     }
 
-    func fetchAllSubscriptionInfo(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: SubscriptionInfo] {
+    func fetchAllSubscriptionInfo(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> [String: SubscriptionInfo] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 
@@ -779,7 +779,7 @@ actor AntigravityQuotaFetcher {
         return (quota, subscription)
     }
 
-    func fetchAllAntigravityQuotas(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
+    func fetchAllAntigravityQuotas(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 
@@ -821,7 +821,7 @@ actor AntigravityQuotaFetcher {
 
     /// Fetch all Antigravity data (quotas + subscriptions) in one call
     /// This avoids duplicate API calls by reusing cached subscription info
-    func fetchAllAntigravityData(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> (quotas: [String: ProviderQuotaData], subscriptions: [String: SubscriptionInfo]) {
+    func fetchAllAntigravityData(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> (quotas: [String: ProviderQuotaData], subscriptions: [String: SubscriptionInfo]) {
         // Clear cache at start of refresh cycle
         clearCache()
 
@@ -867,7 +867,7 @@ actor AntigravityQuotaFetcher {
 
     /// Legacy function - now just calls fetchAllAntigravityQuotas
     @available(*, deprecated, message: "Use fetchAllAntigravityData instead")
-    func fetchAllAntigravityQuotasLegacy(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
+    func fetchAllAntigravityQuotasLegacy(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
 

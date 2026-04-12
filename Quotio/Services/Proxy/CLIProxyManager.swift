@@ -270,6 +270,8 @@ final class CLIProxyManager {
             let savedPort = UserDefaults.standard.integer(forKey: "proxyPort")
             if savedPort > 0 && savedPort < 65536 {
                 self.proxyStatus.port = UInt16(savedPort)
+            } else {
+                self.proxyStatus.port = UInt16(RuntimeProfile.defaultProxyPort)
             }
         }
 

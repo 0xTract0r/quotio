@@ -219,7 +219,7 @@ actor OpenAIQuotaFetcher {
         }
     }
 
-    func fetchAllCodexQuotas(authDir: String = RuntimeProfile.authDirectoryTildePath) async -> [String: ProviderQuotaData] {
+    func fetchAllCodexQuotas(authDir: String = AppRuntimeProfile.authDirectoryPath) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath
         let fileManager = FileManager.default
         

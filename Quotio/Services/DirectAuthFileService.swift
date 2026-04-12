@@ -25,8 +25,14 @@ struct DirectAuthFile: Identifiable, Sendable, Hashable {
     let filename: String
     
     /// Source location of the auth file
-    enum AuthFileSource: String, Sendable {
-        case cliProxyApi = "~/.cli-proxy-api"
+    enum AuthFileSource: Sendable {
+        case cliProxyApi
+
+        var directoryPath: String {
+            switch self {
+            case .cliProxyApi: return AppRuntimeProfile.authDirectoryPath
+            }
+        }
         
         var displayName: String {
             switch self {
@@ -78,7 +84,7 @@ struct DirectAuthFile: Identifiable, Sendable, Hashable {
 /// Used in Quota-Only mode where proxy server is not running
 actor DirectAuthFileService {
     private let fileManager = FileManager.default
-    
+
     /// Expand tilde in path
     private func expandPath(_ path: String) -> String {
         NSString(string: path).expandingTildeInPath
@@ -86,16 +92,18 @@ actor DirectAuthFileService {
     
     /// Scan all known auth file locations
     func scanAllAuthFiles() async -> [DirectAuthFile] {
-        // Only scan ~/.cli-proxy-api (CLIProxyAPI managed)
+        // Only scan the runtime-profile-specific CLIProxyAPI auth directory
         await scanCLIProxyAPIDirectory()
     }
     
     // MARK: - CLI Proxy API Directory
     
-    /// Scan ~/.cli-proxy-api for managed auth files
+    /// Scan the runtime-profile-specific CLIProxyAPI auth directory for managed auth files
     private func scanCLIProxyAPIDirectory() async -> [DirectAuthFile] {
-        let path = expandPath(RuntimeProfile.authDirectoryTildePath)
+        let path = AppRuntimeProfile.authDirectoryPath
+        emitDebugLog("[DirectAuthFileService] Scanning direct auth files from \(path)")
         guard let files = try? fileManager.contentsOfDirectory(atPath: path) else {
+            emitDebugLog("[DirectAuthFileService] Direct auth directory not found or unreadable: \(path)")
             return []
         }
         
@@ -132,7 +140,15 @@ actor DirectAuthFileService {
             ))
         }
         
+        emitDebugLog("[DirectAuthFileService] Loaded \(authFiles.count) direct auth file(s) from \(path)")
         return authFiles
+    }
+
+    private func emitDebugLog(_ message: String) {
+#if DEBUG
+        NSLog("%@", message)
+        RuntimeIsolationDebugLog.write(message)
+#endif
     }
     
     // MARK: - JSON Parsing

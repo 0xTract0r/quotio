@@ -26,6 +26,7 @@ struct ProvidersScreen: View {
     @State private var showAddProviderPopover = false
     @State private var switchingAccount: AccountRowData?
     @State private var accountSettingsEditor: AccountSettingsEditorContext?
+    @State private var bindingTargetAuthFile: AuthFile?
     @State private var accountMetadataStore = AccountMetadataStore.shared
     @State private var modeManager = OperatingModeManager.shared
 
@@ -56,7 +57,8 @@ struct ProvidersScreen: View {
                     authFile: file,
                     metadataKey: metadataKey,
                     remark: accountMetadataStore.remark(for: metadataKey),
-                    hasConfiguredProxy: effectiveProxyURL(for: file) != nil
+                    hasConfiguredProxy: effectiveProxyURL(for: file) != nil,
+                    identityPackage: viewModel.identityPackage(for: file)
                 )
                 groups[provider, default: []].append(data)
             }
@@ -262,6 +264,10 @@ struct ProvidersScreen: View {
             AccountSettingsSheet(context: context)
                 .environment(viewModel)
         }
+        .sheet(item: $bindingTargetAuthFile) { authFile in
+            BindIdentityPackageSheet(authFile: authFile)
+                .environment(viewModel)
+        }
     }
     
     // MARK: - Toolbar
@@ -342,6 +348,12 @@ struct ProvidersScreen: View {
                         } : nil,
                         onToggleDisabled: { account in
                             Task { await toggleAccountDisabled(account) }
+                        },
+                        onManageIdentityBinding: { account in
+                            openIdentityBinding(for: account)
+                        },
+                        onUnbindIdentityBinding: { account in
+                            unbindIdentityBinding(for: account)
                         },
                         isAccountActive: provider == .antigravity ? { account in
                             viewModel.isAntigravityAccountActive(email: account.displayName)
@@ -541,6 +553,24 @@ struct ProvidersScreen: View {
         if let directAuthFile = viewModel.directAuthFiles.first(where: { $0.id == account.id }) {
             await viewModel.toggleDirectAuthFileDisabled(directAuthFile)
         }
+    }
+
+    private func openIdentityBinding(for account: AccountRowData) {
+        guard account.supportsIdentityBinding,
+              let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) else {
+            return
+        }
+
+        bindingTargetAuthFile = authFile
+    }
+
+    private func unbindIdentityBinding(for account: AccountRowData) {
+        guard account.supportsIdentityBinding,
+              let authFile = viewModel.authFiles.first(where: { $0.id == account.id }) else {
+            return
+        }
+
+        viewModel.unbindIdentityPackage(from: authFile)
     }
 
     private func handleEditGlmAccount(_ account: AccountRowData) {
@@ -1309,6 +1339,8 @@ struct MenuBarHintView: View {
 
 // MARK: - OAuth Sheet
 
+/// TODO: Support manual localhost callback URL paste for cross-device web OAuth flows.
+/// Current implementation assumes the browser login and localhost redirect happen on the same device.
 struct OAuthSheet: View {
     @Environment(QuotaViewModel.self) private var viewModel
     let provider: AIProvider

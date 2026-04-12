@@ -2,7 +2,7 @@
 //  ClaudeCodeQuotaFetcher.swift
 //  Quotio - CLIProxyAPI GUI Wrapper
 //
-//  Fetches quota from Claude auth files in ~/.cli-proxy-api/
+//  Fetches quota from Claude auth files in the runtime auth directory
 //  Calls Anthropic OAuth API for usage data
 //
 
@@ -54,8 +54,8 @@ struct ClaudeCodeQuotaInfo: Sendable {
 /// Fetches quota from Claude auth files using OAuth API
 actor ClaudeCodeQuotaFetcher {
 
-    /// Auth directory for CLI Proxy API
-    private let authDir = RuntimeProfile.authDirectoryTildePath
+    /// Auth directory for CLI Proxy API under the current runtime profile
+    private let authDir = AppRuntimeProfile.authDirectoryPath
 
     /// Anthropic OAuth usage API endpoint
     private let usageURL = "https://api.anthropic.com/api/oauth/usage"
@@ -286,7 +286,7 @@ actor ClaudeCodeQuotaFetcher {
         }
     }
 
-    /// Fetch quota for all Claude accounts from auth files in ~/.cli-proxy-api/
+    /// Fetch quota for all Claude accounts from auth files in the runtime auth directory
     /// - Parameter forceRefresh: If true, bypass cache and fetch fresh data
     func fetchAsProviderQuota(forceRefresh: Bool = false) async -> [String: ProviderQuotaData] {
         let expandedPath = NSString(string: authDir).expandingTildeInPath

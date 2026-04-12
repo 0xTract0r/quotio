@@ -54,6 +54,16 @@ struct FallbackAttempt: Codable, Hashable, Sendable {
     }
 }
 
+struct RequestIdentityEvidence: Codable, Hashable, Sendable {
+    let authIndex: String?
+    let authFileId: String?
+    let identityPackageId: UUID?
+    let exitIP: String?
+    let uaProfileId: UUID?
+    let tlsProfileId: UUID?
+    let verificationTraceId: String?
+}
+
 /// Represents a single API request/response pair with associated metadata
 struct RequestLog: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
@@ -124,6 +134,9 @@ struct RequestLog: Identifiable, Codable, Hashable, Sendable {
     /// Whether routing started from a cached fallback entry
     let fallbackStartedFromCache: Bool
 
+    /// Reserved evidence fields for future account -> identity package verification
+    let identityEvidence: RequestIdentityEvidence?
+
     /// Whether the request was successful (2xx status)
     var isSuccess: Bool {
         guard let code = statusCode else { return false }
@@ -157,7 +170,8 @@ struct RequestLog: Identifiable, Codable, Hashable, Sendable {
         authIndex: String? = nil,
         upstreamProxyURL: String? = nil,
         fallbackAttempts: [FallbackAttempt]? = nil,
-        fallbackStartedFromCache: Bool = false
+        fallbackStartedFromCache: Bool = false,
+        identityEvidence: RequestIdentityEvidence? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -180,6 +194,7 @@ struct RequestLog: Identifiable, Codable, Hashable, Sendable {
         self.upstreamProxyURL = upstreamProxyURL
         self.fallbackAttempts = fallbackAttempts
         self.fallbackStartedFromCache = fallbackStartedFromCache
+        self.identityEvidence = identityEvidence
     }
 
     func withRouteObservation(_ observation: RequestRouteObservation) -> RequestLog {

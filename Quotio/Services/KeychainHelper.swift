@@ -11,9 +11,10 @@ import Security
 // MARK: - Keychain Helper
 
 enum KeychainHelper {
-    private static var remoteService: String { RuntimeProfile.keychainServicePrefix + ".remote-management" }
-    private static var localService: String { RuntimeProfile.keychainServicePrefix + ".local-management" }
-    private static var warpService: String { RuntimeProfile.keychainServicePrefix + ".warp" }
+    private static let remoteServiceBase = "dev.quotio.desktop.remote-management"
+    private static let localServiceBase = "dev.quotio.desktop.local-management"
+    private static let warpServiceBase = "dev.quotio.desktop.warp"
+    private static let identityProxyServiceBase = "dev.quotio.desktop.identity-package.proxy"
     private static let localManagementAccount = "local-management-key"
     private static let warpTokensAccount = "warp-tokens"
     private static let localManagementDefaultsKey = "managementKey"
@@ -32,6 +33,11 @@ enum KeychainHelper {
         "proseek.io.vn.Quotio.warp",
         "com.quotio.warp",
     ]
+
+    private static var remoteService: String { AppRuntimeProfile.namespacedKeychainService(remoteServiceBase) }
+    private static var localService: String { AppRuntimeProfile.namespacedKeychainService(localServiceBase) }
+    private static var warpService: String { AppRuntimeProfile.namespacedKeychainService(warpServiceBase) }
+    private static var identityProxyService: String { AppRuntimeProfile.namespacedKeychainService(identityProxyServiceBase) }
 
     static func saveManagementKey(_ key: String, for configId: String) {
         let account = "management-key-\(configId)"
@@ -141,6 +147,23 @@ enum KeychainHelper {
             deleteData(service: legacy, account: warpTokensAccount)
         }
         UserDefaults.standard.removeObject(forKey: warpTokensDefaultsKey)
+    }
+
+    static func saveIdentityPackageProxyPassword(_ password: String, reference: String) -> Bool {
+        guard let data = password.data(using: .utf8) else { return false }
+        let saved = saveData(data, service: identityProxyService, account: reference)
+        if !saved {
+            Log.keychain("Failed to save identity package proxy password for reference \(reference)")
+        }
+        return saved
+    }
+
+    static func getIdentityPackageProxyPassword(reference: String) -> String? {
+        readString(service: identityProxyService, account: reference)
+    }
+
+    static func deleteIdentityPackageProxyPassword(reference: String) {
+        deleteData(service: identityProxyService, account: reference)
     }
 
     private static func migrateData(from oldServices: [String], to newService: String, account: String) -> Data? {
