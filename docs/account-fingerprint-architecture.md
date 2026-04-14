@@ -1,6 +1,8 @@
 # 账户级请求标识架构说明
 
-最后更新：2026-03-21
+最后更新：2026-04-14
+
+> 说明：如果你现在要快速了解“多身份指纹 / 账户级代理与 UA / TLS 画像 / CLIProxyAPIPlus 二次开发”这批工作的全貌，先读 [`multi-identity-fingerprint-summary.md`](./multi-identity-fingerprint-summary.md)。本文保留为这轮实现的架构快照与细节说明。
 
 ## 这次需求的真实目标
 
@@ -241,10 +243,12 @@
 
 当前采用的是 Git submodule 方案。
 
-当前子模块已经指向可复现远端：
+当前维护策略以 [`docs/cliproxy-plus-submodule.md`](./cliproxy-plus-submodule.md) 为准：
 
-- `git@github.com:0xTract0r/CLIProxyAPIPlus.git`
-- 分支：`quotio/account-fingerprint`
+- 子模块真源：`third_party/CLIProxyAPIPlus`
+- 官方上游：`git@github.com:router-for-me/CLIProxyAPIPlus.git`
+- Quotio fork：`git@github.com:0xTract0r/CLIProxyAPIPlus.git`
+- 当前维护基线：`upstream/main` + 最小本地补丁
 
 ### 不建议继续放在 `/tmp` 的原因
 
@@ -265,8 +269,9 @@
 ### 当前已经补齐的管理面
 
 - 固定路径：`third_party/CLIProxyAPIPlus`
+- 官方上游：`router-for-me/CLIProxyAPIPlus`
 - 远端 fork：`0xTract0r/CLIProxyAPIPlus`
-- 跟踪分支：`quotio/account-fingerprint`
+- 当前对齐策略：`upstream/main` 优先，仅重放仍未被官方吸收的本地补丁
 - 重建命令：`./scripts/manage-cliproxy-plus.sh build`
 - 联调脚本：`scripts/watch-claude-mitm-session.sh`
 
