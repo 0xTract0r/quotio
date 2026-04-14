@@ -2,13 +2,20 @@
 
 `docs/` 现按主题收成 4 组，优先从这里进入，不再在根目录平铺查找。
 
+如果你是第一次进入这个 fork 的 AI，请先读：
+
+1. [`project/current-fork-delta.md`](./project/current-fork-delta.md)
+2. [`project/project-overview-prd.md`](./project/project-overview-prd.md)
+
+不要先把仓库理解成“原生 Quotio 未改造版”。
+
 ## `fingerprint/`
 
 多身份、账户级指纹、UA / headers、请求链路和迁移方案。
 
 - [`multi-identity-fingerprint-summary.md`](./fingerprint/multi-identity-fingerprint-summary.md): 多身份指纹与 CLIProxyAPIPlus 二次开发总览
 - [`account-fingerprint-architecture.md`](./fingerprint/account-fingerprint-architecture.md): 当前实现、链路与边界
-- [`oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md`](./fingerprint/oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md): 面向执行型 AI 的实现入口
+- [`oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md`](./fingerprint/oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md): 身份包路线的当前实现指引与后续续做入口
 
 ## `operations/`
 
@@ -26,8 +33,11 @@
 
 ## `project/`
 
-Quotio 自身项目概览、代码结构和基础架构说明。
+Quotio 自身项目概览、运行边界与代码入口。
 
+- [`current-fork-delta.md`](./project/current-fork-delta.md): 当前 fork 和原生上游相比，哪些地方已经被二次开发改过
 - [`project-overview-prd.md`](./project/project-overview-prd.md): 项目 PRD
-- [`codebase-summary.md`](./project/codebase-summary.md): 代码库摘要
-- [`codebase-structure-architecture-code-standards.md`](./project/codebase-structure-architecture-code-standards.md): 结构与代码规范
+
+说明：
+- 旧的 `codebase-summary.md` 与 `codebase-structure-architecture-code-standards.md` 已并入当前 `project-overview-prd.md`
+- 更细的开发规则以仓库根目录 `AGENTS.md` 与 `.agentlens/INDEX.md` 为准

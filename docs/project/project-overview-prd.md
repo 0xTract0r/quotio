@@ -1,223 +1,142 @@
-# Quotio - Project Overview and Product Requirements Document (PRD)
+# Quotio 项目当前概览
 
-> **Last Updated**: December 27, 2024
-> **Version**: 1.0.0
-> **Platform**: macOS 15.0+ (Sequoia)
+最后更新：2026-04-15
 
----
+## 1. 这个仓库现在是什么
 
-## Table of Contents
+Quotio 是一个原生 macOS 菜单栏应用，用来托管本地 AI 代理网关，并把账号管理、配额查看、CLI 配置、日志与运维入口收在同一个宿主里。
 
-1. [Project Purpose](#project-purpose)
-2. [Target Users](#target-users)
-3. [Key Features](#key-features)
-4. [Supported AI Providers](#supported-ai-providers)
-5. [Compatible CLI Agents](#compatible-cli-agents)
-6. [App Modes](#app-modes)
-7. [System Requirements](#system-requirements)
+这份文档只保留当前仍有效的项目事实，不再重复旧的生成式代码摘要。
 
----
+## 2. 当前真实范围
 
-## Project Purpose
+当前仓库不是单纯的 GUI 壳，而是三层组合：
 
-Quotio is a native macOS application that serves as the **command center for AI coding assistants**. It provides a graphical user interface for managing **CLIProxyAPI** - a local proxy server that powers AI coding agents.
+1. Quotio 宿主应用
+   - SwiftUI + AppKit
+   - 负责本地界面、状态管理、代理生命周期、Keychain、CLI 配置
+2. `CLIProxyAPIPlus` 子模块
+   - 路径：`third_party/CLIProxyAPIPlus`
+   - 负责真实请求转发、账号 auth、路由、上游 headers / proxy 接入
+3. `Cli-Proxy-API-Management-Center` 子模块
+   - 路径：`third_party/Cli-Proxy-API-Management-Center`
+   - 负责可复用的 Web 管理后台
 
-### Core Goals
+## 3. Quotio 当前已经覆盖的能力
 
-1. **Centralized Account Management**: Manage multiple AI provider accounts from different services in one unified interface.
-2. **Quota Tracking**: Monitor API usage and quotas across all connected accounts with real-time visual feedback.
-3. **CLI Tool Configuration**: Auto-detect and configure popular AI coding CLI tools to route through the centralized proxy.
-4. **Seamless Integration**: Provide menu bar integration for quick status checks without interrupting workflow.
+- 多 provider 账号管理与 OAuth / 导入流程
+- 配额查看、日志查看、API key 管理
+- CLI agent 自动配置与手工配置
+- 菜单栏状态与通知
+- 开发版 / 正式版运行时隔离
+- 账户级 `proxy_url`、`headers`、备注等本地管理
+- 多身份指纹相关的宿主侧 UI、持久化与验证脚本
+- Identity Package 第一阶段本地模型与页面骨架
 
-### Problem Statement
+## 4. 目前代码里确认存在的 provider 与 agent
 
-Developers using AI coding assistants often need to:
+### Providers
 
-- Manage multiple accounts across different AI providers
-- Track quota usage to avoid service interruptions
-- Configure multiple CLI tools with consistent settings
-- Monitor real-time usage statistics
+来自 `Quotio/Models/Models.swift` 当前 `AIProvider` 枚举：
 
-Quotio solves these challenges by providing a unified management layer with automatic configuration and quota tracking.
+- Gemini CLI
+- Claude Code
+- Codex (OpenAI)
+- Qwen Code
+- iFlow
+- Antigravity
+- Vertex AI
+- Kiro
+- GitHub Copilot
+- Cursor
+- Trae
+- GLM
+- Warp
 
----
+### CLI Agents
 
-## Target Users
+来自 `Quotio/Models/AgentModels.swift` 当前 `CLIAgent` 枚举：
 
-### Primary Users
+- Claude Code
+- Codex CLI
+- Gemini CLI
+- Amp CLI
+- OpenCode
+- Factory Droid
 
-1. **Professional Developers**: Engineers who use AI coding assistants daily and need to manage multiple accounts or team allocations.
+## 5. 运行模式与运行面
 
-2. **Power Users**: Developers who work with multiple AI providers and need centralized quota monitoring.
+当前有两层容易混淆的概念：
 
-3. **Team Leads/DevOps**: Personnel responsible for managing AI tool access and monitoring usage across accounts.
+### App Mode
 
-### User Personas
+由 `AppMode` / `OperatingMode` 控制：
 
-| Persona | Use Case | Key Needs |
-|---------|----------|-----------|
-| Solo Developer | Uses 2-3 AI tools daily | Quota tracking, easy setup |
-| Freelancer | Multiple client accounts | Account switching, usage monitoring |
-| Team Lead | Manages team quotas | Dashboard overview, notifications |
-| DevOps Engineer | Infrastructure management | Proxy configuration, API key management |
+- `full`
+- `quotaOnly`
 
----
+### Runtime Profile
 
-## Key Features
+由 `RuntimeProfile` 控制运行时命名空间：
 
-### Multi-Provider Support
+- 正式版默认运行面
+  - `~/Library/Application Support/Quotio`
+  - `~/.cli-proxy-api`
+  - 端口 `18317/28317`
+- 非正式 bundle id 会自动切到独立目录、独立 auth、独立 Keychain 命名空间与独立默认端口
 
-Connect and manage accounts from multiple AI providers through a unified interface:
+这是本仓库后续做任何 proxy/core 改动时都必须遵守的基础边界。
 
-- OAuth-based authentication for most providers
-- Service account JSON import for Vertex AI
-- CLI-based authentication for GitHub Copilot and Kiro
-- Browser session integration for Cursor
+## 6. 当前值得直接看的入口
 
-### Quota Tracking
+如果你现在要继续开发，不要从旧 PRD 或旧摘要开始，优先看这些：
 
-Visual quota monitoring with intelligent notifications:
+### 仓库总规则
 
-- Per-account quota breakdown
-- Model-level usage tracking
-- Automatic low-quota alerts
-- Configurable notification thresholds
-- Historical usage statistics
+- 根目录 `AGENTS.md`
+- `.agentlens/INDEX.md`
 
-### Agent Configuration
+### Quotio 主仓库
 
-One-click configuration for popular CLI coding tools:
+- `Quotio/Models/Models.swift`
+- `Quotio/ViewModels/QuotaViewModel.swift`
+- `Quotio/Views/Screens/ProvidersScreen.swift`
+- `Quotio/Services/ManagementAPIClient.swift`
+- `Quotio/Services/Proxy/CLIProxyManager.swift`
+- `Quotio/Services/Proxy/ProxyBridge.swift`
 
-- Automatic agent detection
-- Configuration generation (JSON/TOML/Environment)
-- Shell profile integration (zsh/bash/fish)
-- Manual configuration mode with copy-to-clipboard
-- Model slot customization (Opus/Sonnet/Haiku)
+### 多身份 / 指纹相关
 
-### Menu Bar Integration
+- `docs/fingerprint/multi-identity-fingerprint-summary.md`
+- `docs/fingerprint/account-fingerprint-architecture.md`
+- `docs/fingerprint/account-clienthello-transport-prd.md`
+- `docs/fingerprint/claude-request-chain.md`
 
-Always-accessible status from the macOS menu bar:
+### 运维与收口
 
-- Proxy status indicator
-- Quota percentage display per provider
-- Custom provider icons
-- Color-coded status (green/yellow/red)
-- Quick access popover
+- `docs/operations/isolated-dev-testing.md`
+- `docs/operations/dev-to-production-promotion.md`
 
-### Notifications
+### 子模块维护
 
-Intelligent alert system for critical events:
+- `docs/submodules/cliproxy-plus-submodule.md`
+- `docs/submodules/management-center-submodule.md`
 
-- Low quota warnings (configurable threshold)
-- Account cooling period notifications
-- Proxy crash alerts
-- Sound and banner options
+## 7. 当前项目结构里最容易踩错的点
 
-### Auto-Update
+- 正式运行面是本机生产状态，不能把 `18317/28317`、`~/Library/Application Support/Quotio`、`~/.cli-proxy-api` 当测试目录
+- `CLIProxyAPIPlus` 的开发真源只能是 `third_party/CLIProxyAPIPlus`
+- 管理后台子模块不是单独后端；真正的管理接口还是由 proxy core 暴露
+- Identity Package 相关代码虽然已经存在，但“本地 UI / 模型存在”不等于“运行时强绑定已生效”
 
-Seamless update experience via Sparkle framework:
+## 8. 这份文档替代了什么
 
-- Background update checks
-- One-click update installation
-- Changelog display
+旧的：
 
-### Bilingual Support
+- `codebase-summary.md`
+- `codebase-structure-architecture-code-standards.md`
 
-Full localization for:
-
-- English (en)
-- Vietnamese (vi)
-
----
-
-## Supported AI Providers
-
-| Provider | Authentication Method | Quota Tracking | Manual Auth |
-|----------|----------------------|----------------|-------------|
-| **Google Gemini** | OAuth | Yes | Yes |
-| **Anthropic Claude** | OAuth | Yes (via CLI) | Yes |
-| **OpenAI Codex** | OAuth | Yes | Yes |
-| **Qwen Code** | OAuth | No | Yes |
-| **Vertex AI** | Service Account JSON | No | Yes |
-| **iFlow** | OAuth | No | Yes |
-| **Antigravity** | OAuth | Yes | Yes |
-| **Kiro (CodeWhisperer)** | CLI Auth (Google/AWS) | No | Yes |
-| **GitHub Copilot** | Device Code Flow | Yes | Yes |
-| **Cursor** | Browser Session | Yes | No (Auto-detect) |
-
-### Provider Capabilities
-
-- **OAuth Providers**: Gemini, Claude, Codex, Qwen, iFlow, Antigravity
-- **CLI Auth**: GitHub Copilot (Device Code), Kiro (Google OAuth / AWS Builder ID)
-- **File Import**: Vertex AI (Service Account JSON)
-- **Auto-Detect Only**: Cursor (reads from local Cursor app database)
-
----
-
-## Compatible CLI Agents
-
-Quotio can automatically detect and configure the following CLI coding tools:
-
-| Agent | Binary | Config Type | Config Files |
-|-------|--------|-------------|--------------|
-| **Claude Code** | `claude` | JSON + Environment | `~/.claude/settings.json` |
-| **Codex CLI** | `codex` | TOML + JSON | `~/.codex/config.toml`, `~/.codex/auth.json` |
-| **Gemini CLI** | `gemini` | Environment Only | - |
-| **Amp CLI** | `amp` | JSON + Environment | `~/.config/amp/settings.json`, `~/.local/share/amp/secrets.json` |
-| **OpenCode** | `opencode`, `oc` | JSON | `~/.config/opencode/opencode.json` |
-| **Factory Droid** | `droid`, `factory-droid`, `fd` | JSON | `~/.factory/config.json` |
-
-### Configuration Modes
-
-1. **Automatic Mode**: Directly updates config files and shell profiles
-2. **Manual Mode**: Generates configuration for user to copy and apply
-
-### Model Slot Configuration
-
-Agents can be configured with custom model routing:
-
-- **Opus Slot**: High intelligence tasks (e.g., `gemini-claude-opus-4-6-thinking`)
-- **Sonnet Slot**: Balanced tasks (e.g., `gemini-claude-sonnet-4-5`)
-- **Haiku Slot**: Fast/simple tasks (e.g., `gemini-3-flash-preview`)
-
----
-
-## App Modes
-
-Quotio supports two operating modes to accommodate different user needs:
-
-### Full Mode (Default)
-
-Complete functionality including proxy server management:
-
-**Features:**
-
-- Run local proxy server (CLIProxyAPI)
-- Manage multiple AI accounts
-- Configure CLI agents
-- Track quota in menu bar
-- API key management for clients
-- Request/response logging
-
-**Visible Pages:**
-
-- Dashboard
-- Quota
-- Providers
-- Agents
-- API Keys
-- Logs
-- Settings
-- About
-
-### Quota-Only Mode
-
-Lightweight mode for quota monitoring without proxy overhead:
-
-**Features:**
-
-- Track quota in menu bar
-- No proxy server required
+已经并入本文件；更细的代码规范与运行约束统一以根目录 `AGENTS.md` 为准。
 - Minimal UI and resource usage
 - Direct quota fetching via CLI commands
 - Similar to CodexBar / ccusage

@@ -8,6 +8,23 @@ Native macOS menu bar app (SwiftUI) for managing CLIProxyAPI - local proxy serve
 
 **Stack:** Swift 6, SwiftUI, macOS 15+, Xcode 16+, Sparkle (auto-update)
 
+## First Read For AI Contributors
+
+Before doing any feature work, do **not** assume this repository is still a vanilla upstream Quotio checkout.
+
+Read in this order:
+
+1. [`docs/project/current-fork-delta.md`](docs/project/current-fork-delta.md)
+2. [`docs/README.md`](docs/README.md)
+3. Then the task-specific docs under `docs/fingerprint/`, `docs/operations/`, or `docs/submodules/`
+
+Current fork-specific realities that often get missed:
+
+- this repo now depends on both `third_party/CLIProxyAPIPlus` and `third_party/Cli-Proxy-API-Management-Center`
+- account-level `proxy_url`, managed `headers`, and upstream verification workflows have already been implemented and documented
+- `Identity Package` exists, but only as a phase-1 host-side model/UI layer, not a fully enforced runtime binding system
+- production runtime paths and ports on the local machine must be treated as live state, not disposable dev fixtures
+
 ## Structure
 
 ```

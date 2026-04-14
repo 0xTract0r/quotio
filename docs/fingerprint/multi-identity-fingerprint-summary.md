@@ -815,8 +815,8 @@ Quotio 已经有：
    - Claude 请求链路和边界最清楚
 3. `docs/fingerprint/account-clienthello-transport-prd.md`
    - 下一阶段 TLS / ClientHello 改造主文档
-4. `docs/fingerprint/oauth-account-fingerprint-target-architecture.md`
-   - package / binding / target architecture 的完整设计图
+4. `docs/fingerprint/oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md`
+   - Identity Package 路线的当前实现入口与续做边界
 5. `docs/submodules/cliproxy-plus-submodule.md`
    - 后续继续改核心时的真源规则
 

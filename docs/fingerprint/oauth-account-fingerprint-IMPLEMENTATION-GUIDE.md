@@ -1,176 +1,145 @@
-# OAuth 账号强绑定身份包 IMPLEMENTATION GUIDE
+# OAuth 账号运行身份包实现指引
+
+最后更新：2026-04-15
 
 ## 目的
 
-这是给执行型 AI 使用的单入口文档。
+这份文档保留“身份包路线”今天仍然有用的实现入口，并替代早期那批分散的方案稿、TODO 和目标架构草稿。
 
-如果你要在 Quotio 中继续实现“OAuth 账号强绑定运行身份包”能力，请先读这份文件，再按本文指定顺序阅读附属文档并开始编码。
+如果你接下来还要继续做：
 
-不要直接从分散的需求文档自行总结实现范围。
+- Quotio 宿主里的 Identity Package UI / 模型
+- 基于 `CLIProxyAPIPlus` 的账号级强绑定
+- 迁移到别的基于 CLI Proxy API 的宿主项目
 
-## 一句话目标
+先看这份，再进入更具体的当前文档。
 
-在 Quotio 中引入“运行身份包”这一新领域对象，使每个 OAuth 账号都能绑定且只能绑定一套专属身份包；身份包至少包含代理、UA、TLS 指纹信息，并为后续运行时强绑定和验证能力预留稳定的数据结构、UI 入口和服务层接口。
+## 当前真实状态
 
-## 当前阶段
+### 已经存在
 
-当前阶段是：
+Quotio 主仓库里已经有一套 Identity Package 第一阶段基础设施：
 
-- 第一阶段基础设施建设
+- `Quotio/Models/IdentityPackageModels.swift`
+- `Quotio/Services/IdentityPackageService.swift`
+- `Quotio/Views/Screens/IdentityPackagesScreen.swift`
+- `Quotio/Views/Components/BindIdentityPackageSheet.swift`
+- `Quotio/Views/Components/ImportIdentityPackagesSheet.swift`
+- `Quotio/Views/Components/GenerateIdentityPackagesSheet.swift`
 
-当前阶段不是：
+它已经覆盖：
 
-- 真实出站执行层改造完成
-- CLIProxyAPIPlus 运行时强绑定已经打通
-- TLS 指纹能力已经真正生效
+- 身份包模型
+- 本地 CRUD 与导入/生成
+- 账号绑定/解绑 UI
+- 代理密码 `Keychain` 存储
+- `draft` / `available` / `bound` / `verificationFailed` / `blocked` 这些本地状态
 
-## 当前仓库内已经完成的内容
+### 还没有完成
 
-本仓库中已存在以下初始基础：
+下面这些依然不能写成“已落地事实”：
 
-- 身份包模型：
-  - `Quotio/Models/IdentityPackageModels.swift`
-- 身份包本地服务：
-  - `Quotio/Services/IdentityPackageService.swift`
-- 身份包页面骨架：
-  - `Quotio/Views/Screens/IdentityPackagesScreen.swift`
-- 左侧导航入口已接入：
-  - `Quotio/QuotioApp.swift`
-- 导航枚举已扩展：
-  - `Quotio/Models/Models.swift`
+- 普通请求链路里按 `auth_index` 真正强制选择 identity package
+- 未绑定账号时阻断真实出站
+- 账号级运行时 TLS / ClientHello 真正生效
+- 请求级证据链完整落盘
 
-这些是第一阶段的起点，不要重复造概念。
+也就是说：
 
-## 必读顺序
+- `Identity Package` 现在更像宿主侧资源模型和 UI
+- 不是已经打通的核心运行时强绑定系统
 
-继续编码前，按下面顺序读：
+## 与多身份指纹主线的关系
 
-1. 本文件
-2. [oauth-account-fingerprint-target-architecture.md](./oauth-account-fingerprint-target-architecture.md)
-3. [oauth-account-fingerprint-current-architecture.md](./oauth-account-fingerprint-current-architecture.md)
+现在真正已经落地并且可验证的主线，是：
 
-只有在你需要理解产品语义、UI 权衡时，再读：
+- 账户级 `proxy_url`
+- 账户级托管 `headers`
+- Claude / Codex 上游请求的真实验证
 
-4. [oauth-account-fingerprint-binding-plan.md](./oauth-account-fingerprint-binding-plan.md)
+这一部分的当前真源不是早期身份包草稿，而是：
 
-## 硬约束
+1. [multi-identity-fingerprint-summary.md](./multi-identity-fingerprint-summary.md)
+2. [account-fingerprint-architecture.md](./account-fingerprint-architecture.md)
+3. [claude-request-chain.md](./claude-request-chain.md)
+4. [account-clienthello-transport-prd.md](./account-clienthello-transport-prd.md)
+5. [../submodules/cliproxy-plus-submodule.md](../submodules/cliproxy-plus-submodule.md)
 
-这些约束不能被实现时偷偷弱化：
+如果你是为了另一个项目复用“多账号不同上游指纹”，优先看上面这 5 份。
 
-1. 绑定粒度是单个 OAuth 账号 / AuthFile，不是 provider 级。
-2. 一个身份包同一时间只能绑定一个账号。
-3. 一个账号同一时间只能绑定一个身份包。
-4. 未绑定账号在最终目标架构中必须禁止真实出站。
-5. 不能用“全局 proxy-url 多份轮换”伪装成账号级强绑定。
-6. 不能宣称 TLS 指纹已经实现，除非运行时执行层真的支持。
-7. 本仓库当前可以先做 UI、模型、服务、日志字段和接口预留，但不能伪装成已经具备真实强绑定能力。
+如果你是为了继续把 `Identity Package` 从 UI 模型推进到运行时强绑定，再继续看下面这节。
 
-## 本轮推荐实现范围
+## 继续做 Identity Package 时的硬约束
 
-如果要继续在本仓库里编码，优先顺序如下：
+1. 绑定粒度仍然是单个 OAuth 账号 / `AuthFile`
+2. 一个身份包同一时间只能绑定一个账号
+3. 一个账号同一时间只能绑定一个身份包
+4. 不能把“全局 proxy-url 多份轮换”伪装成账号级强绑定
+5. 不能把宿主 UI 的本地状态写成“运行时已生效”
+6. 不能宣称 TLS 指纹已经实现，除非核心 transport 真正支持
 
-### Priority 1
+## 续做时的推荐路径
 
-- 把 `IdentityPackageService` 接入 `QuotaViewModel`
-- 在 `ProvidersScreen` 中展示账号当前绑定状态
-- 增加绑定 / 解绑 UI 入口
+### 路线 A：继续做宿主侧完善
 
-### Priority 2
+适合你要先把 Quotio 侧的交互和数据承载补稳。
 
-- 为身份包补充导入代理和编辑能力
-- 为代理密码接 Keychain 存储
-- 在页面中区分：
-  - draft
-  - available
-  - bound
-  - verificationFailed
-  - blocked
-
-### Priority 3
-
-- 扩展 `RequestLog` 和 `RequestTracker` 的字段，为未来证据链预留结构
-- 在 `LogsScreen` 或身份包详情页预留验证结果展示
-
-## 本轮不应该做的事情
-
-下面这些事情如果没有额外明确授权，不要在这一轮尝试：
-
-- 不要大改 `AgentConfigurationService`
-- 不要把账号级绑定逻辑塞进 CLI 配置文件
-- 不要在 `ProxyBridge` 里靠猜测请求内容来决定账号绑定
-- 不要把“验证通过”做成纯 UI 假数据
-- 不要引入新第三方依赖，除非现有项目确实无法满足
-
-## 推荐改动文件
-
-下一轮编码最可能涉及：
+优先文件：
 
 - `Quotio/ViewModels/QuotaViewModel.swift`
 - `Quotio/Views/Screens/ProvidersScreen.swift`
-- `Quotio/Views/Components/AccountRow.swift`
+- `Quotio/Views/Screens/IdentityPackagesScreen.swift`
+- `Quotio/Services/IdentityPackageService.swift`
 - `Quotio/Services/KeychainHelper.swift`
 - `Quotio/Models/RequestLog.swift`
 - `Quotio/Services/RequestTracker.swift`
 
-## 外部依赖边界
+适合继续补的内容：
 
-这个需求最终要成立，必须依赖 `CLIProxyAPIPlus` 上游支持以下能力：
+- 更清晰的绑定状态提示
+- 验证结果展示
+- 与请求日志字段的对接预留
+- 宿主侧导入/批量管理体验
+
+### 路线 B：继续做核心侧强绑定
+
+这才是让“身份包真的生效”的关键路径。
+
+需要在 `CLIProxyAPIPlus` 侧补齐：
 
 - 常规请求链路解析实际 `auth_index`
-- 按账号绑定关系选择 identity package
-- 按 identity package 切换 proxy / UA / TLS profile
-- 输出请求级证据字段
+- `auth -> identity package` 绑定读取
+- 按绑定包选择 proxy / headers / transport profile
+- 未绑定时拒绝真实出站
+- 请求级证据字段输出
 
-所以本仓库当前阶段的职责是：
+当前这部分仍然依赖：
 
-- 把数据模型和 UI 先固定
-- 把与上游代理对接的接口形状预留好
+- `third_party/CLIProxyAPIPlus`
+- [../submodules/cliproxy-plus-submodule.md](../submodules/cliproxy-plus-submodule.md)
+- [account-clienthello-transport-prd.md](./account-clienthello-transport-prd.md)
 
-不是：
+## 不建议再看的旧稿
 
-- 单独在 GUI 层完成全部运行时绑定
+下面这些早期文档已经被当前文档替代，不再作为续做入口保留：
 
-## 成功标准
+- `oauth-account-fingerprint-TODO.md`
+- `oauth-account-fingerprint-binding-plan.md`
+- `oauth-account-fingerprint-current-architecture.md`
+- `oauth-account-fingerprint-target-architecture.md`
+- `oauth-account-runtime-identity-generic-prd.md`
 
-对于当前阶段，成功标准是：
+这些内容里仍然有价值的部分，已经折进：
 
-1. 身份包模型稳定
-2. 身份包和账号之间可绑定、可解绑、可展示
-3. UI 上能明确看出哪些账号未绑定
-4. 代码结构为未来与 CLIProxyAPIPlus 集成留出清晰接口
-5. 不破坏当前 OAuth、quota、agent setup 主链路
+- 本文
+- `multi-identity-fingerprint-summary.md`
+- `account-fingerprint-architecture.md`
+- `account-clienthello-transport-prd.md`
 
-## 推荐工作方式
+## 最后判断
 
-这个需求当前更适合由一个主 AI 持续推进，不适合一开始拆给多个 AI 并行乱改。
+如果你的目标是“把这套能力迁到另一个基于 CLI Proxy API 的宿主项目”，最务实的做法是：
 
-原因：
-
-- 模型、UI、日志、上游接口边界高度耦合
-- 如果多个 AI 同时写，极易出现概念漂移和假实现
-
-只有在以下前提都稳定后，才适合拆分并行：
-
-- 数据模型已锁定
-- 绑定规则已锁定
-- 上游 CLIProxyAPIPlus 接口契约已锁定
-
-## 开工方式
-
-继续编码时，请按下面顺序执行：
-
-1. 先读取本文件和 `target-architecture`
-2. 审查当前已存在的 `IdentityPackageModels.swift` 与 `IdentityPackageService.swift`
-3. 先把账号绑定状态接到 `QuotaViewModel`
-4. 再做 `ProvidersScreen` 绑定 UI
-5. 每一步都保持可编译
-6. 修改后至少运行一次 Debug build
-
-## 备注
-
-如果你在编码过程中发现某个需求必须依赖 `CLIProxyAPIPlus` 新接口，而本仓库暂时没有，请：
-
-- 在代码中只做接口预留
-- 在结果中明确标注“此能力依赖上游代理”
-
-不要在本地 GUI 层编造一个看似完成但实际上无法运行的方案。
+1. 先复用已经验证过的账户级 `proxy_url + headers + 上游 MITM 验证`
+2. 再决定要不要把 Quotio 这套 `Identity Package` UI / 模型也迁过去
+3. 真要做“强绑定”与“TLS 画像”，最终还是要回到核心 transport 层
