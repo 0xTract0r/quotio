@@ -112,8 +112,8 @@
 
 主要入口：
 
-- [`Quotio/Views/Screens/ProvidersScreen.swift`](../Quotio/Views/Screens/ProvidersScreen.swift)
-- [`Quotio/ViewModels/QuotaViewModel.swift`](../Quotio/ViewModels/QuotaViewModel.swift)
+- [`Quotio/Views/Screens/ProvidersScreen.swift`](../../Quotio/Views/Screens/ProvidersScreen.swift)
+- [`Quotio/ViewModels/QuotaViewModel.swift`](../../Quotio/ViewModels/QuotaViewModel.swift)
 
 职责：
 
@@ -125,9 +125,9 @@
 
 主要文件：
 
-- [`Quotio/Services/AccountMetadataStore.swift`](../Quotio/Services/AccountMetadataStore.swift)
-- [`Quotio/Services/DirectAuthFileService.swift`](../Quotio/Services/DirectAuthFileService.swift)
-- [`Quotio/Services/ManagementAPIClient.swift`](../Quotio/Services/ManagementAPIClient.swift)
+- [`Quotio/Services/AccountMetadataStore.swift`](../../Quotio/Services/AccountMetadataStore.swift)
+- [`Quotio/Services/DirectAuthFileService.swift`](../../Quotio/Services/DirectAuthFileService.swift)
+- [`Quotio/Services/ManagementAPIClient.swift`](../../Quotio/Services/ManagementAPIClient.swift)
 
 职责：
 
@@ -139,7 +139,7 @@
 
 主要文件：
 
-- [`Quotio/Services/AccountFingerprintRuntime.swift`](../Quotio/Services/AccountFingerprintRuntime.swift)
+- [`Quotio/Services/AccountFingerprintRuntime.swift`](../../Quotio/Services/AccountFingerprintRuntime.swift)
 - 各 provider quota fetcher / warmup service
 
 职责：
@@ -168,8 +168,8 @@
 
 主要文件：
 
-- [`Quotio/Services/Proxy/CLIProxyManager.swift`](../Quotio/Services/Proxy/CLIProxyManager.swift)
-- [`scripts/watch-claude-mitm-session.sh`](../scripts/watch-claude-mitm-session.sh)
+- [`Quotio/Services/Proxy/CLIProxyManager.swift`](../../Quotio/Services/Proxy/CLIProxyManager.swift)
+- [`scripts/watch-claude-mitm-session.sh`](../../scripts/watch-claude-mitm-session.sh)
 
 这次为了让 managed-mode 的 MITM 验收稳定，额外补了一层显式注入：
 
@@ -195,7 +195,7 @@
 
 参考文档：
 
-- [`docs/isolated-dev-testing.md`](./isolated-dev-testing.md)
+- [`isolated-dev-testing.md`](../operations/isolated-dev-testing.md)
 
 ### 当前最靠谱的验收口径
 
@@ -236,14 +236,14 @@
 当前已经把“长期维护入口”迁入本项目：
 
 - 子模块路径：`third_party/CLIProxyAPIPlus`
-- 维护说明：[`docs/cliproxy-plus-submodule.md`](./cliproxy-plus-submodule.md)
-- 构建脚本：[`scripts/manage-cliproxy-plus.sh`](../scripts/manage-cliproxy-plus.sh)
+- 维护说明：[`cliproxy-plus-submodule.md`](../submodules/cliproxy-plus-submodule.md)
+- 构建脚本：[`scripts/manage-cliproxy-plus.sh`](../../scripts/manage-cliproxy-plus.sh)
 
 ### 结论
 
 当前采用的是 Git submodule 方案。
 
-当前维护策略以 [`docs/cliproxy-plus-submodule.md`](./cliproxy-plus-submodule.md) 为准：
+当前维护策略以 [`cliproxy-plus-submodule.md`](../submodules/cliproxy-plus-submodule.md) 为准：
 
 - 子模块真源：`third_party/CLIProxyAPIPlus`
 - 官方上游：`git@github.com:router-for-me/CLIProxyAPIPlus.git`

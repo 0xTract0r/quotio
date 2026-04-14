@@ -232,7 +232,7 @@ Phase 1 不作为首选，保留为方案 B。
   - 增加 `setAuthFileTransportProfile(...)`
 - `Quotio/Services/DirectAuthFileService.swift`
   - quota-only / fallback 模式下支持直接读写 `transport_profile`
-- `docs/account-fingerprint-architecture.md`
+- `docs/fingerprint/account-fingerprint-architecture.md`
   - 更新“当前边界”和“已落地范围”
 
 ### 10.2 CLIProxyAPIPlus 子模块
@@ -385,7 +385,7 @@ cacheKey = provider + "|" + authID + "|" + proxyURL + "|" + transportProfileID
 本次方案核对时使用过的已验证源码副本：
 
 - Quotio 当前账号指纹架构  
-  `docs/account-fingerprint-architecture.md`
+  `docs/fingerprint/account-fingerprint-architecture.md`
 - Claude 运行期 client 选择  
   `/tmp/CLIProxyAPIPlus-quotio/internal/runtime/executor/proxy_helpers.go`
 - Claude OAuth `uTLS` transport  

@@ -46,12 +46,12 @@
 继续编码前，按下面顺序读：
 
 1. 本文件
-2. [oauth-account-fingerprint-target-architecture.md](/Users/corylin/Project/ai/quotio/docs/oauth-account-fingerprint-target-architecture.md)
-3. [oauth-account-fingerprint-current-architecture.md](/Users/corylin/Project/ai/quotio/docs/oauth-account-fingerprint-current-architecture.md)
+2. [oauth-account-fingerprint-target-architecture.md](./oauth-account-fingerprint-target-architecture.md)
+3. [oauth-account-fingerprint-current-architecture.md](./oauth-account-fingerprint-current-architecture.md)
 
 只有在你需要理解产品语义、UI 权衡时，再读：
 
-4. [oauth-account-fingerprint-binding-plan.md](/Users/corylin/Project/ai/quotio/docs/oauth-account-fingerprint-binding-plan.md)
+4. [oauth-account-fingerprint-binding-plan.md](./oauth-account-fingerprint-binding-plan.md)
 
 ## 硬约束
 

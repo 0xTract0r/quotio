@@ -19,20 +19,20 @@
 
 ### 开发验证
 
-- [`scripts/run-dev-app.sh`](../scripts/run-dev-app.sh)
+- [`scripts/run-dev-app.sh`](../../scripts/run-dev-app.sh)
   - 重编译并启动测试版 `Quotio Dev.app`
-- [`scripts/check-isolated-dev-runtime.sh`](../scripts/check-isolated-dev-runtime.sh)
+- [`scripts/check-isolated-dev-runtime.sh`](../../scripts/check-isolated-dev-runtime.sh)
   - 检查测试版与正式版是否隔离
-- [`scripts/watch-claude-mitm-session.sh`](../scripts/watch-claude-mitm-session.sh)
+- [`scripts/watch-claude-mitm-session.sh`](../../scripts/watch-claude-mitm-session.sh)
   - 抓 Claude 真实上游请求并自动恢复测试环境
 
 ### 正式构建 / 发布
 
-- [`scripts/build.sh`](../scripts/build.sh)
+- [`scripts/build.sh`](../../scripts/build.sh)
   - 生成正式构建产物
-- [`scripts/release.sh`](../scripts/release.sh)
+- [`scripts/release.sh`](../../scripts/release.sh)
   - 正式 release 流程
-- [`scripts/quick-release.sh`](../scripts/quick-release.sh)
+- [`scripts/quick-release.sh`](../../scripts/quick-release.sh)
   - 交互式 release helper
 
 ## 推荐流程
@@ -79,8 +79,8 @@ git worktree add ../quotio.worktrees/feat-account-fingerprint -b feat/account-fi
 当前项目内已经有一份可持续维护入口：
 
 - 子模块：`third_party/CLIProxyAPIPlus`
-- 说明文档：[`docs/cliproxy-plus-submodule.md`](./cliproxy-plus-submodule.md)
-- 构建脚本：[`scripts/manage-cliproxy-plus.sh`](../scripts/manage-cliproxy-plus.sh)
+- 说明文档：[`cliproxy-plus-submodule.md`](../submodules/cliproxy-plus-submodule.md)
+- 构建脚本：[`scripts/manage-cliproxy-plus.sh`](../../scripts/manage-cliproxy-plus.sh)
 
 如果本机 Go 版本偏旧，`manage-cliproxy-plus.sh build` 默认会走 `GOTOOLCHAIN=auto` 自动拉起上游要求的 toolchain。
 
@@ -125,11 +125,11 @@ git worktree add ../quotio.worktrees/feat-account-fingerprint -b feat/account-fi
 
 已准备好的脚本：
 
-- [`scripts/promote-cliproxy-plus-production.sh`](../scripts/promote-cliproxy-plus-production.sh)
+- [`scripts/promote-cliproxy-plus-production.sh`](../../scripts/promote-cliproxy-plus-production.sh)
   - 默认 dry-run
   - 打印当前正式 core、patched core、哈希、备份路径和风险提示
   - 只有 `EXECUTE=1` 才会执行正式二进制替换
-- [`scripts/rollback-cliproxy-plus-production.sh`](../scripts/rollback-cliproxy-plus-production.sh)
+- [`scripts/rollback-cliproxy-plus-production.sh`](../../scripts/rollback-cliproxy-plus-production.sh)
   - 默认 dry-run
   - 只有 `EXECUTE=1` 才会把指定备份换回正式路径
 

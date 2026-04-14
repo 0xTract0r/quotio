@@ -224,7 +224,7 @@ struct AccountIdentityBinding: Codable, Identifiable, Hashable, Sendable {
 
 ## 二、建议修改的现有文件
 
-### 1. [Quotio/Models/Models.swift](/Users/corylin/Project/ai/quotio/Quotio/Models/Models.swift)
+### 1. [Quotio/Models/Models.swift](../../Quotio/Models/Models.swift)
 
 目的：
 
@@ -235,14 +235,14 @@ struct AccountIdentityBinding: Codable, Identifiable, Hashable, Sendable {
 
 - 大块新模型不建议继续塞这里，避免 `Models.swift` 继续膨胀
 
-### 2. [Quotio/QuotioApp.swift](/Users/corylin/Project/ai/quotio/Quotio/QuotioApp.swift)
+### 2. [Quotio/QuotioApp.swift](../../Quotio/QuotioApp.swift)
 
 目的：
 
 - 左侧导航新增“身份包”入口
 - detail 区切换到 `IdentityPackagesScreen`
 
-### 3. [Quotio/ViewModels/QuotaViewModel.swift](/Users/corylin/Project/ai/quotio/Quotio/ViewModels/QuotaViewModel.swift)
+### 3. [Quotio/ViewModels/QuotaViewModel.swift](../../Quotio/ViewModels/QuotaViewModel.swift)
 
 目的：
 
@@ -254,20 +254,20 @@ struct AccountIdentityBinding: Codable, Identifiable, Hashable, Sendable {
   - `verificationStatus(for:)`
 - 在刷新 authFiles 后同步校验绑定完整性
 
-### 4. [Quotio/Views/Screens/ProvidersScreen.swift](/Users/corylin/Project/ai/quotio/Quotio/Views/Screens/ProvidersScreen.swift)
+### 4. [Quotio/Views/Screens/ProvidersScreen.swift](../../Quotio/Views/Screens/ProvidersScreen.swift)
 
 目的：
 
 - 在账号行增加绑定状态展示
 - 新增绑定 / 换绑 / 验证入口
 
-### 5. [Quotio/Views/Components/AccountRow.swift](/Users/corylin/Project/ai/quotio/Quotio/Views/Components/AccountRow.swift)
+### 5. [Quotio/Views/Components/AccountRow.swift](../../Quotio/Views/Components/AccountRow.swift)
 
 目的：
 
 - 增加身份包 badge / 状态信息
 
-### 6. [Quotio/Services/ManagementAPIClient.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/ManagementAPIClient.swift)
+### 6. [Quotio/Services/ManagementAPIClient.swift](../../Quotio/Services/ManagementAPIClient.swift)
 
 目的：
 
@@ -284,19 +284,19 @@ struct AccountIdentityBinding: Codable, Identifiable, Hashable, Sendable {
 - 如果第一阶段先做本地模型和 UI，占位接口可以先不落代码
 - 但最终落地必须经过这里与代理联通
 
-### 7. [Quotio/Models/RequestLog.swift](/Users/corylin/Project/ai/quotio/Quotio/Models/RequestLog.swift)
+### 7. [Quotio/Models/RequestLog.swift](../../Quotio/Models/RequestLog.swift)
 
 目的：
 
 - 给请求日志补充账号与身份包证据字段
 
-### 8. [Quotio/Services/RequestTracker.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/RequestTracker.swift)
+### 8. [Quotio/Services/RequestTracker.swift](../../Quotio/Services/RequestTracker.swift)
 
 目的：
 
 - 接收新的请求元数据并落盘
 
-### 9. [Quotio/Services/Proxy/ProxyBridge.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/Proxy/ProxyBridge.swift)
+### 9. [Quotio/Services/Proxy/ProxyBridge.swift](../../Quotio/Services/Proxy/ProxyBridge.swift)
 
 目的：
 
@@ -307,13 +307,13 @@ struct AccountIdentityBinding: Codable, Identifiable, Hashable, Sendable {
 - 真正的账号绑定执行不建议放这里
 - 这里仍以观测与转发为主
 
-### 10. [Quotio/Services/KeychainHelper.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/KeychainHelper.swift)
+### 10. [Quotio/Services/KeychainHelper.swift](../../Quotio/Services/KeychainHelper.swift)
 
 目的：
 
 - 为代理密码等敏感字段增加 Keychain 存储能力
 
-### 11. [Quotio/Views/Screens/LogsScreen.swift](/Users/corylin/Project/ai/quotio/Quotio/Views/Screens/LogsScreen.swift)
+### 11. [Quotio/Views/Screens/LogsScreen.swift](../../Quotio/Views/Screens/LogsScreen.swift)
 
 目的：
 
@@ -321,7 +321,7 @@ struct AccountIdentityBinding: Codable, Identifiable, Hashable, Sendable {
 
 ## 三、建议保持不动或尽量少动的区域
 
-### 1. [Quotio/Services/AgentConfigurationService.swift](/Users/corylin/Project/ai/quotio/Quotio/Services/AgentConfigurationService.swift)
+### 1. [Quotio/Services/AgentConfigurationService.swift](../../Quotio/Services/AgentConfigurationService.swift)
 
 原因：
 

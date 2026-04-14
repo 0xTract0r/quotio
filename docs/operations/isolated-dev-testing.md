@@ -15,10 +15,10 @@
 
 项目当前已经有一层运行时隔离，关键入口在：
 
-- [`Quotio/Models/Models.swift`](../Quotio/Models/Models.swift)
-- [`Quotio/Services/KeychainHelper.swift`](../Quotio/Services/KeychainHelper.swift)
-- [`Quotio/Services/Proxy/CLIProxyManager.swift`](../Quotio/Services/Proxy/CLIProxyManager.swift)
-- [`Quotio/QuotioApp.swift`](../Quotio/QuotioApp.swift)
+- [`Quotio/Models/Models.swift`](../../Quotio/Models/Models.swift)
+- [`Quotio/Services/KeychainHelper.swift`](../../Quotio/Services/KeychainHelper.swift)
+- [`Quotio/Services/Proxy/CLIProxyManager.swift`](../../Quotio/Services/Proxy/CLIProxyManager.swift)
+- [`Quotio/QuotioApp.swift`](../../Quotio/QuotioApp.swift)
 
 只要测试版使用不同于 `dev.quotio.desktop` 的 bundle id，运行时会自动切到独立命名空间：
 
@@ -45,7 +45,7 @@
 - CLI agent 配置文件仍是用户全局路径
   - Claude：`~/.claude/settings.json`
   - Codex：`~/.codex/config.toml`、`~/.codex/auth.json`
-  - 代码位置见 [`Quotio/Models/AgentModels.swift`](../Quotio/Models/AgentModels.swift) 和 [`Quotio/Services/AgentConfigurationService.swift`](../Quotio/Services/AgentConfigurationService.swift)
+  - 代码位置见 [`Quotio/Models/AgentModels.swift`](../../Quotio/Models/AgentModels.swift) 和 [`Quotio/Services/AgentConfigurationService.swift`](../../Quotio/Services/AgentConfigurationService.swift)
 - Cursor / Trae 等 IDE 扫描路径是外部应用全局目录，但当前主要是读，不是由 Quotio 命名空间隔离
 
 这意味着：
@@ -362,5 +362,5 @@ rm -rf ~/.cli-proxy-api-dev
 
 ## 相关文档
 
-- [`docs/account-fingerprint-architecture.md`](./account-fingerprint-architecture.md)
-- [`docs/dev-to-production-promotion.md`](./dev-to-production-promotion.md)
+- [`account-fingerprint-architecture.md`](../fingerprint/account-fingerprint-architecture.md)
+- [`dev-to-production-promotion.md`](./dev-to-production-promotion.md)

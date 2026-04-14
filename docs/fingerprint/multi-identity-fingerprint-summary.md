@@ -611,8 +611,8 @@ Quotio 已经有：
 
 已经落地的关键验证资产包括：
 
-- `docs/isolated-dev-testing.md`
-- `docs/dev-to-production-promotion.md`
+- `docs/operations/isolated-dev-testing.md`
+- `docs/operations/dev-to-production-promotion.md`
 - `scripts/watch-claude-mitm-session.sh`
 - `scripts/verify-claude-mitm-capture.sh`
 - `scripts/verify-claude-mitm-capture-production.sh`
@@ -704,8 +704,8 @@ Quotio 已经有：
 - `Quotio/ViewModels/QuotaViewModel.swift`
 - `Quotio/Services/ManagementAPIClient.swift`
 - `Quotio/Services/DirectAuthFileService.swift`
-- `docs/isolated-dev-testing.md`
-- `docs/dev-to-production-promotion.md`
+- `docs/operations/isolated-dev-testing.md`
+- `docs/operations/dev-to-production-promotion.md`
 
 ### 核心侧必须复用或继续补齐
 
@@ -809,15 +809,15 @@ Quotio 已经有：
 
 如果需要继续深挖，建议按下面顺序读：
 
-1. `docs/account-fingerprint-architecture.md`
+1. `docs/fingerprint/account-fingerprint-architecture.md`
    - 当前这轮工作最贴近实际落地状态的架构快照
-2. `docs/claude-request-chain.md`
+2. `docs/fingerprint/claude-request-chain.md`
    - Claude 请求链路和边界最清楚
-3. `docs/account-clienthello-transport-prd.md`
+3. `docs/fingerprint/account-clienthello-transport-prd.md`
    - 下一阶段 TLS / ClientHello 改造主文档
-4. `docs/oauth-account-fingerprint-target-architecture.md`
+4. `docs/fingerprint/oauth-account-fingerprint-target-architecture.md`
    - package / binding / target architecture 的完整设计图
-5. `docs/cliproxy-plus-submodule.md`
+5. `docs/submodules/cliproxy-plus-submodule.md`
    - 后续继续改核心时的真源规则
 
 ## 给后续二次开发者的最终判断
