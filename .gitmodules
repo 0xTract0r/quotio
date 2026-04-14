@@ -2,3 +2,7 @@
 	path = third_party/CLIProxyAPIPlus
 	url = git@github.com:0xTract0r/CLIProxyAPIPlus.git
 	branch = quotio/account-fingerprint
+[submodule "third_party/Cli-Proxy-API-Management-Center"]
+	path = third_party/Cli-Proxy-API-Management-Center
+	url = git@github.com:0xTract0r/Cli-Proxy-API-Management-Center.git
+	branch = main

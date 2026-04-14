@@ -63,6 +63,13 @@
 |--------|--------|---------|
 | **CLIProxyAPI** | GitHub (auto-downloaded) | Local proxy server |
 
+### Git Submodules
+
+| Submodule | Path | Role |
+|-----------|------|------|
+| **CLIProxyAPIPlus** | `third_party/CLIProxyAPIPlus` | Proxy core fork, used for runtime routing, auth, multi-account scheduling, and upstream request forwarding |
+| **Cli-Proxy-API-Management-Center** | `third_party/Cli-Proxy-API-Management-Center` | Web management console fork, used as the reusable browser-based UI/admin layer paired with the proxy core |
+
 ---
 
 ## High-Level Module Overview
@@ -149,6 +156,14 @@ Quotio/Assets.xcassets/
 ├── MenuBarIcons/                # Provider icons for menu bar
 ├── ProviderIcons/               # Provider logos
 └── AccentColor.colorset/        # Accent color definition
+```
+
+### Third-Party Source Trees
+
+```
+third_party/
+├── CLIProxyAPIPlus/                     # Core proxy fork submodule
+└── Cli-Proxy-API-Management-Center/     # Web management center fork submodule
 ```
 
 ---
