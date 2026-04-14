@@ -17,6 +17,23 @@ Quotio 现在额外通过 Git submodule 引入网页端管理后台项目 `Cli-P
 - `Cli-Proxy-API-Management-Center`：网页端管理后台、配置页、认证文件页、日志/管理视图
 - `Quotio`：原生 macOS 菜单栏与本地桌面产品壳
 
+这里要特别区分清楚：
+
+- `Cli-Proxy-API-Management-Center` 不是独立的后端服务
+- 它本质上是一个前端管理页面
+- 真正的管理后端仍然是 `CLIProxyAPI` 暴露出来的 `/v0/management/*`
+
+因此通常会出现两类访问地址：
+
+1. `http://127.0.0.1:28317/management.html`
+   - 这是 `CLIProxyAPI` 自带的页面入口
+   - 没有额外前端端口
+   - 页面和后端都挂在同一个 `CLIProxyAPI` 端口上
+2. `http://127.0.0.1:4173` / `4176` 之类
+   - 这是独立前端预览端口
+   - 只负责提供静态页面
+   - 页面仍然会去请求真正的管理后端，例如 `http://127.0.0.1:28317/v0/management/*`
+
 后续如果要迁移到非 macOS 项目，优先复用的通常是：
 
 1. `CLIProxyAPIPlus` 的核心能力
@@ -97,6 +114,19 @@ npm --prefix third_party/Cli-Proxy-API-Management-Center run build
 ./scripts/start-management-center.sh
 ```
 
+如果你只是想直接登录当前 Quotio 正在运行的正式版，不必额外起前端预览端口，直接打开：
+
+```text
+http://127.0.0.1:28317/management.html
+```
+
+当前这台机器上，正式版 Quotio 的本地 management key 真源是：
+
+- Keychain service：`dev.quotio.desktop.local-management`
+- account：`local-management-key`
+
+脚本会优先从这里读取原始 key；`~/Library/Application Support/Quotio/config.yaml` 里的 `remote-management.secret-key` 可能已经是 bcrypt/hash，不能直接当登录口令使用。
+
 如果需要显式指定 Quotio config：
 
 ```bash
@@ -126,6 +156,7 @@ npm --prefix third_party/Cli-Proxy-API-Management-Center run build
 - Quotio 本地模式下，真正更稳定的真源是 Keychain；脚本优先读 Keychain，读不到才退回 config。
 - 脚本默认会构建前端、生成临时 `bootstrap.html`，写入同源 `localStorage` 后自动跳到 `/management.html`，从而跳过手工登录。
 - 这个临时 `bootstrap.html` 会短暂包含原始 management key，因此脚本默认只绑定 `127.0.0.1`，并在进程退出时自动删除 staging 目录；不要把它暴露到公网，也不要在不可信机器上保留 `--keep-staging` 产物。
+- 预览端口例如 `4173` / `4176` 不是新的管理后端，只是静态前端入口；真正的后端管理接口仍然是 `CLIProxyAPI` 当前监听的端口，例如正式版默认 `28317`。
 
 ## 与 Quotio 的关系
 
