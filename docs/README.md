@@ -23,6 +23,7 @@
 
 - [`isolated-dev-testing.md`](./operations/isolated-dev-testing.md): Dev / Prod 隔离测试方案
 - [`dev-to-production-promotion.md`](./operations/dev-to-production-promotion.md): 从开发版收口到正式版的操作说明
+- [`linux-cliproxyapi-plus-deploy.md`](./operations/linux-cliproxyapi-plus-deploy.md): Linux 服务器上部署远程 `CLIProxyAPIPlus` 的实际记录与维护入口
 
 ## `submodules/`
 
