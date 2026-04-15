@@ -17,6 +17,10 @@ TZ_VALUE="${TZ_VALUE:-Asia/Shanghai}"
 SYNC_AUTH_DIR="${SYNC_AUTH_DIR:-1}"
 SERVER_PROXY_URL="${SERVER_PROXY_URL:-}"
 CONTAINER_DNS_SERVERS="${CONTAINER_DNS_SERVERS:-}"
+SERVER_TLS_ENABLE="${SERVER_TLS_ENABLE:-0}"
+SERVER_TLS_CERT_FILE="${SERVER_TLS_CERT_FILE:-}"
+SERVER_TLS_KEY_FILE="${SERVER_TLS_KEY_FILE:-}"
+SERVER_TLS_CURL_INSECURE="${SERVER_TLS_CURL_INSECURE:-0}"
 
 if [[ -n "${QUOTIO_SOURCE_ROOT:-}" ]]; then
   SOURCE_ROOT="${QUOTIO_SOURCE_ROOT}"
@@ -29,6 +33,18 @@ MGMT_SRC="${SOURCE_ROOT}/third_party/Cli-Proxy-API-Management-Center"
 LOCAL_CONFIG_PATH="${LOCAL_CONFIG_PATH:-$HOME/Library/Application Support/Quotio/config.yaml}"
 SOURCE_AUTH_DIR_PATH="${SOURCE_AUTH_DIR_PATH:-$HOME/.cli-proxy-api}"
 PROXY_API_KEY="${PROXY_API_KEY:-}"
+
+validate_toggle_flag() {
+  local name="$1"
+  local value="$2"
+  case "${value}" in
+    0|1) ;;
+    *)
+      echo "${name} must be 0 or 1, got: ${value}" >&2
+      exit 1
+      ;;
+  esac
+}
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -66,6 +82,9 @@ if [[ "${SYNC_AUTH_DIR}" == "1" && ! -d "${SOURCE_AUTH_DIR_PATH}" ]]; then
   exit 1
 fi
 
+validate_toggle_flag "SERVER_TLS_ENABLE" "${SERVER_TLS_ENABLE}"
+validate_toggle_flag "SERVER_TLS_CURL_INSECURE" "${SERVER_TLS_CURL_INSECURE}"
+
 if [[ -n "${BIND_HOST}" ]]; then
   PORT_MAPPING="${BIND_HOST}:${API_PORT}:${API_PORT}"
 else
@@ -76,6 +95,55 @@ if [[ -n "${SERVER_PROXY_URL}" ]]; then
   echo "[info] Using server proxy URL: ${SERVER_PROXY_URL}"
 else
   echo "[info] SERVER_PROXY_URL not set; proxy-url will be empty"
+fi
+
+TLS_CERT_RUNTIME_NAME="tls.crt"
+TLS_KEY_RUNTIME_NAME="tls.key"
+TLS_CERT_CONTAINER_PATH=""
+TLS_KEY_CONTAINER_PATH=""
+
+if [[ "${SERVER_TLS_ENABLE}" == "1" ]]; then
+  [[ -n "${SERVER_TLS_CERT_FILE}" ]] || {
+    echo "SERVER_TLS_CERT_FILE is required when SERVER_TLS_ENABLE=1" >&2
+    exit 1
+  }
+  [[ -n "${SERVER_TLS_KEY_FILE}" ]] || {
+    echo "SERVER_TLS_KEY_FILE is required when SERVER_TLS_ENABLE=1" >&2
+    exit 1
+  }
+  [[ "${SERVER_TLS_CERT_FILE}" = /* ]] || {
+    echo "SERVER_TLS_CERT_FILE must be an absolute path: ${SERVER_TLS_CERT_FILE}" >&2
+    exit 1
+  }
+  [[ "${SERVER_TLS_KEY_FILE}" = /* ]] || {
+    echo "SERVER_TLS_KEY_FILE must be an absolute path: ${SERVER_TLS_KEY_FILE}" >&2
+    exit 1
+  }
+  [[ -f "${SERVER_TLS_CERT_FILE}" ]] || {
+    echo "TLS certificate file not found: ${SERVER_TLS_CERT_FILE}" >&2
+    exit 1
+  }
+  [[ -f "${SERVER_TLS_KEY_FILE}" ]] || {
+    echo "TLS private key file not found: ${SERVER_TLS_KEY_FILE}" >&2
+    exit 1
+  }
+  TLS_CERT_CONTAINER_PATH="/CLIProxyAPI/tls/server.crt"
+  TLS_KEY_CONTAINER_PATH="/CLIProxyAPI/tls/server.key"
+  echo "[info] HTTPS enabled; runtime cert/key will be mounted from runtime/tls"
+else
+  echo "[info] HTTPS disabled; service will remain on HTTP"
+fi
+
+BASE_SCHEME="http"
+if [[ "${SERVER_TLS_ENABLE}" == "1" ]]; then
+  BASE_SCHEME="https"
+fi
+BASE_URL="${BASE_SCHEME}://${SERVER_HOST_IP}:${API_PORT}"
+
+CURL_ARGS=(-fsS)
+if [[ "${SERVER_TLS_ENABLE}" == "1" && "${SERVER_TLS_CURL_INSECURE}" == "1" ]]; then
+  CURL_ARGS+=(-k)
+  echo "[info] curl smoke verification will use -k (self-signed mode)"
 fi
 
 TMP_DIR="$(mktemp -d)"
@@ -93,12 +161,19 @@ mkdir -p \
   "${TMP_DIR}/runtime/auth" \
   "${TMP_DIR}/runtime/config" \
   "${TMP_DIR}/runtime/logs" \
-  "${TMP_DIR}/runtime/static"
+  "${TMP_DIR}/runtime/static" \
+  "${TMP_DIR}/runtime/tls"
 
 echo "[2/6] Preparing deployment bundle"
 rsync -a --delete --exclude '.git' --exclude 'node_modules' \
   "${CORE_SRC}/" "${TMP_DIR}/source/CLIProxyAPIPlus/"
 cp "${MGMT_SRC}/dist/index.html" "${TMP_DIR}/runtime/static/management.html"
+
+if [[ "${SERVER_TLS_ENABLE}" == "1" ]]; then
+  cp "${SERVER_TLS_CERT_FILE}" "${TMP_DIR}/runtime/tls/server.crt"
+  cp "${SERVER_TLS_KEY_FILE}" "${TMP_DIR}/runtime/tls/server.key"
+  chmod 600 "${TMP_DIR}/runtime/tls/server.crt" "${TMP_DIR}/runtime/tls/server.key"
+fi
 
 if [[ "${SYNC_AUTH_DIR}" == "1" ]]; then
   rsync -a --delete \
@@ -113,6 +188,9 @@ export OUTPUT_CONFIG_PATH="${TMP_DIR}/runtime/config/config.yaml"
 export PROXY_API_KEY
 export API_PORT
 export SERVER_PROXY_URL
+export SERVER_TLS_ENABLE
+export SERVER_TLS_CERT_CONTAINER_PATH="${TLS_CERT_CONTAINER_PATH}"
+export SERVER_TLS_KEY_CONTAINER_PATH="${TLS_KEY_CONTAINER_PATH}"
 python3 <<'PY'
 import os
 import pathlib
@@ -123,6 +201,9 @@ output_path = pathlib.Path(os.environ["OUTPUT_CONFIG_PATH"])
 api_port = int(os.environ["API_PORT"])
 override_api_key = os.environ.get("PROXY_API_KEY", "").strip()
 server_proxy_url = os.environ.get("SERVER_PROXY_URL", "").strip()
+server_tls_enable = os.environ.get("SERVER_TLS_ENABLE", "").strip() == "1"
+tls_cert_container_path = os.environ.get("SERVER_TLS_CERT_CONTAINER_PATH", "").strip()
+tls_key_container_path = os.environ.get("SERVER_TLS_KEY_CONTAINER_PATH", "").strip()
 
 with config_path.open("r", encoding="utf-8") as f:
     data = yaml.safe_load(f) or {}
@@ -131,6 +212,11 @@ data["host"] = ""
 data["port"] = api_port
 data["auth-dir"] = "/CLIProxyAPI/auth"
 data["proxy-url"] = server_proxy_url
+data["tls"] = {
+    "enable": server_tls_enable,
+    "cert": tls_cert_container_path if server_tls_enable else "",
+    "key": tls_key_container_path if server_tls_enable else "",
+}
 
 remote = dict(data.get("remote-management") or {})
 remote["allow-remote"] = True
@@ -201,6 +287,7 @@ ${DNS_BLOCK}    ports:
       - ./runtime/auth:/CLIProxyAPI/auth
       - ./runtime/logs:/CLIProxyAPI/logs
       - ./runtime/static:/CLIProxyAPI/static
+      - ./runtime/tls:/CLIProxyAPI/tls:ro
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -243,22 +330,22 @@ fi
 
 echo "[verify] Waiting for health check"
 for _ in $(seq 1 30); do
-  if curl -fsS "http://${SERVER_HOST_IP}:${API_PORT}/healthz" >/dev/null 2>&1; then
+  if curl "${CURL_ARGS[@]}" "${BASE_URL}/healthz" >/dev/null 2>&1; then
     break
   fi
   sleep 2
 done
 
-echo "[verify] Verifying deployment"
-curl -fsS "http://${SERVER_HOST_IP}:${API_PORT}/healthz"
+echo "[verify] Verifying deployment at ${BASE_URL}"
+curl "${CURL_ARGS[@]}" "${BASE_URL}/healthz"
 echo
-curl -fsS "http://${SERVER_HOST_IP}:${API_PORT}/management.html" -o /tmp/cliproxy-management.html
+curl "${CURL_ARGS[@]}" "${BASE_URL}/management.html" -o /tmp/cliproxy-management.html
 wc -c /tmp/cliproxy-management.html
 sed -n '1,3p' /tmp/cliproxy-management.html
 echo
-curl -fsS \
+curl "${CURL_ARGS[@]}" \
   -H "Authorization: Bearer ${MANAGEMENT_PASSWORD}" \
-  "http://${SERVER_HOST_IP}:${API_PORT}/v0/management/auth-files" | \
+  "${BASE_URL}/v0/management/auth-files" | \
   python3 -c 'import json,sys; data=json.load(sys.stdin); items=data.get("files") or data.get("auth-files") or data.get("auth_files") or []; print("auth_files=", len(items)); print([item.get("name") for item in items])'
 echo
 ssh "${REMOTE_HOST}" "cd '${DEPLOY_DIR}' && sudo docker compose ps"
