@@ -15,17 +15,12 @@
 
 - 管理面可用
 - 认证文件已迁入并可被核心识别
-- 至少一条 Claude 上游探针可达真实 provider
+- Claude 与 Codex 路径都已拿到真实上游响应
 
-当前部署还没有达到：
+当前部署的最终结论：
 
-- Codex 链路稳定可用
-- 可以让用户把本地 Cursor 手动切到这台远程 core
-
-结论先说清楚：
-
-- 现在不要把本地 Cursor 切到 `10.1.1.201:18317`
-- 等 Codex 真实上游探针从本地 `502 request failed` 变成真实上游响应后，再切
+- 可以让用户手动把本地 Quotio 指到 `http://10.1.1.201:18317`
+- 如果某个 Codex 账号返回 `403 insufficient permissions: api.model.read`，应先按账号 scope / token 权限问题处理，而不是先判定远端部署失败
 
 ## 服务器目录
 
@@ -118,7 +113,7 @@ curl -sS -i -X POST http://10.1.1.201:18317/v0/management/api-call \
 - 当前容器并不是完全出不了网
 - 至少“Claude 账号 + 当前代理配置”这一条链路能打到真实 provider
 
-### 3. Codex 链路仍未达标
+### 3. Codex 链路已验证能到真实上游
 
 已执行的 Codex 探针：
 
@@ -131,79 +126,41 @@ curl -sS -i -X POST http://10.1.1.201:18317/v0/management/api-call \
 
 结果：
 
-- management API 返回 `HTTP 502`
-- 返回体：`{"error":"request failed"}`
-
-服务器日志也显示对应 `POST /v0/management/api-call` 失败：
-
-- 有一条约 `4s` 的 `502`
-- 有多条约 `30s` / `60s` 的 `502`
+- management API 返回 `HTTP 200`
+- 返回体中的上游结果是 `status_code: 403`
+- 返回的错误来自 OpenAI 上游，核心信息为 `insufficient permissions: api.model.read`
+- 响应头来自上游 CDN / Cloudflare
 
 这说明：
 
-- 这不是“OpenAI 上游真实返回了 401 / 403 / 404”
-- 而是请求在到达上游前就失败了
+- 当前远端全局代理链路已经能把 Codex 请求送到真实上游
+- 当前阻塞点不再是“本地 `502 request failed`”
+- 如果该账号继续返回 `403 insufficient permissions: api.model.read`，应优先排查账号 scope / token 权限，而不是网络或 Docker 部署
 
-## 当前已知风险点
+## 当前已知边界
 
-### Codex 相关风险
+- 远端管理面、静态前端、auth 挂载都已通过
+- 当前全局 `proxy-url = http://Clash:hBnsF3B7@10.1.1.5:7890` 已在 `runtime/config/config.yaml` 生效
+- Claude 探针拿到真实上游 `404/405`，Codex 探针拿到真实上游 `403 insufficient permissions: api.model.read`
+- 这意味着当前“部署/代理链路是否通”的问题已经收口；剩余问题更可能是单个账号权限、auth 内容或 provider 侧策略
 
-当前 3 个 Codex 认证里：
+## 用户什么时候可以切 Quotio
 
-- `codex-cory2btc@gmail.com-pro.json`：没有 `proxy_url`
-  - 走的是对 `api.openai.com` 的直接域名访问
-- `codex-fatovokiroq397@gmail.com-plus.json`：`proxy_url = socks5://...@p.webshare.io:10001`
-- `codex-michaelmurphym995@gmail.com-plus.json`：`proxy_url = socks5://...@p.webshare.io:10000`
+### 当前准入结论
 
-这三种路径都还存在 DNS 风险：
+- 现在可以把本地 Quotio 手动切到远端 `http://10.1.1.201:18317`
+- management key 使用 `runtime/secrets.env` 中的 `MANAGEMENT_PASSWORD`
+- 是否“业务完全可用”仍要看你正在使用的具体账号 scope
 
-- 直连路径依赖 `api.openai.com` 解析
-- 代理路径依赖 `p.webshare.io` 解析
+### 什么情况下不要误判成部署失败
 
-### DNS 风险
+以下情况优先按账号或上游权限问题排查：
 
-当前已经显式给容器注入：
+1. 管理面通过
+2. `api-call` 已返回真实上游状态码
+3. 某个 Codex 账号返回的是 `403 insufficient permissions: api.model.read` 之类 provider-originated 错误
 
-- `1.1.1.1`
-- `8.8.8.8`
-
-但容器内对外部 DNS 的直接探测仍然超时，例如：
-
-```bash
-sudo docker exec cliproxyapi-plus-remote sh -lc 'nslookup p.webshare.io 1.1.1.1'
-sudo docker exec cliproxyapi-plus-remote sh -lc 'nslookup api.openai.com 1.1.1.1'
-```
-
-都出现：
-
-```text
-connection timed out; no servers could be reached
-```
-
-这说明当前更像是：
-
-- 服务器所在网络对外部 DNS 有限制，或
-- 到公开 DNS 的 UDP/53 本身不可达，或
-- 宿主机当前 DNS 环境本身就无法稳定解析 `api.openai.com` / `p.webshare.io`
-
-## 用户什么时候可以切 Cursor
-
-### 现在不应切
-
-下面这个条件目前不满足，因此现在不应把本地 Cursor 切到远程：
-
-- 至少一条 Codex 真实上游探针成功到达 upstream，并返回真实上游状态码
-
-当前 Codex 仍然是本地 `502 request failed`，所以不达标。
-
-### 什么时候可以切
-
-至少满足下面两条后，才建议用户手动切本地 Cursor 到远程：
-
-1. `auth_index=33eecb5140987ec5` 或其他 Codex auth，对 `https://api.openai.com/v1/models` 的 `api-call` 不再返回本地 `502`
-2. 返回的是 OpenAI 真实上游状态
-   - 例如 `200`
-   - 或即使不是 `200`，也至少是来自上游的真实 `401/403/404`，而不是 `{"error":"request failed"}`
+只有当请求重新退化为本地 `502 request failed`、超时、或根本没到真实上游时，才优先按部署/代理链路故障处理
 
 ## 当前部署命令
 
@@ -232,6 +189,14 @@ SERVER_PROXY_URL='http://Clash:hBnsF3B7@10.1.1.5:7890'
 ```
 
 - 不传 `SERVER_PROXY_URL` 时，脚本默认会把服务器侧 `proxy-url` 写成空字符串
+
+## 管理 key 与前端页面
+
+- 管理页 URL：`http://10.1.1.201:18317/management.html`
+- management API 前缀：`http://10.1.1.201:18317/v0/management`
+- 管理 key 来源：`/home/wisedata/deploy/cliproxyapi-plus/runtime/secrets.env` 里的 `MANAGEMENT_PASSWORD`
+- 这项 `MANAGEMENT_PASSWORD` 是明文值，可直接用于 `Authorization: Bearer <key>`
+- 它不是 `runtime/config/config.yaml` 里的 `api-keys`
 
 ## 日常维护命令
 

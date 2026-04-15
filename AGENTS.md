@@ -180,6 +180,18 @@ Important:
 
 If the user says production traffic must not be interrupted, interpret that as a hard ban on touching the production app or production core process.
 
+### Remote Linux Core Truth
+
+Treat the Linux core on `wisedata@10.1.1.201` as the current runtime truth for remote-core maintenance work.
+
+For any task that changes or debugs `CLIProxyAPI` / `CLIProxyAPIPlus`, Docker packaging, runtime config, auth mounts, or upstream proxy handling:
+
+- local macOS or `Quotio Dev` verification is only a preflight gate, not final acceptance
+- before claiming success, deploy the updated core/runtime to `10.1.1.201` and rerun the minimal remote checks in [`docs/operations/remote-core-maintenance.md`](docs/operations/remote-core-maintenance.md)
+- default human client integration target is Quotio pointing to remote core `http://10.1.1.201:18317`, not an ad-hoc local temporary core, unless the user explicitly asks for a local fallback
+
+When remote `/healthz`, `/management.html`, and `/v0/management/auth-files` are healthy but a specific account returns provider-originated `401` / `403` / `404` / `429`, classify it first as account/upstream scope rather than a completed deploy regression.
+
 ## CLIProxyAPIPlus Source Of Truth
 
 Treat the project submodule as the only development source of truth for `CLIProxyAPIPlus`:
