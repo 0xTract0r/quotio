@@ -1,5 +1,19 @@
 # AI Agent Instructions
 
+## Fork Notice
+
+Before trusting this generated index as the current project truth, read:
+
+1. [`../docs/project/current-fork-delta.md`](../docs/project/current-fork-delta.md)
+2. [`../AGENTS.md`](../AGENTS.md)
+3. [`../docs/README.md`](../docs/README.md)
+
+Important:
+
+- this repo is a customized Quotio fork, not a plain upstream checkout
+- `.agentlens` is useful for navigation, but fork-specific behavior may have advanced beyond the generated snapshot
+- if the `Generated` timestamp or embedded `Git HEAD` is old, confirm behavior from the real files before making assumptions
+
 ## Reading Protocol
 
 Follow this protocol to understand the codebase efficiently:

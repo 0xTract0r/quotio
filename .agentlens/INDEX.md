@@ -1,5 +1,22 @@
 # Project
 
+## Fork Notice
+
+Before using this generated index as your primary understanding of the repository, read:
+
+1. [`../docs/project/current-fork-delta.md`](../docs/project/current-fork-delta.md)
+2. [`../AGENTS.md`](../AGENTS.md)
+3. [`../docs/README.md`](../docs/README.md)
+
+Reason:
+
+- this repository is a heavily customized Quotio fork, not a vanilla upstream checkout
+- `CLIProxyAPIPlus` and `Cli-Proxy-API-Management-Center` are part of the effective architecture
+- account-level proxy / managed headers / upstream verification work has already been implemented
+- `Identity Package` exists but is still only phase-1 host-side work
+
+Use `.agentlens` as a code index, not as the only source of truth for recent fork-specific behavior.
+
 ## Reading Protocol
 
 **Start here**, then navigate to specific modules.
