@@ -24,15 +24,18 @@
 
 Quotio is a native macOS application for managing **CLIProxyAPI** - a local proxy server that powers your AI coding agents. It helps you manage multiple AI accounts, track quotas, and configure CLI tools in one place.
 
+> AI contributors entering this fork should start with [`docs/project/AI_ONBOARDING.md`](docs/project/AI_ONBOARDING.md).
+
 ## Fork Note For Contributors
 
 This repository is no longer just a vanilla upstream Quotio checkout.
 
 If you are contributing new features, or you are an AI agent entering this repository for the first time, read these first:
 
-1. [`docs/project/current-fork-delta.md`](docs/project/current-fork-delta.md)
-2. [`docs/README.md`](docs/README.md)
-3. [`AGENTS.md`](AGENTS.md)
+1. [`docs/project/AI_ONBOARDING.md`](docs/project/AI_ONBOARDING.md)
+2. [`docs/project/current-fork-delta.md`](docs/project/current-fork-delta.md)
+3. [`docs/README.md`](docs/README.md)
+4. [`AGENTS.md`](AGENTS.md)
 
 In particular, do not miss that:
 

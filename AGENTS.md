@@ -14,9 +14,10 @@ Before doing any feature work, do **not** assume this repository is still a vani
 
 Read in this order:
 
-1. [`docs/project/current-fork-delta.md`](docs/project/current-fork-delta.md)
-2. [`docs/README.md`](docs/README.md)
-3. Then the task-specific docs under `docs/fingerprint/`, `docs/operations/`, or `docs/submodules/`
+1. [`docs/project/AI_ONBOARDING.md`](docs/project/AI_ONBOARDING.md)
+2. [`docs/project/current-fork-delta.md`](docs/project/current-fork-delta.md)
+3. [`docs/README.md`](docs/README.md)
+4. Then the task-specific docs under `docs/fingerprint/`, `docs/operations/`, or `docs/submodules/`
 
 Current fork-specific realities that often get missed:
 

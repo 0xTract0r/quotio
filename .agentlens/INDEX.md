@@ -4,9 +4,10 @@
 
 Before using this generated index as your primary understanding of the repository, read:
 
-1. [`../docs/project/current-fork-delta.md`](../docs/project/current-fork-delta.md)
-2. [`../AGENTS.md`](../AGENTS.md)
-3. [`../docs/README.md`](../docs/README.md)
+1. [`../docs/project/AI_ONBOARDING.md`](../docs/project/AI_ONBOARDING.md)
+2. [`../docs/project/current-fork-delta.md`](../docs/project/current-fork-delta.md)
+3. [`../AGENTS.md`](../AGENTS.md)
+4. [`../docs/README.md`](../docs/README.md)
 
 Reason:
 

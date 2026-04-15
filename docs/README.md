@@ -4,8 +4,9 @@
 
 如果你是第一次进入这个 fork 的 AI，请先读：
 
-1. [`project/current-fork-delta.md`](./project/current-fork-delta.md)
-2. [`project/project-overview-prd.md`](./project/project-overview-prd.md)
+1. [`project/AI_ONBOARDING.md`](./project/AI_ONBOARDING.md)
+2. [`project/current-fork-delta.md`](./project/current-fork-delta.md)
+3. [`project/project-overview-prd.md`](./project/project-overview-prd.md)
 
 不要先把仓库理解成“原生 Quotio 未改造版”。
 
