@@ -15,12 +15,32 @@ IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
 CONTAINER_UID_GID="${CONTAINER_UID_GID:-1000:1000}"
 TZ_VALUE="${TZ_VALUE:-Asia/Shanghai}"
 SYNC_AUTH_DIR="${SYNC_AUTH_DIR:-1}"
-SERVER_PROXY_URL="${SERVER_PROXY_URL:-}"
+REMOTE_DOCKER_BUILDKIT="${REMOTE_DOCKER_BUILDKIT:-}"
+REMOTE_COMPOSE_DOCKER_CLI_BUILD="${REMOTE_COMPOSE_DOCKER_CLI_BUILD:-}"
 CONTAINER_DNS_SERVERS="${CONTAINER_DNS_SERVERS:-}"
-SERVER_TLS_ENABLE="${SERVER_TLS_ENABLE:-0}"
-SERVER_TLS_CERT_FILE="${SERVER_TLS_CERT_FILE:-}"
-SERVER_TLS_KEY_FILE="${SERVER_TLS_KEY_FILE:-}"
 SERVER_TLS_CURL_INSECURE="${SERVER_TLS_CURL_INSECURE:-0}"
+ALLOW_TLS_DOWNGRADE="${ALLOW_TLS_DOWNGRADE:-0}"
+SERVER_TLS_GENERATE_REMOTE="${SERVER_TLS_GENERATE_REMOTE:-0}"
+SERVER_TLS_GENERATE_REMOTE_OVERWRITE="${SERVER_TLS_GENERATE_REMOTE_OVERWRITE:-0}"
+SERVER_TLS_GENERATE_REMOTE_DAYS="${SERVER_TLS_GENERATE_REMOTE_DAYS:-365}"
+SERVER_TLS_GENERATE_REMOTE_HOST_IP="${SERVER_TLS_GENERATE_REMOTE_HOST_IP:-${SERVER_HOST_IP}}"
+SERVER_TLS_GENERATE_REMOTE_CN="${SERVER_TLS_GENERATE_REMOTE_CN:-${SERVER_TLS_GENERATE_REMOTE_HOST_IP}}"
+
+SERVER_PROXY_URL_SET=0
+if [[ "${SERVER_PROXY_URL+x}" == "x" ]]; then
+  SERVER_PROXY_URL_SET=1
+else
+  SERVER_PROXY_URL=""
+fi
+
+SERVER_TLS_ENABLE_SET=0
+if [[ "${SERVER_TLS_ENABLE+x}" == "x" ]]; then
+  SERVER_TLS_ENABLE_SET=1
+else
+  SERVER_TLS_ENABLE=""
+fi
+SERVER_TLS_CERT_FILE="${SERVER_TLS_CERT_FILE-}"
+SERVER_TLS_KEY_FILE="${SERVER_TLS_KEY_FILE-}"
 
 if [[ -n "${QUOTIO_SOURCE_ROOT:-}" ]]; then
   SOURCE_ROOT="${QUOTIO_SOURCE_ROOT}"
@@ -30,6 +50,7 @@ fi
 
 CORE_SRC="${SOURCE_ROOT}/third_party/CLIProxyAPIPlus"
 MGMT_SRC="${SOURCE_ROOT}/third_party/Cli-Proxy-API-Management-Center"
+REMOTE_TLS_GENERATOR_SCRIPT="${SOURCE_ROOT}/scripts/generate-cliproxy-self-signed-cert-remote.sh"
 LOCAL_CONFIG_PATH="${LOCAL_CONFIG_PATH:-$HOME/Library/Application Support/Quotio/config.yaml}"
 SOURCE_AUTH_DIR_PATH="${SOURCE_AUTH_DIR_PATH:-$HOME/.cli-proxy-api}"
 PROXY_API_KEY="${PROXY_API_KEY:-}"
@@ -82,8 +103,10 @@ if [[ "${SYNC_AUTH_DIR}" == "1" && ! -d "${SOURCE_AUTH_DIR_PATH}" ]]; then
   exit 1
 fi
 
-validate_toggle_flag "SERVER_TLS_ENABLE" "${SERVER_TLS_ENABLE}"
 validate_toggle_flag "SERVER_TLS_CURL_INSECURE" "${SERVER_TLS_CURL_INSECURE}"
+validate_toggle_flag "ALLOW_TLS_DOWNGRADE" "${ALLOW_TLS_DOWNGRADE}"
+validate_toggle_flag "SERVER_TLS_GENERATE_REMOTE" "${SERVER_TLS_GENERATE_REMOTE}"
+validate_toggle_flag "SERVER_TLS_GENERATE_REMOTE_OVERWRITE" "${SERVER_TLS_GENERATE_REMOTE_OVERWRITE}"
 
 if [[ -n "${BIND_HOST}" ]]; then
   PORT_MAPPING="${BIND_HOST}:${API_PORT}:${API_PORT}"
@@ -91,42 +114,169 @@ else
   PORT_MAPPING="${API_PORT}:${API_PORT}"
 fi
 
-if [[ -n "${SERVER_PROXY_URL}" ]]; then
-  echo "[info] Using server proxy URL: ${SERVER_PROXY_URL}"
-else
-  echo "[info] SERVER_PROXY_URL not set; proxy-url will be empty"
-fi
-
 TLS_CERT_RUNTIME_NAME="tls.crt"
 TLS_KEY_RUNTIME_NAME="tls.key"
 TLS_CERT_CONTAINER_PATH=""
 TLS_KEY_CONTAINER_PATH=""
+USE_REMOTE_TLS_ASSETS=0
+REMOTE_CONFIG_PRESENT=0
+REMOTE_PROXY_URL=""
+REMOTE_TLS_ENABLE="0"
+REMOTE_TLS_CERT_PATH=""
+REMOTE_TLS_KEY_PATH=""
+REMOTE_TLS_CERT_PRESENT=0
+REMOTE_TLS_KEY_PRESENT=0
+
+read_remote_runtime_state() {
+  REMOTE_CONFIG_PRESENT=0
+  REMOTE_PROXY_URL=""
+  REMOTE_TLS_ENABLE="0"
+  REMOTE_TLS_CERT_PATH=""
+  REMOTE_TLS_KEY_PATH=""
+
+  local config_raw=""
+  config_raw="$(ssh "${REMOTE_HOST}" "if [ -f '${DEPLOY_DIR}/runtime/config/config.yaml' ]; then cat '${DEPLOY_DIR}/runtime/config/config.yaml'; fi")"
+  if [[ -n "${config_raw}" ]]; then
+    REMOTE_CONFIG_PRESENT=1
+    local parsed
+    parsed="$(REMOTE_CONFIG_RAW="${config_raw}" python3 <<'PY'
+import os
+import yaml
+
+data = yaml.safe_load(os.environ["REMOTE_CONFIG_RAW"]) or {}
+tls = data.get("tls") or {}
+print((data.get("proxy-url") or "").replace("\n", " "))
+print("1" if tls.get("enable") else "0")
+print((tls.get("cert") or "").replace("\n", " "))
+print((tls.get("key") or "").replace("\n", " "))
+PY
+)"
+    REMOTE_PROXY_URL="$(printf '%s\n' "${parsed}" | sed -n '1p')"
+    REMOTE_TLS_ENABLE="$(printf '%s\n' "${parsed}" | sed -n '2p')"
+    REMOTE_TLS_CERT_PATH="$(printf '%s\n' "${parsed}" | sed -n '3p')"
+    REMOTE_TLS_KEY_PATH="$(printf '%s\n' "${parsed}" | sed -n '4p')"
+  fi
+
+  REMOTE_TLS_CERT_PRESENT="$(ssh "${REMOTE_HOST}" "if [ -s '${DEPLOY_DIR}/runtime/tls/server.crt' ]; then echo 1; else echo 0; fi")"
+  REMOTE_TLS_KEY_PRESENT="$(ssh "${REMOTE_HOST}" "if [ -s '${DEPLOY_DIR}/runtime/tls/server.key' ]; then echo 1; else echo 0; fi")"
+}
+
+generate_remote_tls_assets() {
+  [[ -f "${REMOTE_TLS_GENERATOR_SCRIPT}" ]] || {
+    echo "Remote TLS generator script not found: ${REMOTE_TLS_GENERATOR_SCRIPT}" >&2
+    exit 1
+  }
+
+  REMOTE_HOST="${REMOTE_HOST}" \
+  DEPLOY_DIR="${DEPLOY_DIR}" \
+  HOST_IP="${SERVER_TLS_GENERATE_REMOTE_HOST_IP}" \
+  COMMON_NAME="${SERVER_TLS_GENERATE_REMOTE_CN}" \
+  DAYS="${SERVER_TLS_GENERATE_REMOTE_DAYS}" \
+  OVERWRITE="${SERVER_TLS_GENERATE_REMOTE_OVERWRITE}" \
+  bash "${REMOTE_TLS_GENERATOR_SCRIPT}"
+}
+
+read_remote_runtime_state
+
+if [[ "${SERVER_PROXY_URL_SET}" == "1" ]]; then
+  if [[ -n "${SERVER_PROXY_URL}" ]]; then
+    echo "[info] Using server proxy URL: ${SERVER_PROXY_URL}"
+  else
+    echo "[warn] SERVER_PROXY_URL was explicitly set empty; proxy-url will be cleared"
+  fi
+elif [[ "${REMOTE_CONFIG_PRESENT}" == "1" ]]; then
+  SERVER_PROXY_URL="${REMOTE_PROXY_URL}"
+  if [[ -n "${SERVER_PROXY_URL}" ]]; then
+    echo "[info] Preserving remote proxy URL: ${SERVER_PROXY_URL}"
+  else
+    echo "[info] Preserving empty remote proxy-url"
+  fi
+else
+  echo "[info] SERVER_PROXY_URL not set and no remote config found; proxy-url will be empty"
+fi
+
+if [[ "${SERVER_TLS_ENABLE_SET}" != "1" ]]; then
+  if [[ -n "${SERVER_TLS_CERT_FILE}" || -n "${SERVER_TLS_KEY_FILE}" ]]; then
+    SERVER_TLS_ENABLE="1"
+    echo "[info] Inferred SERVER_TLS_ENABLE=1 because TLS file paths were provided"
+  elif [[ "${REMOTE_CONFIG_PRESENT}" == "1" ]]; then
+    SERVER_TLS_ENABLE="${REMOTE_TLS_ENABLE}"
+    echo "[info] Preserving remote TLS enable=${SERVER_TLS_ENABLE}"
+  else
+    SERVER_TLS_ENABLE="0"
+    echo "[info] SERVER_TLS_ENABLE not set and no remote config found; defaulting to HTTP"
+  fi
+fi
+
+if [[ "${SERVER_TLS_GENERATE_REMOTE}" == "1" ]]; then
+  [[ -n "${SERVER_TLS_GENERATE_REMOTE_HOST_IP}" ]] || {
+    echo "SERVER_TLS_GENERATE_REMOTE=1 requires SERVER_TLS_GENERATE_REMOTE_HOST_IP or SERVER_HOST_IP" >&2
+    exit 1
+  }
+  if [[ ! "${SERVER_TLS_GENERATE_REMOTE_DAYS}" =~ ^[0-9]+$ ]] || (( SERVER_TLS_GENERATE_REMOTE_DAYS <= 0 )); then
+    echo "SERVER_TLS_GENERATE_REMOTE_DAYS must be a positive integer, got: ${SERVER_TLS_GENERATE_REMOTE_DAYS}" >&2
+    exit 1
+  fi
+  [[ -z "${SERVER_TLS_CERT_FILE}" && -z "${SERVER_TLS_KEY_FILE}" ]] || {
+    echo "SERVER_TLS_GENERATE_REMOTE=1 cannot be combined with SERVER_TLS_CERT_FILE/SERVER_TLS_KEY_FILE" >&2
+    exit 1
+  }
+  if [[ "${SERVER_TLS_ENABLE_SET}" == "1" && "${SERVER_TLS_ENABLE}" != "1" ]]; then
+    echo "SERVER_TLS_GENERATE_REMOTE=1 requires SERVER_TLS_ENABLE=1" >&2
+    exit 1
+  fi
+  if [[ "${SERVER_TLS_ENABLE}" != "1" ]]; then
+    SERVER_TLS_ENABLE="1"
+    echo "[info] Inferred SERVER_TLS_ENABLE=1 because SERVER_TLS_GENERATE_REMOTE=1"
+  fi
+fi
+
+validate_toggle_flag "SERVER_TLS_ENABLE" "${SERVER_TLS_ENABLE}"
+
+if [[ "${SERVER_TLS_ENABLE}" == "0" && "${REMOTE_TLS_ENABLE}" == "1" && "${ALLOW_TLS_DOWNGRADE}" != "1" ]]; then
+  echo "Refusing to downgrade remote TLS to HTTP without ALLOW_TLS_DOWNGRADE=1" >&2
+  exit 1
+fi
+
+if [[ "${SERVER_TLS_GENERATE_REMOTE}" == "1" ]]; then
+  echo "[info] Explicit remote TLS generation enabled; generating a self-signed cert directly on ${REMOTE_HOST}"
+  generate_remote_tls_assets
+  read_remote_runtime_state
+fi
 
 if [[ "${SERVER_TLS_ENABLE}" == "1" ]]; then
-  [[ -n "${SERVER_TLS_CERT_FILE}" ]] || {
-    echo "SERVER_TLS_CERT_FILE is required when SERVER_TLS_ENABLE=1" >&2
+  if [[ -n "${SERVER_TLS_CERT_FILE}" || -n "${SERVER_TLS_KEY_FILE}" ]]; then
+    [[ -n "${SERVER_TLS_CERT_FILE}" ]] || {
+      echo "SERVER_TLS_CERT_FILE is required when SERVER_TLS_ENABLE=1" >&2
+      exit 1
+    }
+    [[ -n "${SERVER_TLS_KEY_FILE}" ]] || {
+      echo "SERVER_TLS_KEY_FILE is required when SERVER_TLS_ENABLE=1" >&2
+      exit 1
+    }
+    [[ "${SERVER_TLS_CERT_FILE}" = /* ]] || {
+      echo "SERVER_TLS_CERT_FILE must be an absolute path: ${SERVER_TLS_CERT_FILE}" >&2
+      exit 1
+    }
+    [[ "${SERVER_TLS_KEY_FILE}" = /* ]] || {
+      echo "SERVER_TLS_KEY_FILE must be an absolute path: ${SERVER_TLS_KEY_FILE}" >&2
+      exit 1
+    }
+    [[ -f "${SERVER_TLS_CERT_FILE}" ]] || {
+      echo "TLS certificate file not found: ${SERVER_TLS_CERT_FILE}" >&2
+      exit 1
+    }
+    [[ -f "${SERVER_TLS_KEY_FILE}" ]] || {
+      echo "TLS private key file not found: ${SERVER_TLS_KEY_FILE}" >&2
+      exit 1
+    }
+  elif [[ "${REMOTE_TLS_CERT_PRESENT}" == "1" && "${REMOTE_TLS_KEY_PRESENT}" == "1" ]]; then
+    USE_REMOTE_TLS_ASSETS=1
+    echo "[info] Preserving remote TLS certificate/key in place at ${DEPLOY_DIR}/runtime/tls"
+  else
+    echo "SERVER_TLS_ENABLE=1 but no local TLS files were provided and no reusable remote TLS files exist" >&2
     exit 1
-  }
-  [[ -n "${SERVER_TLS_KEY_FILE}" ]] || {
-    echo "SERVER_TLS_KEY_FILE is required when SERVER_TLS_ENABLE=1" >&2
-    exit 1
-  }
-  [[ "${SERVER_TLS_CERT_FILE}" = /* ]] || {
-    echo "SERVER_TLS_CERT_FILE must be an absolute path: ${SERVER_TLS_CERT_FILE}" >&2
-    exit 1
-  }
-  [[ "${SERVER_TLS_KEY_FILE}" = /* ]] || {
-    echo "SERVER_TLS_KEY_FILE must be an absolute path: ${SERVER_TLS_KEY_FILE}" >&2
-    exit 1
-  }
-  [[ -f "${SERVER_TLS_CERT_FILE}" ]] || {
-    echo "TLS certificate file not found: ${SERVER_TLS_CERT_FILE}" >&2
-    exit 1
-  }
-  [[ -f "${SERVER_TLS_KEY_FILE}" ]] || {
-    echo "TLS private key file not found: ${SERVER_TLS_KEY_FILE}" >&2
-    exit 1
-  }
+  fi
   TLS_CERT_CONTAINER_PATH="/CLIProxyAPI/tls/server.crt"
   TLS_KEY_CONTAINER_PATH="/CLIProxyAPI/tls/server.key"
   echo "[info] HTTPS enabled; runtime cert/key will be mounted from runtime/tls"
@@ -158,7 +308,6 @@ npm --prefix "${MGMT_SRC}" run build
 
 mkdir -p \
   "${TMP_DIR}/source" \
-  "${TMP_DIR}/runtime/auth" \
   "${TMP_DIR}/runtime/config" \
   "${TMP_DIR}/runtime/logs" \
   "${TMP_DIR}/runtime/static" \
@@ -170,12 +319,19 @@ rsync -a --delete --exclude '.git' --exclude 'node_modules' \
 cp "${MGMT_SRC}/dist/index.html" "${TMP_DIR}/runtime/static/management.html"
 
 if [[ "${SERVER_TLS_ENABLE}" == "1" ]]; then
-  cp "${SERVER_TLS_CERT_FILE}" "${TMP_DIR}/runtime/tls/server.crt"
-  cp "${SERVER_TLS_KEY_FILE}" "${TMP_DIR}/runtime/tls/server.key"
-  chmod 600 "${TMP_DIR}/runtime/tls/server.crt" "${TMP_DIR}/runtime/tls/server.key"
+  if [[ "${USE_REMOTE_TLS_ASSETS}" == "1" ]]; then
+    ssh "${REMOTE_HOST}" "cat '${DEPLOY_DIR}/runtime/tls/server.crt'" > "${TMP_DIR}/runtime/tls/server.crt"
+    ssh "${REMOTE_HOST}" "cat '${DEPLOY_DIR}/runtime/tls/server.key'" > "${TMP_DIR}/runtime/tls/server.key"
+    chmod 600 "${TMP_DIR}/runtime/tls/server.crt" "${TMP_DIR}/runtime/tls/server.key"
+  else
+    cp "${SERVER_TLS_CERT_FILE}" "${TMP_DIR}/runtime/tls/server.crt"
+    cp "${SERVER_TLS_KEY_FILE}" "${TMP_DIR}/runtime/tls/server.key"
+    chmod 600 "${TMP_DIR}/runtime/tls/server.crt" "${TMP_DIR}/runtime/tls/server.key"
+  fi
 fi
 
 if [[ "${SYNC_AUTH_DIR}" == "1" ]]; then
+  mkdir -p "${TMP_DIR}/runtime/auth"
   rsync -a --delete \
     --include '*/' \
     --include '*.json' \
@@ -308,7 +464,31 @@ EOF
 
 echo "[3/6] Syncing bundle to ${REMOTE_HOST}:${DEPLOY_DIR}"
 ssh "${REMOTE_HOST}" "mkdir -p '${DEPLOY_DIR}'"
-rsync -az --delete "${TMP_DIR}/" "${REMOTE_HOST}:${DEPLOY_DIR}/"
+RSYNC_ARGS=(-az --delete)
+if [[ "${SYNC_AUTH_DIR}" != "1" ]]; then
+  RSYNC_ARGS+=(--filter='P runtime/auth/' --filter='P runtime/auth/***')
+fi
+RSYNC_ARGS+=(--filter='P backups/' --filter='P backups/***')
+if [[ -z "${SERVER_TLS_CERT_FILE}" && -z "${SERVER_TLS_KEY_FILE}" ]]; then
+  RSYNC_ARGS+=(--filter='P runtime/tls/' --filter='P runtime/tls/***')
+fi
+RSYNC_ARGS+=(
+  --filter='P runtime/config/.usage-statistics.json'
+  --filter='P runtime/config/.usage-statistics.json.tmp'
+)
+rsync "${RSYNC_ARGS[@]}" "${TMP_DIR}/" "${REMOTE_HOST}:${DEPLOY_DIR}/"
+
+REMOTE_COMPOSE_CMD="sudo docker compose"
+if [[ -n "${REMOTE_DOCKER_BUILDKIT}" || -n "${REMOTE_COMPOSE_DOCKER_CLI_BUILD}" ]]; then
+  REMOTE_COMPOSE_CMD="sudo env"
+  if [[ -n "${REMOTE_DOCKER_BUILDKIT}" ]]; then
+    REMOTE_COMPOSE_CMD+=" DOCKER_BUILDKIT=${REMOTE_DOCKER_BUILDKIT}"
+  fi
+  if [[ -n "${REMOTE_COMPOSE_DOCKER_CLI_BUILD}" ]]; then
+    REMOTE_COMPOSE_CMD+=" COMPOSE_DOCKER_CLI_BUILD=${REMOTE_COMPOSE_DOCKER_CLI_BUILD}"
+  fi
+  REMOTE_COMPOSE_CMD+=" docker compose"
+fi
 
 if [[ "${BUILD_STRATEGY}" == "local-load" ]]; then
   echo "[4/6] Building local image ${IMAGE_NAME} (${IMAGE_PLATFORM})"
@@ -322,10 +502,10 @@ if [[ "${BUILD_STRATEGY}" == "local-load" ]]; then
   docker save "${IMAGE_NAME}" | ssh "${REMOTE_HOST}" "sudo docker load"
 
   echo "[6/6] Starting container from loaded image"
-  ssh "${REMOTE_HOST}" "cd '${DEPLOY_DIR}' && sudo docker compose up -d"
+  ssh "${REMOTE_HOST}" "cd '${DEPLOY_DIR}' && ${REMOTE_COMPOSE_CMD} up -d"
 else
   echo "[4/6] Building and starting container"
-  ssh "${REMOTE_HOST}" "cd '${DEPLOY_DIR}' && sudo docker compose up -d --build"
+  ssh "${REMOTE_HOST}" "cd '${DEPLOY_DIR}' && ${REMOTE_COMPOSE_CMD} up -d --build"
 fi
 
 echo "[verify] Waiting for health check"

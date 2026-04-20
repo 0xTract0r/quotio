@@ -12,11 +12,25 @@ sanitize_suffix() {
   printf '%s' "$1" | sed -E 's/[^A-Za-z0-9._-]+/-/g'
 }
 
+resolve_proxy_port() {
+  local defaults_domain="$1"
+  local fallback_port="$2"
+  local configured_port=""
+
+  configured_port="$(defaults read "$defaults_domain" proxyPort 2>/dev/null || true)"
+  if [[ "$configured_port" =~ ^[0-9]+$ ]] && (( configured_port > 0 && configured_port < 65536 )); then
+    printf '%s\n' "$configured_port"
+    return 0
+  fi
+
+  printf '%s\n' "$fallback_port"
+}
+
 if [[ "$bundle_id" == "$PRODUCTION_BUNDLE_ID" ]]; then
   namespace_suffix=""
   app_support_name="$PRODUCTION_APP_SUPPORT"
   auth_dir_name="$PRODUCTION_AUTH_DIR"
-  proxy_port="$PRODUCTION_PROXY_PORT"
+  proxy_port="$(resolve_proxy_port "$bundle_id" "$PRODUCTION_PROXY_PORT")"
 else
   if [[ "$bundle_id" == "$PRODUCTION_BUNDLE_ID".* ]]; then
     raw_suffix="${bundle_id#${PRODUCTION_BUNDLE_ID}.}"
@@ -27,7 +41,7 @@ else
   [[ -n "$namespace_suffix" ]] || namespace_suffix="test"
   app_support_name="Quotio-$namespace_suffix"
   auth_dir_name=".cli-proxy-api-$namespace_suffix"
-  proxy_port=18017
+  proxy_port="$(resolve_proxy_port "$bundle_id" 18017)"
 fi
 
 internal_port=$((proxy_port + 10000))

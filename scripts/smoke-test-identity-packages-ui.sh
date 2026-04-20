@@ -7,14 +7,25 @@ source "${SCRIPT_DIR}/config.sh"
 TEST_BUNDLE_ID="dev.quotio.desktop.test"
 TEST_PRODUCT_NAME="Quotio Test"
 TEST_APP_PATH="${PROJECT_DIR}/build/test-app/${TEST_PRODUCT_NAME}.app"
+TEST_EXECUTABLE="${TEST_APP_PATH}/Contents/MacOS/${TEST_PRODUCT_NAME}"
+TEST_EXECUTABLE_PATTERN="/${TEST_PRODUCT_NAME}.app/Contents/MacOS/${TEST_PRODUCT_NAME}"
 TEST_DEFAULTS_BACKUP=""
 TEST_LOG_FILE="${PROJECT_DIR}/build/identity-packages-ui-smoke.log"
 EXPECTED_PACKAGE_NAME="UI Smoke Package"
 EXPECTED_UPDATED_HOST="updated.identity.local"
 EXPECTED_UPDATED_PORT="8443"
+TEST_APP_PID=""
+SMOKE_EMPTY_STATE_FLAG="0"
+SMOKE_FIXTURE_FLOW_FLAG="0"
 
 cleanup() {
-    pkill -x "${TEST_PRODUCT_NAME}" >/dev/null 2>&1 || true
+    if [[ -n "${TEST_APP_PID}" ]]; then
+        kill "${TEST_APP_PID}" >/dev/null 2>&1 || true
+        wait "${TEST_APP_PID}" 2>/dev/null || true
+        TEST_APP_PID=""
+    fi
+
+    pkill -f "${TEST_EXECUTABLE_PATTERN}" >/dev/null 2>&1 || true
 
     if [[ -n "${TEST_DEFAULTS_BACKUP}" && -f "${TEST_DEFAULTS_BACKUP}" ]]; then
         defaults import "${TEST_BUNDLE_ID}" "${TEST_DEFAULTS_BACKUP}" >/dev/null 2>&1 || true
@@ -24,16 +35,23 @@ cleanup() {
     fi
 }
 
-check_accessibility_permission() {
-    swift - <<'EOF'
-import ApplicationServices
-import Foundation
+configure_launch_env() {
+    local stage="$1"
 
-guard AXIsProcessTrusted() else {
-    fputs("Accessibility permission is required for native UI smoke. Grant Terminal/osascript access in System Settings > Privacy & Security > Accessibility.\n", stderr)
-    exit(1)
-}
-EOF
+    case "${stage}" in
+    empty)
+        SMOKE_EMPTY_STATE_FLAG="1"
+        SMOKE_FIXTURE_FLOW_FLAG="0"
+        ;;
+    fixture)
+        SMOKE_EMPTY_STATE_FLAG="0"
+        SMOKE_FIXTURE_FLOW_FLAG="1"
+        ;;
+    *)
+        log_error "Unknown identity smoke stage: ${stage}"
+        exit 1
+        ;;
+    esac
 }
 
 write_identity_packages_fixture() {
@@ -167,6 +185,11 @@ defaults.synchronize()
 EOF
 }
 
+clear_identity_packages_fixture() {
+    defaults delete "${TEST_BUNDLE_ID}" identityPackages.storage >/dev/null 2>&1 || true
+    defaults delete "${TEST_BUNDLE_ID}" identityPackages.bindings >/dev/null 2>&1 || true
+}
+
 assert_identity_package_defaults() {
     TEST_BUNDLE_ID="${TEST_BUNDLE_ID}" EXPECTED_PACKAGE_NAME="${EXPECTED_PACKAGE_NAME}" EXPECTED_UPDATED_HOST="${EXPECTED_UPDATED_HOST}" EXPECTED_UPDATED_PORT="${EXPECTED_UPDATED_PORT}" swift - <<'EOF'
 import Foundation
@@ -205,130 +228,70 @@ guard port == expectedPort else {
 EOF
 }
 
-run_applescript_smoke() {
-    TEST_PRODUCT_NAME="${TEST_PRODUCT_NAME}" EXPECTED_PACKAGE_NAME="${EXPECTED_PACKAGE_NAME}" EXPECTED_UPDATED_HOST="${EXPECTED_UPDATED_HOST}" EXPECTED_UPDATED_PORT="${EXPECTED_UPDATED_PORT}" osascript <<'EOF'
-on waitForWindow(processName)
-	tell application "System Events"
-		tell process processName
-			repeat 60 times
-				if (count of windows) > 0 then return window 1
-				delay 1
-			end repeat
-		end tell
-	end tell
-	error "Timed out waiting for Quotio Test window"
-end waitForWindow
+clear_log_file() {
+    : > "${TEST_LOG_FILE}"
+}
 
-on clickSidebarRow(mainWindow, rowLabel)
-	tell application "System Events"
-		tell process (system attribute "TEST_PRODUCT_NAME")
-			tell mainWindow
-				repeat with sidebarRow in rows of outline 1 of scroll area 1 of splitter group 1
-					if exists static text rowLabel of sidebarRow then
-						select sidebarRow
-						return
-					end if
-				end repeat
-			end tell
-		end tell
-	end tell
-	error "Sidebar row not found: " & rowLabel
-end clickSidebarRow
+wait_for_log_line() {
+    local pattern="$1"
+    local timeout_seconds="${2:-30}"
 
-on findButtonByTitle(mainWindow, buttonTitle)
-	tell application "System Events"
-		tell process (system attribute "TEST_PRODUCT_NAME")
-			tell mainWindow
-				repeat 30 times
-					try
-						return first button of entire contents whose title is buttonTitle
-					end try
-					delay 0.5
-				end repeat
-			end tell
-		end tell
-	end tell
-	error "Button not found: " & buttonTitle
-end findButtonByTitle
+    for _ in $(seq 1 "${timeout_seconds}"); do
+        if grep -Fq "${pattern}" "${TEST_LOG_FILE}" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
 
-on findTextFieldByValue(mainWindow, fieldValue)
-	tell application "System Events"
-		tell process (system attribute "TEST_PRODUCT_NAME")
-			tell mainWindow
-				repeat 30 times
-					try
-						return first text field of entire contents whose value is fieldValue
-					end try
-					delay 0.5
-				end repeat
-			end tell
-		end tell
-	end tell
-	error "Text field with value not found: " & fieldValue
-end findTextFieldByValue
+    log_error "Timed out waiting for log line: ${pattern}"
+    tail -n 120 "${TEST_LOG_FILE}" || true
+    exit 1
+}
 
-on waitForStaticText(mainWindow, textValue)
-	tell application "System Events"
-		tell process (system attribute "TEST_PRODUCT_NAME")
-			tell mainWindow
-				repeat 30 times
-					try
-						(first static text of entire contents whose value is textValue)
-						return
-					end try
-					delay 0.5
-				end repeat
-			end tell
-		end tell
-	end tell
-	error "Static text not found: " & textValue
-end waitForStaticText
+launch_test_app() {
+    local stage="$1"
 
-set processName to system attribute "TEST_PRODUCT_NAME"
-set packageName to system attribute "EXPECTED_PACKAGE_NAME"
-set updatedHost to system attribute "EXPECTED_UPDATED_HOST"
-set updatedPort to system attribute "EXPECTED_UPDATED_PORT"
+    : > "${TEST_LOG_FILE}"
+    pkill -f "${TEST_EXECUTABLE_PATTERN}" >/dev/null 2>&1 || true
+    sleep 1
 
-tell application processName to activate
-set mainWindow to waitForWindow(processName)
+    configure_launch_env "${stage}"
 
-my clickSidebarRow(mainWindow, "Identity Packages")
-my waitForStaticText(mainWindow, packageName)
-my waitForStaticText(mainWindow, "Available")
+    log_step "Launching ${TEST_PRODUCT_NAME} (${stage})..."
+    env \
+        QUOTIO_OPERATING_MODE=localProxy \
+        QUOTIO_INITIAL_PAGE=identityPackages \
+        QUOTIO_SHOW_IN_DOCK=1 \
+        QUOTIO_SKIP_ONBOARDING=1 \
+        QUOTIO_DISABLE_UPDATE_CHECKS=1 \
+        QUOTIO_UI_SMOKE_IDENTITY_EMPTY_STATE="${SMOKE_EMPTY_STATE_FLAG}" \
+        QUOTIO_UI_SMOKE_IDENTITY_FIXTURE_FLOW="${SMOKE_FIXTURE_FLOW_FLAG}" \
+        "${TEST_EXECUTABLE}" \
+        --runtime-isolation-debug-log-path "${TEST_LOG_FILE}" \
+        >>"${TEST_LOG_FILE}" 2>&1 &
+    TEST_APP_PID="$!"
 
-set hostField to my findTextFieldByValue(mainWindow, "fixture.identity.local")
-tell application "System Events"
-	tell process processName
-		set value of hostField to updatedHost
-	end tell
-end tell
+    for _ in $(seq 1 30); do
+        if [[ -n "${TEST_APP_PID}" ]] && kill -0 "${TEST_APP_PID}" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
 
-set portField to my findTextFieldByValue(mainWindow, "8080")
-set saveButton to my findButtonByTitle(mainWindow, "Save")
-tell application "System Events"
-	tell process processName
-		set value of portField to updatedPort
-		click saveButton
-	end tell
-end tell
+    log_error "${TEST_PRODUCT_NAME} did not start"
+    tail -n 120 "${TEST_LOG_FILE}" || true
+    exit 1
+}
 
-delay 0.5
-set markBlockedButton to my findButtonByTitle(mainWindow, "Mark Blocked")
-tell application "System Events"
-	tell process processName
-		click markBlockedButton
-	end tell
-end tell
-my waitForStaticText(mainWindow, "Blocked")
-
-set clearStatusButton to my findButtonByTitle(mainWindow, "Clear Local Status")
-tell application "System Events"
-	tell process processName
-		click clearStatusButton
-	end tell
-end tell
-my waitForStaticText(mainWindow, "Available")
-EOF
+stop_test_app() {
+    log_step "Stopping ${TEST_PRODUCT_NAME}..."
+    if [[ -n "${TEST_APP_PID}" ]]; then
+        kill "${TEST_APP_PID}" >/dev/null 2>&1 || true
+        wait "${TEST_APP_PID}" 2>/dev/null || true
+        TEST_APP_PID=""
+    fi
+    pkill -f "${TEST_EXECUTABLE_PATTERN}" >/dev/null 2>&1 || true
+    sleep 1
 }
 
 trap cleanup EXIT
@@ -344,7 +307,7 @@ print_summary "Smoke Configuration" \
 mkdir -p "${PROJECT_DIR}/build"
 rm -f "${TEST_LOG_FILE}"
 
-if defaults export "${TEST_BUNDLE_ID}" - > /dev/null 2>&1; then
+if defaults export "${TEST_BUNDLE_ID}" - >/dev/null 2>&1; then
     TEST_DEFAULTS_BACKUP="$(mktemp "${TMPDIR:-/tmp}/quotio-ui-smoke-defaults.XXXXXX.plist")"
     defaults export "${TEST_BUNDLE_ID}" "${TEST_DEFAULTS_BACKUP}" >/dev/null 2>&1
 fi
@@ -356,49 +319,30 @@ defaults write "${TEST_BUNDLE_ID}" showInDock -bool true
 defaults write "${TEST_BUNDLE_ID}" appLanguage -string en
 defaults write "${TEST_BUNDLE_ID}" runtimeIsolationDebugLogPath -string "${TEST_LOG_FILE}"
 
-log_step "Checking Accessibility permission..."
-check_accessibility_permission
-
-write_identity_packages_fixture
-
 log_step "Building isolated test app..."
 "${SCRIPT_DIR}/build-test-app.sh" >/dev/null
 
-pkill -x "${TEST_PRODUCT_NAME}" >/dev/null 2>&1 || true
+log_step "Running empty-state smoke..."
+clear_identity_packages_fixture
+clear_log_file
+launch_test_app empty
+wait_for_log_line "[ui-smoke] identity-empty-state-ready"
+stop_test_app
 
-log_step "Launching ${TEST_PRODUCT_NAME}..."
-open -n "${TEST_APP_PATH}" --args --runtime-isolation-debug-log-path "${TEST_LOG_FILE}"
-
-APP_STARTED="false"
-for _ in $(seq 1 20); do
-    if pgrep -x "${TEST_PRODUCT_NAME}" >/dev/null 2>&1; then
-        APP_STARTED="true"
-        break
-    fi
-    sleep 1
-done
-
-if [[ "${APP_STARTED}" != "true" ]]; then
-    log_error "${TEST_PRODUCT_NAME} did not start"
-    exit 1
-fi
-
-log_step "Driving native UI smoke path..."
-if ! run_applescript_smoke >>"${TEST_LOG_FILE}" 2>&1; then
-    log_error "AppleScript UI smoke failed"
-    log_item "Hint: grant Accessibility permission to Terminal and /usr/bin/osascript, then rerun this script."
-    tail -n 80 "${TEST_LOG_FILE}" || true
-    exit 1
-fi
-
-log_step "Stopping ${TEST_PRODUCT_NAME}..."
-pkill -x "${TEST_PRODUCT_NAME}" >/dev/null 2>&1 || true
-sleep 2
+log_step "Preparing fixture-backed smoke..."
+write_identity_packages_fixture
+clear_log_file
+launch_test_app fixture
+wait_for_log_line "[ui-smoke] identity-fixture-ready"
+wait_for_log_line "[ui-smoke] identity-fixture-saved"
+wait_for_log_line "[ui-smoke] identity-fixture-blocked"
+wait_for_log_line "[ui-smoke] identity-fixture-cleared"
+stop_test_app
 
 log_step "Validating persisted identity package state..."
 assert_identity_package_defaults
 
 print_summary "Smoke Passed" \
-    "Navigation" "Identity Packages" \
-    "Status Path" "Available -> Blocked -> Available" \
+    "Empty State" "logged" \
+    "Fixture Flow" "ready -> saved -> blocked -> cleared" \
     "Persisted Host" "${EXPECTED_UPDATED_HOST}:${EXPECTED_UPDATED_PORT}"
