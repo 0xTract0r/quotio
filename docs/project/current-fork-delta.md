@@ -1,6 +1,6 @@
 # 当前 Fork 改动总览
 
-最后更新：2026-04-15
+最后更新：2026-04-21
 
 如果你是第一次进入仓库的 AI，先读更短的首屏入口：[`AI_ONBOARDING.md`](./AI_ONBOARDING.md)。
 
@@ -54,6 +54,7 @@
 
 - `docs/submodules/management-center-submodule.md`
 - `scripts/start-management-center.sh`
+- `scripts/replace-local-quotio-runtime.sh`
 
 ### 4. 多身份指纹不是停留在想法
 
@@ -64,6 +65,20 @@
 - Claude / Codex 真实上游请求验证链路
 - dev / prod 运行时隔离
 - 正式版迁移 / 回滚脚本
+
+当前还需要额外记住两个容易漏掉的行为边界：
+
+- provider 账号页现在支持“原账户就地重发 OAuth2 并替换原 oauth 文件”，不是只能新增账户；核心侧通过目标参数 `auth_name` 覆盖原 auth，并保留账户级 `prefix`、`proxy_url`、`headers`、`priority`、`note`、`disabled`
+- 管理后台与 Quotio 的原位重认证现在都支持“复制链接 / 取消 / localhost callback URL 回填”；对于需要在真实登录环境里打开授权链接、再把 `http://localhost:1455/...` 回填到发起端完成闭环的场景，已经有正式 UI 入口，不再需要手工拼 API
+- 重认证历史不再只能靠 auth 文件 `modified time` 猜测；core 会把事件落到 `<authDir>/.oauth-history/reauth.jsonl`，并通过只读 management API `/v0/management/oauth-reauth-history?auth_name=<name>&limit=<n>` 提供给 management 页面和 Quotio 展示
+- Codex `plus` 账号的可用模型轮询必须排除 `gpt-5.3-codex-spark`，不要把它当成可正常访问的可选模型
+- Codex OAuth auth 在本地正式 / 本地 dev / 远端 core 默认是独立副本；同一账号若多运行面并行 refresh，旧副本后续会出现 `invalid_grant` / `refresh_token_reused`。当前运维约束是：默认不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
+- 本地 `Quotio` / `Quotio Dev` 的 runtime 管理页真源是运行目录下的 `static/management.html`；本地替换脚本现在会把 `Cli-Proxy-API-Management-Center/dist/index.html` 一并 stage/replace，不能只看 app/core 是否更新
+- 本地 runtime 若要保留这套 fork 里的管理页改动，`config.yaml` 的 `remote-management.disable-auto-update-panel` 必须为 `true`；否则 core 启动后会从官方 `router-for-me/Cli-Proxy-API-Management-Center` release 重新拉取 `management.html`，把本地刚替换进去的页面覆盖回旧版
+- 本地正式 / dev runtime 的替换现在会把备份清单写到 `~/Library/Application Support/Quotio*/backups/local-runtime-replace/replace.<target>.<timestamp>.txt`，并支持用 `scripts/rollback-local-quotio-runtime.sh` 按最近一次或指定 manifest 一键回滚 app/core/management
+- usage 统计快照会持久化到 `~/Library/Application Support/Quotio*/.usage-statistics.json`；proxy core 启动时会自动 merge 恢复，所以“重启后历史没了”优先先排查宿主 UI 是否没有把 `requests_by_day` / `tokens_by_day` / `cost_by_day` 展示出来，而不是先假设 core 没落盘
+- usage 统计现在开始带官方价格估算的 `total_cost_usd` / `cost_by_day`，并区分 `cache_read_input_tokens` 与 `cache_write_input_tokens`；`gpt-5.3-codex-spark` 这类官方价格未最终确定的模型会标成 `pricing_status=unfinalized`，不能静默按 0 美元当成“免费”
+- management center 的 `/usage` 页面现在优先使用 core 返回的 request-level `cost_usd` / `pricing_status`，不再把浏览器 localStorage 里的模型价格当成唯一真源；页面下方的价格表只保留给旧快照或未内置定价模型做 fallback
 
 这部分当前真源：
 

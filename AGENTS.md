@@ -188,7 +188,8 @@ For any task that changes or debugs `CLIProxyAPI` / `CLIProxyAPIPlus`, Docker pa
 
 - local macOS or `Quotio Dev` verification is only a preflight gate, not final acceptance
 - before claiming success, deploy the updated core/runtime to `10.1.1.201` and rerun the minimal remote checks in [`docs/operations/remote-core-maintenance.md`](docs/operations/remote-core-maintenance.md)
-- default human client integration target is Quotio pointing to remote core `http://10.1.1.201:18317`, not an ad-hoc local temporary core, unless the user explicitly asks for a local fallback
+- default human client integration target is Quotio pointing to the remote core on `10.1.1.201` using the current runtime scheme; the stable baseline is `https://10.1.1.201:18317`, and any temporary HTTP downgrade must be treated as an incident tracked in [`docs/operations/remote-core-maintenance.md`](docs/operations/remote-core-maintenance.md)
+- Codex OAuth auth files on local prod, local dev, and remote core are independent copies; do not casually sync the latest local production Codex auth to remote/dev, and do not leave multiple runtimes refreshing the same Codex account in parallel, or you will create `invalid_grant` / `refresh_token_reused` token-rotation conflicts
 
 When remote `/healthz`, `/management.html`, and `/v0/management/auth-files` are healthy but a specific account returns provider-originated `401` / `403` / `404` / `429`, classify it first as account/upstream scope rather than a completed deploy regression.
 
