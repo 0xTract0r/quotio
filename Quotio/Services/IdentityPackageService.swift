@@ -14,6 +14,8 @@ final class IdentityPackageService {
     private let defaults = UserDefaults.standard
     private let packagesKey = "identityPackages.storage"
     private let bindingsKey = "identityPackages.bindings"
+    private let legacyMigrationVersionKey = "identityPackages.legacyMigrationVersion"
+    private let currentLegacyMigrationVersion = 2
 
     private(set) var packages: [RuntimeIdentityPackage] = []
     private(set) var bindings: [String: AccountIdentityBinding] = [:]
@@ -28,6 +30,10 @@ final class IdentityPackageService {
         }
     }
 
+    var needsLegacyAccountMigration: Bool {
+        defaults.integer(forKey: legacyMigrationVersionKey) < currentLegacyMigrationVersion
+    }
+
     func createPackage(name: String? = nil) {
         let now = Date()
         let package = RuntimeIdentityPackage(
@@ -35,6 +41,7 @@ final class IdentityPackageService {
             name: name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                 ? name!.trimmingCharacters(in: .whitespacesAndNewlines)
                 : defaultPackageName(for: packages.count + 1),
+            note: nil,
             status: .draft,
             statusReason: nil,
             proxy: .empty,
@@ -71,6 +78,7 @@ final class IdentityPackageService {
                 RuntimeIdentityPackage(
                     id: UUID(),
                     name: name,
+                    note: nil,
                     status: .draft,
                     statusReason: nil,
                     proxy: .empty,
@@ -211,7 +219,7 @@ final class IdentityPackageService {
         }
 
         packages[index].binding = nil
-        packages[index].status = packages[index].proxy.isConfigured ? .available : .draft
+        packages[index].status = .available
         packages[index].statusReason = nil
         packages[index].updatedAt = Date()
 
@@ -293,6 +301,7 @@ final class IdentityPackageService {
                 let package = RuntimeIdentityPackage(
                     id: packageID,
                     name: imported.name,
+                    note: nil,
                     status: .available,
                     statusReason: nil,
                     proxy: IdentityProxyConfig(
@@ -337,6 +346,83 @@ final class IdentityPackageService {
         return IdentityPackageImportResult(
             importedCount: importedPackages.count,
             issues: issues
+        )
+    }
+
+    func migrateLegacyPackages(from seeds: [LegacyIdentityPackageSeed]) -> IdentityPackageMigrationResult {
+        var migratedPackages: [RuntimeIdentityPackage] = []
+        var migratedBindings: [String: AccountIdentityBinding] = [:]
+        var migratedCount = 0
+        var skippedCount = 0
+
+        for seed in seeds {
+            if bindings[seed.authFileId] != nil || packages.contains(where: { $0.binding?.authFileId == seed.authFileId }) {
+                skippedCount += 1
+                continue
+            }
+
+            let now = Date()
+            let packageID = UUID()
+            let passwordRef = syncProxyPassword(
+                packageId: packageID,
+                existingRef: nil,
+                password: seed.proxyPassword
+            )
+
+            let binding = AccountIdentityBinding(
+                authFileId: seed.authFileId,
+                authIndex: seed.authIndex,
+                provider: seed.provider,
+                accountKey: seed.accountKey,
+                packageId: packageID,
+                bindingMode: .strict,
+                createdAt: now,
+                updatedAt: now
+            )
+            let boundRef = BoundAccountRef(
+                authFileId: seed.authFileId,
+                authIndex: seed.authIndex,
+                providerRawValue: seed.provider.rawValue,
+                accountKey: seed.accountKey,
+                displayName: seed.displayName
+            )
+
+            var proxy = seed.proxy
+            proxy.passwordRef = passwordRef
+
+            migratedPackages.append(
+                RuntimeIdentityPackage(
+                    id: packageID,
+                    name: seed.packageName,
+                    note: trimmedStatusReason(seed.note),
+                    status: .bound,
+                    statusReason: nil,
+                    proxy: proxy,
+                    uaProfile: seed.uaProfile,
+                    tlsProfile: seed.tlsProfile,
+                    verification: nil,
+                    binding: boundRef,
+                    createdAt: now,
+                    updatedAt: now
+                )
+            )
+            migratedBindings[seed.authFileId] = binding
+            migratedCount += 1
+        }
+
+        if !migratedPackages.isEmpty {
+            packages.insert(contentsOf: migratedPackages.reversed(), at: 0)
+            for (authFileID, binding) in migratedBindings {
+                bindings[authFileID] = binding
+            }
+            persistPackages()
+            persistBindings()
+        }
+
+        defaults.set(currentLegacyMigrationVersion, forKey: legacyMigrationVersionKey)
+        return IdentityPackageMigrationResult(
+            migratedCount: migratedCount,
+            skippedCount: skippedCount
         )
     }
 

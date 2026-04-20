@@ -23,6 +23,33 @@ enum AccountSource: Equatable {
     }
 }
 
+enum AccountLiveAlertLevel: Hashable {
+    case warning
+    case error
+
+    var color: Color {
+        switch self {
+        case .warning:
+            return .orange
+        case .error:
+            return .red
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .error:
+            return "xmark.octagon.fill"
+        }
+    }
+
+    func badgeCountText(count: Int) -> String {
+        String(max(count, 1))
+    }
+}
+
 /// Unified data model for account display
 struct AccountRowData: Identifiable, Hashable {
     let id: String
@@ -34,6 +61,7 @@ struct AccountRowData: Identifiable, Hashable {
     let source: AccountSource
     let status: String?           // "ready", "cooling", "error", etc.
     let statusMessage: String?
+    let isUnavailable: Bool
     let isDisabled: Bool
     let hasConfiguredProxy: Bool
     let canToggleDisabled: Bool
@@ -54,6 +82,7 @@ struct AccountRowData: Identifiable, Hashable {
         source: AccountSource,
         status: String?,
         statusMessage: String?,
+        isUnavailable: Bool = false,
         isDisabled: Bool,
         hasConfiguredProxy: Bool = false,
         canToggleDisabled: Bool,
@@ -73,6 +102,7 @@ struct AccountRowData: Identifiable, Hashable {
         self.source = source
         self.status = status
         self.statusMessage = statusMessage
+        self.isUnavailable = isUnavailable
         self.isDisabled = isDisabled
         self.hasConfiguredProxy = hasConfiguredProxy
         self.canToggleDisabled = canToggleDisabled
@@ -97,6 +127,54 @@ struct AccountRowData: Identifiable, Hashable {
         }
     }
 
+    private var trimmedStatusMessage: String? {
+        let trimmed = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    var liveAlertLevel: AccountLiveAlertLevel? {
+        if isUnavailable || status == "error" {
+            return .error
+        }
+        if status == "cooling" || trimmedStatusMessage != nil {
+            return .warning
+        }
+        return nil
+    }
+
+    var shouldSurfaceLiveAlert: Bool {
+        source == .proxy && liveAlertLevel != nil
+    }
+
+    var primaryDisplayTitle: String {
+        remark ?? displayName
+    }
+
+    var liveAlertSummary: String? {
+        guard shouldSurfaceLiveAlert else { return nil }
+        if let trimmedStatusMessage {
+            return trimmedStatusMessage
+        }
+        if isUnavailable {
+            return "Unavailable"
+        }
+        if let status, !status.isEmpty {
+            return status.capitalized
+        }
+        return nil
+    }
+
+    var statusDisplayText: String? {
+        if isUnavailable {
+            return "unavailable"
+        }
+        if status == "ready", liveAlertLevel == .warning {
+            return "warning"
+        }
+        return status
+    }
+
     // MARK: - Factory Methods
     
     /// Create from AuthFile (proxy mode)
@@ -117,7 +195,8 @@ struct AccountRowData: Identifiable, Hashable {
             remark: remark,
             source: .proxy,
             status: authFile.status,
-            statusMessage: authFile.statusMessage,
+            statusMessage: authFile.normalizedProblemStatus,
+            isUnavailable: authFile.unavailable,
             isDisabled: authFile.disabled,
             hasConfiguredProxy: hasConfiguredProxy,
             canToggleDisabled: true,
@@ -140,6 +219,7 @@ struct AccountRowData: Identifiable, Hashable {
             source: .direct,
             status: nil,
             statusMessage: nil,
+            isUnavailable: false,
             isDisabled: directAuthFile.isDisabled,
             hasConfiguredProxy: directAuthFile.proxyURL != nil,
             canToggleDisabled: true,
@@ -159,6 +239,7 @@ struct AccountRowData: Identifiable, Hashable {
             source: .autoDetected,
             status: nil,
             statusMessage: nil,
+            isUnavailable: false,
             isDisabled: false,
             hasConfiguredProxy: false,
             canToggleDisabled: false,
@@ -170,6 +251,8 @@ struct AccountRowData: Identifiable, Hashable {
         hasher.combine(id)
         hasher.combine(isDisabled)
         hasher.combine(status)
+        hasher.combine(statusMessage)
+        hasher.combine(isUnavailable)
         hasher.combine(remark)
         hasher.combine(hasConfiguredProxy)
         hasher.combine(identityPackage)
@@ -180,6 +263,8 @@ struct AccountRowData: Identifiable, Hashable {
         lhs.id == rhs.id &&
         lhs.isDisabled == rhs.isDisabled &&
         lhs.status == rhs.status &&
+        lhs.statusMessage == rhs.statusMessage &&
+        lhs.isUnavailable == rhs.isUnavailable &&
         lhs.remark == rhs.remark &&
         lhs.hasConfiguredProxy == rhs.hasConfiguredProxy &&
         lhs.identityPackage == rhs.identityPackage &&
@@ -223,11 +308,15 @@ struct AccountRow: View {
     }
     
     private var statusColor: Color {
-        switch account.status {
-        case "ready": return account.isDisabled ? .gray : .green
-        case "cooling": return .orange
-        case "error": return .red
-        default: return .gray
+        if let liveAlertLevel = account.liveAlertLevel {
+            return liveAlertLevel.color
+        }
+
+        switch account.statusDisplayText {
+        case "ready":
+            return account.isDisabled ? .gray : .green
+        default:
+            return .gray
         }
     }
 
@@ -256,9 +345,19 @@ struct AccountRow: View {
             
             // Account info
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayTitle)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(displayTitle)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+
+                    if let liveAlertLevel = account.liveAlertLevel,
+                       let liveAlertSummary = account.liveAlertSummary {
+                        Circle()
+                            .fill(liveAlertLevel.color)
+                            .frame(width: 8, height: 8)
+                            .help(liveAlertSummary)
+                    }
+                }
                 
                 HStack(spacing: 6) {
                     if hasRemark {
@@ -277,7 +376,7 @@ struct AccountRow: View {
                         .foregroundStyle(.secondary)
                     
                     // Status indicator (only for proxy accounts)
-                    if let status = account.status {
+                    if let status = account.statusDisplayText {
                         Circle()
                             .fill(statusColor)
                             .frame(width: 6, height: 6)
@@ -374,22 +473,18 @@ struct AccountRow: View {
                 Button {
                     onManageIdentityBinding()
                 } label: {
-                    Image(systemName: account.identityPackage == nil ? "shield" : "arrow.triangle.2.circlepath")
-                        .foregroundStyle(account.identityPackage == nil ? Color.secondary : .blue)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(account.identityPackage == nil ? Color.clear : Color.blue.opacity(0.1))
+                            .frame(width: 28, height: 28)
+
+                        Image(systemName: account.identityPackage == nil ? "shield" : "shield.lefthalf.filled")
+                            .font(.system(size: 14))
+                            .foregroundStyle(account.identityPackage == nil ? Color.secondary : .blue)
+                    }
                 }
                 .buttonStyle(.rowAction)
-                .help(account.identityPackage == nil ? "Bind identity package" : "Change identity package")
-            }
-
-            if account.identityPackage != nil, let onUnbindIdentityBinding = onUnbindIdentityBinding {
-                Button(role: .destructive) {
-                    onUnbindIdentityBinding()
-                } label: {
-                    Image(systemName: "shield.slash")
-                        .foregroundStyle(.red.opacity(0.8))
-                }
-                .buttonStyle(.rowActionDestructive)
-                .help("Unbind identity package")
+                .help(account.identityPackage == nil ? "Bind identity package" : "Manage identity package")
             }
 
             // Disable/Enable toggle button (only for proxy accounts)
@@ -501,17 +596,9 @@ struct AccountRow: View {
                     onManageIdentityBinding()
                 } label: {
                     Label(
-                        account.identityPackage == nil ? "Bind identity package" : "Change identity package",
-                        systemImage: account.identityPackage == nil ? "shield" : "arrow.triangle.2.circlepath"
+                        account.identityPackage == nil ? "Bind identity package" : "Manage identity package",
+                        systemImage: account.identityPackage == nil ? "shield" : "shield.lefthalf.filled"
                     )
-                }
-
-                if account.identityPackage != nil, let onUnbindIdentityBinding = onUnbindIdentityBinding {
-                    Button(role: .destructive) {
-                        onUnbindIdentityBinding()
-                    } label: {
-                        Label("Unbind identity package", systemImage: "shield.slash")
-                    }
                 }
 
                 Divider()
@@ -603,6 +690,7 @@ struct AccountRow: View {
                 source: .proxy,
                 status: "ready",
                 statusMessage: nil,
+                isUnavailable: false,
                 isDisabled: false,
                 canToggleDisabled: true,
                 canDelete: true
@@ -618,6 +706,7 @@ struct AccountRow: View {
                 source: .direct,
                 status: nil,
                 statusMessage: nil,
+                isUnavailable: false,
                 isDisabled: false,
                 canToggleDisabled: true,
                 canDelete: true
@@ -632,6 +721,7 @@ struct AccountRow: View {
                 source: .autoDetected,
                 status: nil,
                 statusMessage: nil,
+                isUnavailable: false,
                 isDisabled: false,
                 canToggleDisabled: false,
                 canDelete: false

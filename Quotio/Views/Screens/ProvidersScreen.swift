@@ -26,6 +26,7 @@ struct ProvidersScreen: View {
     @State private var showAddProviderPopover = false
     @State private var switchingAccount: AccountRowData?
     @State private var accountSettingsEditor: AccountSettingsEditorContext?
+    @State private var didApplyLaunchAutomation = false
     @State private var bindingTargetAuthFile: AuthFile?
     @State private var accountMetadataStore = AccountMetadataStore.shared
     @State private var modeManager = OperatingModeManager.shared
@@ -56,7 +57,7 @@ struct ProvidersScreen: View {
                 let data = AccountRowData.from(
                     authFile: file,
                     metadataKey: metadataKey,
-                    remark: accountMetadataStore.remark(for: metadataKey),
+                    remark: resolvedAccountRemark(for: metadataKey),
                     hasConfiguredProxy: effectiveProxyURL(for: file) != nil,
                     identityPackage: viewModel.identityPackage(for: file)
                 )
@@ -69,7 +70,7 @@ struct ProvidersScreen: View {
                 let data = AccountRowData.from(
                     directAuthFile: file,
                     metadataKey: metadataKey,
-                    remark: accountMetadataStore.remark(for: metadataKey)
+                    remark: resolvedAccountRemark(for: metadataKey)
                 )
                 groups[file.provider, default: []].append(data)
             }
@@ -85,7 +86,7 @@ struct ProvidersScreen: View {
                         provider: provider,
                         accountKey: accountKey,
                         metadataKey: metadataKey,
-                        remark: accountMetadataStore.remark(for: metadataKey)
+                        remark: resolvedAccountRemark(for: metadataKey)
                     )
                     groups[provider, default: []].append(data)
                 }
@@ -102,7 +103,7 @@ struct ProvidersScreen: View {
                 displayName: glmProvider.name.isEmpty ? "GLM" : glmProvider.name,
                 menuBarAccountKey: glmProvider.name,
                 metadataKey: metadataKey,
-                remark: accountMetadataStore.remark(for: metadataKey),
+                remark: resolvedAccountRemark(for: metadataKey),
                 source: .direct,
                 status: "ready",
                 statusMessage: nil,
@@ -124,7 +125,7 @@ struct ProvidersScreen: View {
                 displayName: warpToken.name.isEmpty ? "Warp" : warpToken.name,
                 menuBarAccountKey: warpToken.name,
                 metadataKey: metadataKey,
-                remark: accountMetadataStore.remark(for: metadataKey),
+                remark: resolvedAccountRemark(for: metadataKey),
                 source: .direct,
                 status: "ready",
                 statusMessage: nil,
@@ -154,6 +155,14 @@ struct ProvidersScreen: View {
         groupedAccounts.values.reduce(0) { $0 + $1.count }
     }
 
+    private var launchAutomationSignature: String {
+        let allAccounts = groupedAccounts.values.flatMap { $0 }
+        let markers = allAccounts.map { account in
+            account.id + "|" + account.provider.rawValue + "|" + String(describing: account.source) + "|" + account.primaryDisplayTitle
+        }
+        return markers.sorted().joined(separator: "||")
+    }
+
     /// Account count per provider (for AddProviderPopover badge display)
     private var providerAccountCounts: [AIProvider: Int] {
         groupedAccounts.mapValues { $0.count }
@@ -179,7 +188,6 @@ struct ProvidersScreen: View {
             OAuthSheet(provider: provider, projectId: $projectId) {
                 selectedProvider = nil
                 projectId = ""
-                viewModel.oauthState = nil
             }
             .environment(viewModel)
         }
@@ -194,7 +202,11 @@ struct ProvidersScreen: View {
             // Failure case is silently ignored - user can retry via UI
         }
         .task {
-            await viewModel.loadDirectAuthFiles()
+            await viewModel.loadProvidersScreenData()
+            applyLaunchAutomationIfNeeded()
+        }
+        .onChange(of: launchAutomationSignature) { _, _ in
+            applyLaunchAutomationIfNeeded()
         }
         .alert("providers.proxyRequired.title".localized(), isPresented: $showProxyRequiredAlert) {
             Button("action.startProxy".localized()) {
@@ -443,8 +455,13 @@ struct ProvidersScreen: View {
             editingWarpToken = nil
             showWarpConnectionSheet = true
         } else {
-            viewModel.oauthState = nil
-            selectedProvider = provider
+            Task {
+                let result = await viewModel.cancelOAuth()
+                guard result.didCancel else {
+                    return
+                }
+                selectedProvider = provider
+            }
         }
     }
 
@@ -457,6 +474,11 @@ struct ProvidersScreen: View {
 
     private func accountMetadataKey(for directAuthFile: DirectAuthFile) -> String {
         AccountMetadataStore.authFileKey(provider: directAuthFile.provider, fileName: directAuthFile.filename)
+    }
+
+    private func resolvedAccountRemark(for metadataKey: String) -> String? {
+        accountMetadataStore.remark(for: metadataKey)
+            ?? providersMetadataFallbackUserDefaults().flatMap { AccountMetadataStore.remark(for: metadataKey, in: $0) }
     }
 
     private func effectiveProxyURL(for authFile: AuthFile) -> String? {
@@ -594,6 +616,7 @@ struct ProvidersScreen: View {
                 id: account.id,
                 provider: account.provider,
                 displayName: account.displayName,
+                remark: account.remark,
                 metadataKey: account.metadataKey,
                 supportsProxy: account.canConfigureProxy,
                 authFile: authFile,
@@ -607,6 +630,7 @@ struct ProvidersScreen: View {
                 id: account.id,
                 provider: account.provider,
                 displayName: account.displayName,
+                remark: account.remark,
                 metadataKey: account.metadataKey,
                 supportsProxy: account.canConfigureProxy,
                 authFile: nil,
@@ -624,11 +648,95 @@ struct ProvidersScreen: View {
             id: account.id,
             provider: account.provider,
             displayName: account.displayName,
+            remark: account.remark,
             metadataKey: account.metadataKey,
             supportsProxy: false,
             authFile: nil,
             directAuthFile: nil
         )
+    }
+
+    private func applyLaunchAutomationIfNeeded() {
+        guard !didApplyLaunchAutomation else {
+            return
+        }
+
+        let allAccounts = groupedAccounts.values.flatMap { $0 }
+        if let identityBindingQuery = RuntimeProfile.autoOpenIdentityBindingQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !identityBindingQuery.isEmpty {
+            let matchingAccounts = matchingLaunchAutomationAccounts(
+                for: identityBindingQuery,
+                in: allAccounts
+            )
+
+            guard let proxyAccount = matchingAccounts.first(where: { $0.source == .proxy && $0.supportsIdentityBinding }) else {
+                return
+            }
+
+            didApplyLaunchAutomation = true
+            if RuntimeProfile.providersIdentityBindingSmokeEnabled {
+                uiSmokeLog(
+                    "providers-identity-row-ready auth=\(proxyAccount.id) " +
+                    "title=\(proxyAccount.primaryDisplayTitle) " +
+                    "remark_visible=\(proxyAccount.remark != nil) " +
+                    "email_secondary=\(proxyAccount.primaryDisplayTitle != proxyAccount.displayName) " +
+                    "supports_binding=\(proxyAccount.supportsIdentityBinding) " +
+                    "identity_badge=\(proxyAccount.identityPackage?.name ?? "unbound")"
+                )
+            }
+            openIdentityBinding(for: proxyAccount)
+            return
+        }
+
+        guard let accountSettingsQuery = RuntimeProfile.autoOpenAccountSettingsQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !accountSettingsQuery.isEmpty else {
+            return
+        }
+        let matchingAccounts = matchingLaunchAutomationAccounts(for: accountSettingsQuery, in: allAccounts)
+
+        if matchingAccounts.isEmpty {
+            return
+        }
+
+        if let proxyAccount = matchingAccounts.first(where: { $0.source == .proxy }) {
+            didApplyLaunchAutomation = true
+            handleConfigureAccountSettings(proxyAccount)
+            return
+        }
+
+        // 对支持重认证的 provider，优先等待 proxy 上下文，避免误打开 direct-only 设置页。
+        if matchingAccounts.contains(where: { $0.provider.supportsOAuthReauthentication }) {
+            return
+        }
+
+        didApplyLaunchAutomation = true
+        handleConfigureAccountSettings(matchingAccounts[0])
+    }
+
+    private func matchingLaunchAutomationAccounts(
+        for query: String,
+        in allAccounts: [AccountRowData]
+    ) -> [AccountRowData] {
+        let normalizedQuery = query.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        return allAccounts.filter { account in
+            let candidates = [
+                account.id,
+                account.metadataKey,
+                account.displayName,
+                account.remark,
+                account.primaryDisplayTitle
+            ].compactMap { $0?.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current) }
+
+            return candidates.contains(where: { candidate in
+                candidate == normalizedQuery || candidate.localizedCaseInsensitiveContains(normalizedQuery)
+            })
+        }
+    }
+
+    private func uiSmokeLog(_ message: String) {
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[ui-smoke] \(message)")
+        #endif
     }
 
     private func syncCustomProvidersToConfig() {
@@ -638,14 +746,44 @@ struct ProvidersScreen: View {
     }
 }
 
+private func providersMetadataFallbackUserDefaults() -> UserDefaults? {
+    guard !RuntimeProfile.isPrimaryApp else { return nil }
+    return UserDefaults(suiteName: RuntimeProfile.primaryBundleIdentifier)
+}
+
+@MainActor
+private func providersResolvedRemark(
+    for metadataKey: String,
+    store: AccountMetadataStore
+) -> String? {
+    store.remark(for: metadataKey)
+        ?? providersMetadataFallbackUserDefaults().flatMap { AccountMetadataStore.remark(for: metadataKey, in: $0) }
+}
+
+@MainActor
+private func providersResolvedFingerprintProfile(
+    for metadataKey: String,
+    store: AccountMetadataStore
+) -> AccountFingerprintProfile? {
+    store.fingerprintProfile(for: metadataKey)
+        ?? providersMetadataFallbackUserDefaults().flatMap { AccountMetadataStore.fingerprintProfile(for: metadataKey, in: $0) }
+}
+
 private struct AccountSettingsEditorContext: Identifiable {
     let id: String
     let provider: AIProvider
     let displayName: String
+    let remark: String?
     let metadataKey: String
     let supportsProxy: Bool
     let authFile: AuthFile?
     let directAuthFile: DirectAuthFile?
+}
+
+private enum AuthStatusRefreshFeedbackTone {
+    case success
+    case warning
+    case error
 }
 
 private struct AccountSettingsSheet: View {
@@ -665,6 +803,30 @@ private struct AccountSettingsSheet: View {
     @State private var saveError: String?
     @State private var showFingerprintDetails = false
     @State private var showRegenerateConfirmation = false
+    @State private var showReauthConfirmation = false
+    @State private var copiedOAuthLink = false
+    @State private var reauthHistoryEvents: [OAuthReauthHistoryEvent] = []
+    @State private var isLoadingReauthHistory = false
+    @State private var reauthHistoryError: String?
+    @State private var isRefreshingAuthStatus = false
+    @State private var authStatusRefreshFeedback: String?
+    @State private var authStatusRefreshFeedbackTone: AuthStatusRefreshFeedbackTone = .success
+    @State private var didRunProvidersReauthSmoke = false
+
+    private var headerTitle: String {
+        let remark = context.remark?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let remark, !remark.isEmpty else {
+            return context.displayName
+        }
+        return remark
+    }
+
+    private var headerSubtitle: String? {
+        guard headerTitle != context.displayName else {
+            return nil
+        }
+        return context.displayName
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -677,9 +839,14 @@ private struct AccountSettingsSheet: View {
                             Text("providers.accountSettings.title".localized())
                                 .font(.title3)
                                 .fontWeight(.semibold)
-                            Text(context.displayName)
+                            Text(headerTitle)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .fontWeight(.medium)
+                            if let headerSubtitle {
+                                Text(headerSubtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -738,6 +905,7 @@ private struct AccountSettingsSheet: View {
                             }
 
                             fingerprintSection
+                            oauthReauthenticationSection
 
                             if let loadError {
                                 Text(loadError)
@@ -792,6 +960,18 @@ private struct AccountSettingsSheet: View {
         .frame(width: 540, height: 620)
         .task {
             await loadCurrentValue()
+            await runProvidersReauthSmokeIfNeeded()
+        }
+        .onChange(of: currentOAuthState?.status) { _, newValue in
+            guard let newValue else {
+                return
+            }
+            switch newValue {
+            case .success, .error:
+                Task { await loadReauthHistory() }
+            case .waiting, .polling, .cancelled:
+                break
+            }
         }
         .confirmationDialog("重新生成上游请求标识？", isPresented: $showRegenerateConfirmation) {
             Button("重新生成", role: .destructive) {
@@ -800,6 +980,14 @@ private struct AccountSettingsSheet: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("重新生成会替换当前账户的上游 HTTP 标识档案。需点击保存后才会真正写入 auth 配置。")
+        }
+        .confirmationDialog("确认重新认证当前账户？", isPresented: $showReauthConfirmation) {
+            Button("继续重新认证") {
+                Task { await reauthenticateCurrentAccount() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("开始后当前 auth 文件不会立刻被替换，只有新 OAuth 成功完成时才会覆盖原文件。你也可以随时取消，保留当前账户状态不变。")
         }
     }
 
@@ -972,6 +1160,402 @@ private struct AccountSettingsSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var oauthReauthenticationSection: some View {
+        if canReauthenticate {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("quota.reauthenticate".localized())
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 10) {
+                            refreshAuthStatusButton
+                            reauthenticateButton
+                            if isReauthenticating {
+                                cancelReauthenticationButton
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            refreshAuthStatusButton
+                            reauthenticateButton
+                            if isReauthenticating {
+                                cancelReauthenticationButton
+                            }
+                        }
+                    }
+
+                    Text("会重新检查当前认证状态，能清掉的旧警告会自动清掉。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    if let authURL = currentOAuthURL,
+                       let authURLString = currentOAuthState?.authURL {
+                        Text("oauth.copyLinkOrOpen".localized())
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: 10) {
+                                copyOAuthLinkButton(authURLString: authURLString)
+                                openOAuthLinkButton(authURL: authURL)
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                copyOAuthLinkButton(authURLString: authURLString)
+                                openOAuthLinkButton(authURL: authURL)
+                            }
+                        }
+                    }
+
+                    if let currentOAuthState,
+                       context.provider.supportsOAuthCallbackSubmission,
+                       currentOAuthState.authURL != nil,
+                       isReauthenticating {
+                        OAuthCallbackPasteSection(
+                            provider: context.provider,
+                            session: currentOAuthState
+                        )
+                        .environment(viewModel)
+                    }
+
+                    Text("当前 auth 文件会一直保留到新的 OAuth 成功完成；取消后会恢复为未开始状态。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                oauthReauthenticationStatusCard
+
+                reauthHistorySection
+            }
+        }
+    }
+
+    private var canReauthenticate: Bool {
+        liveAuthFile != nil && context.provider.supportsOAuthReauthentication
+    }
+
+    private var currentOAuthState: OAuthState? {
+        guard let authFile = liveAuthFile,
+              let state = viewModel.oauthState,
+              state.provider == context.provider,
+              state.targetAuthName == authFile.name else {
+            return nil
+        }
+        return state
+    }
+
+    private var liveAuthFile: AuthFile? {
+        guard let authFile = context.authFile else {
+            return nil
+        }
+        return viewModel.authFiles.first(where: { $0.id == authFile.id || $0.name == authFile.name }) ?? authFile
+    }
+
+    private var currentOAuthURL: URL? {
+        guard let authURL = currentOAuthState?.authURL else {
+            return nil
+        }
+        return URL(string: authURL)
+    }
+
+    private var currentAuthProblemMessage: String? {
+        let message = liveAuthFile?.normalizedProblemStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let message, !message.isEmpty else {
+            return nil
+        }
+        return message
+    }
+
+    private var currentAuthProblemColor: Color {
+        if liveAuthFile?.status == "error" || liveAuthFile?.unavailable == true {
+            return .red
+        }
+        return .orange
+    }
+
+    private var currentAuthProblemIsError: Bool {
+        liveAuthFile?.status == "error" || liveAuthFile?.unavailable == true
+    }
+
+    private var shouldShowOAuthStatusCard: Bool {
+        currentAuthProblemMessage != nil ||
+        (authStatusRefreshFeedback?.isEmpty == false) ||
+        currentOAuthState != nil
+    }
+
+    @ViewBuilder
+    private var oauthReauthenticationStatusCard: some View {
+        if shouldShowOAuthStatusCard {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let currentAuthProblemMessage {
+                        statusMessageRow(
+                            icon: currentAuthProblemIsError ? "xmark.octagon.fill" : "exclamationmark.triangle.fill",
+                            color: currentAuthProblemColor,
+                            text: currentAuthProblemMessage
+                        )
+                    }
+
+                    if let authStatusRefreshFeedback, !authStatusRefreshFeedback.isEmpty {
+                        statusMessageRow(
+                            icon: authStatusRefreshFeedbackIcon,
+                            color: authStatusRefreshFeedbackColor,
+                            text: authStatusRefreshFeedback
+                        )
+                    }
+
+                    if let currentOAuthState {
+                        switch currentOAuthState.status {
+                        case .waiting, .polling:
+                            statusMessageRow(
+                                icon: "clock.fill",
+                                color: .secondary,
+                                text: "oauth.waitingForAuth".localized()
+                            )
+
+                            if let error = currentOAuthState.error, !error.isEmpty {
+                                statusMessageRow(
+                                    icon: "exclamationmark.triangle.fill",
+                                    color: .orange,
+                                    text: error
+                                )
+                            }
+                        case .success:
+                            statusMessageRow(
+                                icon: "checkmark.circle.fill",
+                                color: .green,
+                                text: "oauth.success".localized()
+                            )
+                        case .cancelled:
+                            statusMessageRow(
+                                icon: "minus.circle.fill",
+                                color: .orange,
+                                text: currentOAuthState.error ?? "Authentication was cancelled"
+                            )
+                        case .error:
+                            statusMessageRow(
+                                icon: "xmark.octagon.fill",
+                                color: .red,
+                                text: currentOAuthState.error ?? "oauth.failed".localized()
+                            )
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Text("当前状态")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+        }
+    }
+
+    private var refreshAuthStatusButton: some View {
+        Button {
+            Task { await refreshCurrentAuthStatus() }
+        } label: {
+            if isRefreshingAuthStatus {
+                HStack(spacing: 6) {
+                    SmallProgressView()
+                    Text("刷新状态")
+                }
+            } else {
+                Label("刷新状态", systemImage: "arrow.clockwise")
+            }
+        }
+        .buttonStyle(.bordered)
+        .disabled(isLoading || isSaving || isReauthenticating || isRefreshingAuthStatus)
+    }
+
+    private var authStatusRefreshFeedbackIcon: String {
+        switch authStatusRefreshFeedbackTone {
+        case .success:
+            return "checkmark.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .error:
+            return "xmark.circle.fill"
+        }
+    }
+
+    private var authStatusRefreshFeedbackColor: Color {
+        switch authStatusRefreshFeedbackTone {
+        case .success:
+            return .green
+        case .warning:
+            return .orange
+        case .error:
+            return .red
+        }
+    }
+
+    private var reauthenticateButton: some View {
+        Button {
+            showReauthConfirmation = true
+        } label: {
+            if isReauthenticating {
+                HStack(spacing: 8) {
+                    SmallProgressView()
+                    Text("quota.reauthenticating".localized())
+                }
+            } else {
+                Label("quota.reauthenticate".localized(), systemImage: "arrow.clockwise.circle")
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(isLoading || isSaving || isReauthenticating)
+    }
+
+    private var cancelReauthenticationButton: some View {
+        Button("action.cancel".localized(), role: .cancel) {
+            Task { await cancelCurrentReauthentication() }
+        }
+        .buttonStyle(.bordered)
+        .disabled(isLoading || isSaving)
+    }
+
+    private func copyOAuthLinkButton(authURLString: String) -> some View {
+        Button {
+            copyOAuthLink(authURLString)
+        } label: {
+            Label(copiedOAuthLink ? "oauth.copied".localized() : "oauth.copyLink".localized(), systemImage: copiedOAuthLink ? "checkmark" : "doc.on.doc")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func openOAuthLinkButton(authURL: URL) -> some View {
+        Button {
+            NSWorkspace.shared.open(authURL)
+        } label: {
+            Label("oauth.openLink".localized(), systemImage: "safari")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var isReauthenticating: Bool {
+        guard let currentOAuthState else {
+            return false
+        }
+        switch currentOAuthState.status {
+        case .waiting, .polling:
+            return true
+        case .success, .cancelled, .error:
+            return false
+        }
+    }
+
+    private func statusMessageRow(icon: String, color: Color, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(color)
+
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var reauthHistorySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("最近重认证历史")
+                    .font(.caption)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                Button {
+                    Task { await loadReauthHistory() }
+                } label: {
+                    if isLoadingReauthHistory {
+                        SmallProgressView()
+                    } else {
+                        Text("刷新")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .disabled(isLoading || isSaving || isLoadingReauthHistory)
+            }
+
+            if let reauthHistoryError, !reauthHistoryError.isEmpty {
+                Text("历史加载失败：" + reauthHistoryError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            } else if isLoadingReauthHistory && reauthHistoryEvents.isEmpty {
+                HStack(spacing: 8) {
+                    SmallProgressView()
+                    Text("加载最近重认证历史…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if reauthHistoryEvents.isEmpty {
+                Text("暂无重认证历史。这里展示的是独立历史记录，不是 auth 文件最近修改时间。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(reauthHistoryEvents) { event in
+                        GroupBox {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(historyStatusTitle(for: event))
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(historyStatusColor(for: event))
+
+                                    Spacer()
+
+                                    if let occurredAtText = formattedHistoryOccurredAt(for: event) {
+                                        Text(occurredAtText)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                if let accountSummary = historyAccountSummary(for: event) {
+                                    Text("账户：" + accountSummary)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+
+                                if let planSummary = historyPlanSummary(for: event) {
+                                    Text("计划：" + planSummary)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if event.overwroteExisting, event.eventType == "success" {
+                                    Text("已覆盖原 auth 文件，账户身份保持不变。")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if let errorSummary = historyErrorSummary(for: event) {
+                                    Text("错误：" + errorSummary)
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+
+            Text("仅显示最近几条记录；源文件来自 `<authDir>/.oauth-history/reauth.jsonl`。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private func regenerateFingerprintProfile() {
         fingerprintProfile = AccountFingerprintProfile.generate(
             for: context.provider,
@@ -984,8 +1568,25 @@ private struct AccountSettingsSheet: View {
     private func loadCurrentValue() async {
         isLoading = true
         loadError = nil
-        remark = accountMetadataStore.remark(for: context.metadataKey) ?? ""
-        fingerprintProfile = accountMetadataStore.fingerprintProfile(for: context.metadataKey)
+        authStatusRefreshFeedback = nil
+        authStatusRefreshFeedbackTone = .success
+        reauthHistoryError = nil
+        remark = providersResolvedRemark(for: context.metadataKey, store: accountMetadataStore) ?? ""
+        fingerprintProfile = providersResolvedFingerprintProfile(for: context.metadataKey, store: accountMetadataStore)
+
+        if fingerprintProfile == nil {
+            if let authFile = context.authFile {
+                fingerprintProfile = try? await viewModel.loadAuthFileRecoveredFingerprintProfile(
+                    authFile,
+                    metadataKey: context.metadataKey
+                )
+            } else if let directAuthFile = context.directAuthFile {
+                fingerprintProfile = await viewModel.loadDirectAuthFileRecoveredFingerprintProfile(
+                    directAuthFile,
+                    metadataKey: context.metadataKey
+                )
+            }
+        }
 
         do {
             if context.supportsProxy {
@@ -1006,7 +1607,196 @@ private struct AccountSettingsSheet: View {
             loadError = error.localizedDescription
         }
 
+        await loadReauthHistory()
+
         isLoading = false
+    }
+
+    private func loadReauthHistory() async {
+        guard canReauthenticate, let authFile = liveAuthFile else {
+            reauthHistoryEvents = []
+            reauthHistoryError = nil
+            isLoadingReauthHistory = false
+            return
+        }
+
+        isLoadingReauthHistory = true
+        reauthHistoryError = nil
+
+        do {
+            reauthHistoryEvents = try await viewModel.fetchOAuthReauthHistory(authName: authFile.name, limit: 5)
+        } catch {
+            reauthHistoryEvents = []
+            reauthHistoryError = error.localizedDescription
+        }
+
+        isLoadingReauthHistory = false
+    }
+
+    private func runProvidersReauthSmokeIfNeeded() async {
+        guard RuntimeProfile.providersReauthSmokeEnabled,
+              !didRunProvidersReauthSmoke,
+              canReauthenticate,
+              let authFile = liveAuthFile else {
+            return
+        }
+
+        didRunProvidersReauthSmoke = true
+        uiSmokeLog("providers-reauth-sheet-ready auth=\(authFile.name) provider=\(context.provider.rawValue)")
+
+        await reauthenticateCurrentAccount()
+        uiSmokeLog("providers-reauth-started auth=\(authFile.name)")
+
+        guard let authURLString = await waitForCurrentOAuthURL() else {
+            uiSmokeLog("providers-reauth-timeout auth=\(authFile.name)")
+            return
+        }
+
+        copyOAuthLink(authURLString)
+        let pastedURL = NSPasteboard.general.string(forType: .string) ?? ""
+        let pasteboardMatches = pastedURL == authURLString
+        let callbackVisible = context.provider.supportsOAuthCallbackSubmission
+        uiSmokeLog(
+            "providers-reauth-url-ready auth=\(authFile.name) copy_open_visible=true callback_visible=\(callbackVisible) pasteboard_matches=\(pasteboardMatches)"
+        )
+
+        await cancelCurrentReauthentication()
+        let idleRestored = await waitForReauthIdle()
+        uiSmokeLog("providers-reauth-cancelled auth=\(authFile.name) idle=\(idleRestored)")
+    }
+
+    private func reauthenticateCurrentAccount() async {
+        guard let authFile = liveAuthFile else {
+            return
+        }
+        copiedOAuthLink = false
+        await viewModel.startOAuth(for: context.provider, targetAuthName: authFile.name)
+    }
+
+    private func cancelCurrentReauthentication() async {
+        guard currentOAuthState != nil else {
+            return
+        }
+        copiedOAuthLink = false
+        _ = await viewModel.cancelOAuth()
+    }
+
+    private func waitForCurrentOAuthURL() async -> String? {
+        for _ in 0..<40 {
+            if let authURLString = currentOAuthState?.authURL, !authURLString.isEmpty {
+                return authURLString
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return nil
+    }
+
+    private func waitForReauthIdle() async -> Bool {
+        for _ in 0..<20 {
+            if currentOAuthState == nil {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return currentOAuthState == nil
+    }
+
+    private func copyOAuthLink(_ authURLString: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(authURLString, forType: .string)
+        copiedOAuthLink = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            copiedOAuthLink = false
+        }
+    }
+
+    private func uiSmokeLog(_ message: String) {
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[ui-smoke] \(message)")
+        #endif
+    }
+
+    private func refreshCurrentAuthStatus() async {
+        guard let authFile = liveAuthFile else {
+            return
+        }
+
+        isRefreshingAuthStatus = true
+        authStatusRefreshFeedback = nil
+        authStatusRefreshFeedbackTone = .success
+        defer { isRefreshingAuthStatus = false }
+
+        do {
+            let response = try await viewModel.refreshAuthFileStatus(authFile)
+            if let warningMessage = response.warningMessage {
+                authStatusRefreshFeedback = warningMessage
+                authStatusRefreshFeedbackTone = .warning
+            } else if response.isSuccess {
+                authStatusRefreshFeedback = "已刷新当前认证状态。"
+                authStatusRefreshFeedbackTone = .success
+            } else {
+                authStatusRefreshFeedback = response.error ?? "当前认证状态刷新失败。"
+                authStatusRefreshFeedbackTone = .error
+            }
+        } catch {
+            authStatusRefreshFeedback = error.localizedDescription
+            authStatusRefreshFeedbackTone = .error
+        }
+    }
+
+    private func historyStatusTitle(for event: OAuthReauthHistoryEvent) -> String {
+        event.eventType == "success" ? "重认证成功" : "重认证失败"
+    }
+
+    private func historyStatusColor(for event: OAuthReauthHistoryEvent) -> Color {
+        event.eventType == "success" ? .green : .red
+    }
+
+    private func formattedHistoryOccurredAt(for event: OAuthReauthHistoryEvent) -> String? {
+        guard let raw = event.occurredAt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        if let date = Self.parseHistoryTimestamp(raw) {
+            return date.formatted(date: .abbreviated, time: .shortened)
+        }
+        return raw
+    }
+
+    private func historyAccountSummary(for event: OAuthReauthHistoryEvent) -> String? {
+        let before = event.before?.email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let after = event.after?.email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !before.isEmpty && !after.isEmpty && before != after {
+            return before + " -> " + after
+        }
+        let single = after.isEmpty ? before : after
+        return single.isEmpty ? nil : single
+    }
+
+    private func historyPlanSummary(for event: OAuthReauthHistoryEvent) -> String? {
+        let afterPlan = event.after?.plan?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !afterPlan.isEmpty {
+            return afterPlan
+        }
+        let beforePlan = event.before?.plan?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return beforePlan.isEmpty ? nil : beforePlan
+    }
+
+    private func historyErrorSummary(for event: OAuthReauthHistoryEvent) -> String? {
+        let message = event.error?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return message.isEmpty ? nil : message
+    }
+
+    private nonisolated static func parseHistoryTimestamp(_ value: String) -> Date? {
+        let formatterWithFractional = ISO8601DateFormatter()
+        formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatterWithFractional.date(from: value) {
+            return date
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
     }
 
     private func save() async {
@@ -1024,6 +1814,19 @@ private struct AccountSettingsSheet: View {
         do {
             accountMetadataStore.setRemark(remark, for: context.metadataKey)
             accountMetadataStore.setFingerprintProfile(fingerprintProfile, for: context.metadataKey)
+
+            let sanitizedRemark = remark.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let authFile = context.authFile {
+                try await viewModel.updateAuthFileNote(
+                    sanitizedRemark.isEmpty ? nil : sanitizedRemark,
+                    for: authFile
+                )
+            } else if let directAuthFile = context.directAuthFile {
+                try await viewModel.updateDirectAuthFileNote(
+                    sanitizedRemark.isEmpty ? nil : sanitizedRemark,
+                    for: directAuthFile
+                )
+            }
 
             if context.supportsProxy {
                 if let authFile = context.authFile {
@@ -1339,8 +2142,6 @@ struct MenuBarHintView: View {
 
 // MARK: - OAuth Sheet
 
-/// TODO: Support manual localhost callback URL paste for cross-device web OAuth flows.
-/// Current implementation assumes the browser login and localhost redirect happen on the same device.
 struct OAuthSheet: View {
     @Environment(QuotaViewModel.self) private var viewModel
     let provider: AIProvider
@@ -1352,21 +2153,39 @@ struct OAuthSheet: View {
     @State private var remark = ""
     @State private var proxyURL = ""
     @State private var proxyValidation: ProxyURLValidationResult = .empty
+
+    private var activeOAuthState: OAuthState? {
+        guard let state = viewModel.oauthState,
+              state.provider == provider,
+              state.targetAuthName == nil else {
+            return nil
+        }
+        return state
+    }
     
     private var isPolling: Bool {
-        viewModel.oauthState?.status == .polling || viewModel.oauthState?.status == .waiting
+        activeOAuthState?.status == .polling || activeOAuthState?.status == .waiting
     }
     
     private var isSuccess: Bool {
-        viewModel.oauthState?.status == .success
+        activeOAuthState?.status == .success
     }
     
     private var isError: Bool {
-        viewModel.oauthState?.status == .error
+        activeOAuthState?.status == .error
     }
 
     private var canStartAuthentication: Bool {
         !isPolling && proxyValidation.isValid
+    }
+
+    private var shouldShowCallbackPasteSection: Bool {
+        guard let activeOAuthState,
+              provider.supportsOAuthCallbackSubmission,
+              activeOAuthState.authURL != nil else {
+            return false
+        }
+        return activeOAuthState.status == .waiting || activeOAuthState.status == .polling
     }
     
     private var kiroAuthMethods: [AuthCommand] {
@@ -1452,15 +2271,28 @@ struct OAuthSheet: View {
                 .frame(maxWidth: 320)
             }
             
-            if let state = viewModel.oauthState, state.provider == provider {
+            if let state = activeOAuthState {
                 OAuthStatusView(status: state.status, error: state.error, state: state.state, authURL: state.authURL, provider: provider)
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+
+            if let activeOAuthState, shouldShowCallbackPasteSection {
+                OAuthCallbackPasteSection(provider: provider, session: activeOAuthState)
+                    .environment(viewModel)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
             
             HStack(spacing: 16) {
                 Button("action.cancel".localized(), role: .cancel) {
-                    viewModel.cancelOAuth()
-                    onDismiss()
+                    Task {
+                        if activeOAuthState != nil {
+                            let result = await viewModel.cancelOAuth()
+                            guard result.didCancel else {
+                                return
+                            }
+                        }
+                        onDismiss()
+                    }
                 }
                 .buttonStyle(.bordered)
                 
@@ -1510,11 +2342,11 @@ struct OAuthSheet: View {
         .frame(width: 480)
         .frame(minHeight: 350)
         .fixedSize(horizontal: false, vertical: true)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.oauthState?.status)
+        .animation(.easeInOut(duration: 0.2), value: activeOAuthState?.status)
         .onAppear {
             proxyValidation = ProxyURLValidator.validate(proxyURL)
         }
-        .onChange(of: viewModel.oauthState?.status) { _, newStatus in
+        .onChange(of: activeOAuthState?.status) { _, newStatus in
             if newStatus == .success {
                 Task {
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -1522,6 +2354,223 @@ struct OAuthSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct OAuthCallbackPasteSection: View {
+    @Environment(QuotaViewModel.self) private var viewModel
+    let provider: AIProvider
+    let session: OAuthState
+
+    @State private var callbackURL = ""
+    @State private var isSubmitting = false
+    @State private var submissionFeedback: OAuthCallbackSubmissionFeedback?
+
+    private var validation: OAuthCallbackPasteValidation {
+        OAuthCallbackPasteValidation(rawValue: callbackURL, expectedState: session.state)
+    }
+
+    private var canSubmit: Bool {
+        switch session.status {
+        case .waiting, .polling:
+            return validation.isValid && !isSubmitting
+        case .success, .cancelled, .error:
+            return false
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("oauth.callbackTitle".localized())
+                .font(.subheadline)
+                .fontWeight(.medium)
+
+            Text("oauth.callbackHint".localized())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField("oauth.callbackPlaceholder".localized(), text: $callbackURL, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...4)
+
+            if let validationKey = validation.localizationKey {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(validationKey.localized())
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let submissionFeedback {
+                Text(submissionFeedback.message)
+                    .font(.caption)
+                    .foregroundStyle(submissionFeedback.color)
+            }
+
+            Button {
+                Task {
+                    await submitCallback()
+                }
+            } label: {
+                if isSubmitting {
+                    HStack(spacing: 8) {
+                        SmallProgressView()
+                        Text("oauth.submittingCallback".localized())
+                    }
+                } else {
+                    Label("oauth.submitCallback".localized(), systemImage: "paperplane.fill")
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canSubmit)
+        }
+        .frame(maxWidth: 320, alignment: .leading)
+        .onChange(of: callbackURL) { _, _ in
+            submissionFeedback = nil
+        }
+        .onChange(of: session.state) { _, _ in
+            callbackURL = ""
+            isSubmitting = false
+            submissionFeedback = nil
+        }
+    }
+
+    private func submitCallback() async {
+        guard let normalizedURL = validation.normalizedURL else {
+            return
+        }
+
+        isSubmitting = true
+        submissionFeedback = nil
+
+        do {
+            try await viewModel.submitOAuthCallback(for: provider, redirectURL: normalizedURL)
+            submissionFeedback = .success("oauth.callbackSubmitted".localized())
+        } catch {
+            submissionFeedback = .error(error.localizedDescription)
+        }
+
+        isSubmitting = false
+    }
+}
+
+private enum OAuthCallbackSubmissionFeedback {
+    case success(String)
+    case error(String)
+
+    var message: String {
+        switch self {
+        case .success(let message), .error(let message):
+            return message
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .success:
+            return .green
+        case .error:
+            return .red
+        }
+    }
+}
+
+private enum OAuthCallbackPasteValidation {
+    case empty
+    case valid(normalizedURL: String)
+    case invalid(localizationKey: String)
+
+    init(rawValue: String, expectedState: String?) {
+        let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedValue.isEmpty else {
+            self = .empty
+            return
+        }
+
+        guard let normalizedURL = Self.normalizedCallbackURL(from: trimmedValue),
+              let components = URLComponents(string: normalizedURL) else {
+            self = .invalid(localizationKey: "oauth.callbackInvalidFormat")
+            return
+        }
+
+        let queryItems = Self.queryItems(from: components)
+        let state = Self.queryValue(named: "state", in: queryItems)
+        let code = Self.queryValue(named: "code", in: queryItems)
+        let error = Self.queryValue(named: "error", in: queryItems)
+            ?? Self.queryValue(named: "error_description", in: queryItems)
+
+        guard let state, !state.isEmpty else {
+            self = .invalid(localizationKey: "oauth.callbackMissingState")
+            return
+        }
+
+        if let expectedState,
+           !expectedState.isEmpty,
+           state != expectedState {
+            self = .invalid(localizationKey: "oauth.callbackStateMismatch")
+            return
+        }
+
+        guard (code?.isEmpty == false) || (error?.isEmpty == false) else {
+            self = .invalid(localizationKey: "oauth.callbackMissingCode")
+            return
+        }
+
+        self = .valid(normalizedURL: normalizedURL)
+    }
+
+    var isValid: Bool {
+        if case .valid = self {
+            return true
+        }
+        return false
+    }
+
+    var normalizedURL: String? {
+        guard case .valid(let normalizedURL) = self else {
+            return nil
+        }
+        return normalizedURL
+    }
+
+    var localizationKey: String? {
+        guard case .invalid(let localizationKey) = self else {
+            return nil
+        }
+        return localizationKey
+    }
+
+    private static func normalizedCallbackURL(from rawValue: String) -> String? {
+        if rawValue.contains("://") {
+            return rawValue
+        }
+        if rawValue.hasPrefix("?") {
+            return "http://localhost/auth/callback" + rawValue
+        }
+        if rawValue.hasPrefix("/") {
+            return "http://localhost" + rawValue
+        }
+        if rawValue.contains("=") && !rawValue.contains("?") {
+            return "http://localhost/auth/callback?" + rawValue
+        }
+        if rawValue.contains("/?#") || rawValue.contains(":") {
+            return "http://" + rawValue
+        }
+        return nil
+    }
+
+    private static func queryItems(from components: URLComponents) -> [URLQueryItem] {
+        var items = components.queryItems ?? []
+        if let fragment = components.fragment,
+           let fragmentItems = URLComponents(string: "http://localhost/?" + fragment)?.queryItems {
+            items.append(contentsOf: fragmentItems)
+        }
+        return items
+    }
+
+    private static func queryValue(named name: String, in items: [URLQueryItem]) -> String? {
+        items.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -1544,10 +2593,17 @@ private struct OAuthStatusView: View {
             case .waiting:
                 VStack(spacing: 12) {
                     ProgressView()
-                        .controlSize(.large)
                     Text("oauth.openingBrowser".localized())
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+
+                    if let error, !error.isEmpty {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 350)
+                    }
                 }
                 .padding(.vertical, 16)
                 
@@ -1556,12 +2612,12 @@ private struct OAuthStatusView: View {
                     ZStack {
                         Circle()
                             .stroke(provider.color.opacity(0.2), lineWidth: 4)
-                            .frame(width: 60, height: 60)
+                            .frame(width: 56, height: 56)
                         
                         Circle()
                             .trim(from: 0, to: 0.7)
                             .stroke(provider.color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .frame(width: 60, height: 60)
+                            .frame(width: 56, height: 56)
                             .rotationEffect(.degrees(rotationAngle - 90))
                             .onAppear {
                                 withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
@@ -1570,7 +2626,7 @@ private struct OAuthStatusView: View {
                             }
                         
                         Image(systemName: "person.badge.key.fill")
-                            .font(.title2)
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(provider.color)
                     }
                     
@@ -1650,6 +2706,14 @@ private struct OAuthStatusView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+
+                        if let error, !error.isEmpty {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 350)
+                        }
                     }
                 }
                 .padding(.vertical, 16)
@@ -1667,6 +2731,19 @@ private struct OAuthStatusView: View {
                     Text("oauth.closingSheet".localized())
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 16)
+
+            case .cancelled:
+                VStack(spacing: 12) {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.orange)
+
+                    Text(error ?? "Authentication was cancelled")
+                        .font(.headline)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
                 }
                 .padding(.vertical, 16)
                 

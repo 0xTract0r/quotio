@@ -15,6 +15,10 @@ enum RuntimeProfile {
         Bundle.main.bundleIdentifier ?? productionBundleIdentifier
     }
 
+    static var primaryBundleIdentifier: String {
+        productionBundleIdentifier
+    }
+
     static var isPrimaryApp: Bool {
         bundleIdentifier == productionBundleIdentifier
     }
@@ -119,6 +123,41 @@ enum RuntimeProfile {
             return nil
         }
         return UInt16(value)
+    }
+
+    static var initialNavigationPage: NavigationPage? {
+        guard let raw = stringValue(for: "QUOTIO_INITIAL_PAGE")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+
+        return NavigationPage.allCases.first { page in
+            page.rawValue.caseInsensitiveCompare(raw) == .orderedSame
+        }
+    }
+
+    static var autoOpenAccountSettingsQuery: String? {
+        stringValue(for: "QUOTIO_AUTO_OPEN_ACCOUNT_SETTINGS")
+    }
+
+    static var autoOpenIdentityBindingQuery: String? {
+        stringValue(for: "QUOTIO_AUTO_OPEN_IDENTITY_BINDING")
+    }
+
+    static var identityPackagesEmptyStateSmokeEnabled: Bool {
+        boolValue(for: "QUOTIO_UI_SMOKE_IDENTITY_EMPTY_STATE") ?? false
+    }
+
+    static var identityPackagesFixtureFlowSmokeEnabled: Bool {
+        boolValue(for: "QUOTIO_UI_SMOKE_IDENTITY_FIXTURE_FLOW") ?? false
+    }
+
+    static var providersReauthSmokeEnabled: Bool {
+        boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_REAUTH") ?? false
+    }
+
+    static var providersIdentityBindingSmokeEnabled: Bool {
+        boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_IDENTITY_BINDING") ?? false
     }
 
     static func queueLabel(_ suffix: String) -> String {
@@ -368,6 +407,24 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var supportsOAuthReauthentication: Bool {
+        switch self {
+        case .claude, .codex, .gemini, .qwen, .iflow, .antigravity:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var supportsOAuthCallbackSubmission: Bool {
+        switch self {
+        case .claude, .codex, .gemini, .iflow, .antigravity:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Whether this provider uses API key authentication (stored in CustomProviderService)
     var usesAPIKeyAuth: Bool {
         switch self {
@@ -403,6 +460,17 @@ struct ProxyStatus: Codable {
 // MARK: - Auth File (from Management API)
 
 struct AuthFile: Codable, Identifiable, Hashable, Sendable {
+    private static let healthyStatusMessages: Set<String> = [
+        "ok",
+        "healthy",
+        "ready",
+        "success",
+        "available",
+        "active",
+        "authenticated",
+        "authorized"
+    ]
+
     let id: String
     let name: String
     let provider: String
@@ -414,6 +482,7 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     let runtimeOnly: Bool?
     let source: String?
     let path: String?
+    let note: String?
     let email: String?
     let accountType: String?
     let account: String?
@@ -423,7 +492,7 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     let lastRefresh: String?
     
     enum CodingKeys: String, CodingKey {
-        case id, name, provider, label, status, disabled, unavailable, source, path, email, account
+        case id, name, provider, label, status, disabled, unavailable, source, path, note, email, account
         case authIndex = "auth_index"
         case statusMessage = "status_message"
         case runtimeOnly = "runtime_only"
@@ -494,6 +563,20 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
         // Already a plain string
         return msg
     }
+
+    var normalizedProblemStatus: String? {
+        guard let rawStatus = humanReadableStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawStatus.isEmpty else {
+            return nil
+        }
+
+        let normalized = rawStatus.lowercased()
+        guard !Self.healthyStatusMessages.contains(normalized) else {
+            return nil
+        }
+
+        return rawStatus
+    }
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
@@ -510,6 +593,61 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
 
 struct AuthFilesResponse: Codable, Sendable {
     let files: [AuthFile]
+}
+
+struct OAuthReauthHistoryFileSummary: Codable, Hashable, Sendable {
+    let fileSHA256: String?
+    let size: Int64?
+    let modTime: String?
+    let provider: String?
+    let email: String?
+    let plan: String?
+    let projectID: String?
+    let label: String?
+    let accountIDHash: String?
+
+    enum CodingKeys: String, CodingKey {
+        case size, provider, email, plan, label
+        case fileSHA256 = "file_sha256"
+        case modTime = "modtime"
+        case projectID = "project_id"
+        case accountIDHash = "account_id_hash"
+    }
+}
+
+struct OAuthReauthHistoryEvent: Codable, Identifiable, Hashable, Sendable {
+    let eventType: String
+    let occurredAt: String?
+    let provider: String?
+    let targetAuthFile: String?
+    let overwroteExisting: Bool
+    let before: OAuthReauthHistoryFileSummary?
+    let after: OAuthReauthHistoryFileSummary?
+    let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case provider, before, after, error
+        case eventType = "event_type"
+        case occurredAt = "occurred_at"
+        case targetAuthFile = "target_auth_file"
+        case overwroteExisting = "overwrote_existing"
+    }
+
+    var id: String {
+        let timestamp = occurredAt ?? "unknown"
+        return [targetAuthFile ?? "unknown", eventType, timestamp].joined(separator: "::")
+    }
+}
+
+struct OAuthReauthHistoryResponse: Codable, Sendable {
+    let events: [OAuthReauthHistoryEvent]
+    let limit: Int?
+    let authName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case events, limit
+        case authName = "auth_name"
+    }
 }
 
 // MARK: - API Keys (Proxy Service Auth)
@@ -539,21 +677,69 @@ struct UsageData: Codable, Sendable {
     let successCount: Int?
     let failureCount: Int?
     let totalTokens: Int?
-    let inputTokens: Int?
-    let outputTokens: Int?
+    let totalCostUSD: Double?
+    let pricingStatus: String?
+    let unpricedRequestCount: Int?
+    let unfinalizedRequestCount: Int?
+    let requestsByDay: [String: Int]?
+    let tokensByDay: [String: Int]?
+    let costByDay: [String: Double]?
     
     enum CodingKeys: String, CodingKey {
         case totalRequests = "total_requests"
         case successCount = "success_count"
         case failureCount = "failure_count"
         case totalTokens = "total_tokens"
-        case inputTokens = "input_tokens"
-        case outputTokens = "output_tokens"
+        case totalCostUSD = "total_cost_usd"
+        case pricingStatus = "pricing_status"
+        case unpricedRequestCount = "unpriced_request_count"
+        case unfinalizedRequestCount = "unfinalized_request_count"
+        case requestsByDay = "requests_by_day"
+        case tokensByDay = "tokens_by_day"
+        case costByDay = "cost_by_day"
     }
     
     var successRate: Double {
         guard let total = totalRequests, total > 0, let success = successCount else { return 0 }
         return Double(success) / Double(total) * 100
+    }
+
+    var hasEstimatedCost: Bool {
+        guard let pricingStatus else { return false }
+        return !pricingStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var recentUsageDays: [UsageDaySnapshot] {
+        let requestMap = requestsByDay ?? [:]
+        let tokenMap = tokensByDay ?? [:]
+        let costMap = costByDay ?? [:]
+        let keys = Set(requestMap.keys).union(tokenMap.keys).union(costMap.keys)
+
+        return keys
+            .sorted(by: >)
+            .prefix(7)
+            .map { key in
+                UsageDaySnapshot(
+                    dateKey: key,
+                    requests: requestMap[key] ?? 0,
+                    tokens: tokenMap[key] ?? 0,
+                    costUSD: costMap[key]
+                )
+            }
+    }
+}
+
+struct UsageDaySnapshot: Identifiable, Sendable {
+    let dateKey: String
+    let requests: Int
+    let tokens: Int
+    let costUSD: Double?
+
+    var id: String { dateKey }
+
+    var shortLabel: String {
+        guard dateKey.count >= 5 else { return dateKey }
+        return String(dateKey.suffix(5))
     }
 }
 
@@ -569,6 +755,55 @@ struct OAuthURLResponse: Codable, Sendable {
 struct OAuthStatusResponse: Codable, Sendable {
     let status: String
     let error: String?
+
+    var isSuccess: Bool {
+        status == "ok"
+    }
+
+    var isWaiting: Bool {
+        status == "wait"
+    }
+
+    var isCancelled: Bool {
+        status == "cancelled"
+    }
+
+    var isError: Bool {
+        status == "error"
+    }
+}
+
+struct OAuthCancelResponse: Codable, Sendable {
+    let status: String
+    let cancelled: Bool?
+    let error: String?
+
+    var didCancel: Bool {
+        status == "ok" && cancelled != false
+    }
+}
+
+struct OAuthCallbackResponse: Codable, Sendable {
+    let status: String
+    let error: String?
+}
+
+struct AuthFileStatusRefreshResponse: Codable, Sendable {
+    let status: String
+    let error: String?
+    let file: AuthFile?
+
+    var isSuccess: Bool {
+        status == "ok"
+    }
+
+    var warningMessage: String? {
+        guard let raw = file?.normalizedProblemStatus?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        return raw
+    }
 }
 
 // MARK: - App Config
@@ -622,11 +857,13 @@ struct RemoteManagementConfig: Codable {
     var allowRemote: Bool = false
     var secretKey: String = ""
     var disableControlPanel: Bool = false
+    var disableAutoUpdatePanel: Bool = true
     
     enum CodingKeys: String, CodingKey {
         case allowRemote = "allow-remote"
         case secretKey = "secret-key"
         case disableControlPanel = "disable-control-panel"
+        case disableAutoUpdatePanel = "disable-auto-update-panel"
     }
 }
 
@@ -712,6 +949,21 @@ extension Int {
             return String(format: "%.1fK", Double(self) / 1_000)
         }
         return "\(self)"
+    }
+}
+
+extension Double {
+    var formattedUSDCompact: String {
+        if abs(self) >= 1_000_000 {
+            return String(format: "$%.1fM", self / 1_000_000)
+        }
+        if abs(self) >= 1_000 {
+            return String(format: "$%.1fK", self / 1_000)
+        }
+        if abs(self) >= 1 {
+            return String(format: "$%.2f", self)
+        }
+        return String(format: "$%.4f", self)
     }
 }
 

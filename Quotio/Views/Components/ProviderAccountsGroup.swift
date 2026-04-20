@@ -39,6 +39,30 @@ struct ProviderAccountsGroup: View {
     var onDeleteAccount: ((AccountRowData) -> Void)?
     
     @State private var isExpanded: Bool = true
+
+    private var alertingAccounts: [AccountRowData] {
+        group.accounts
+            .filter(\.shouldSurfaceLiveAlert)
+            .sorted { severityRank(for: $0) > severityRank(for: $1) }
+    }
+
+    private var providerAlertLevel: AccountLiveAlertLevel? {
+        alertingAccounts.first?.liveAlertLevel
+    }
+
+    private var providerAlertBadgeText: String? {
+        guard let providerAlertLevel else { return nil }
+        return providerAlertLevel.badgeCountText(count: alertingAccounts.count)
+    }
+
+    private var providerAlertHelpText: String? {
+        let lines = alertingAccounts.compactMap { account -> String? in
+            guard let summary = account.liveAlertSummary else { return nil }
+            return account.primaryDisplayTitle + "： " + summary
+        }
+        guard !lines.isEmpty else { return nil }
+        return lines.joined(separator: "\n")
+    }
     
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
@@ -73,6 +97,18 @@ struct ProviderAccountsGroup: View {
                 .clipShape(Capsule())
             
             Spacer()
+
+            if let providerAlertLevel {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(providerAlertLevel.color)
+                        .frame(width: 8, height: 8)
+                    Text(providerAlertBadgeText ?? "1")
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(providerAlertLevel.color)
+                .help(providerAlertHelpText ?? "")
+            }
             
             // Source indicator for auto-detected providers
             if group.accounts.allSatisfy({ $0.source == .autoDetected }) {
@@ -80,6 +116,17 @@ struct ProviderAccountsGroup: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
+        }
+    }
+
+    private func severityRank(for account: AccountRowData) -> Int {
+        switch account.liveAlertLevel {
+        case .error:
+            return 2
+        case .warning:
+            return 1
+        case nil:
+            return 0
         }
     }
 }

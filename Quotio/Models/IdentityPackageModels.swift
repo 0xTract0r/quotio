@@ -133,6 +133,7 @@ struct AccountIdentityBinding: Codable, Identifiable, Hashable, Sendable {
 struct RuntimeIdentityPackage: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var name: String
+    var note: String?
     var status: IdentityPackageStatus
     var statusReason: String?
     var proxy: IdentityProxyConfig
@@ -150,6 +151,25 @@ struct RuntimeIdentityPackage: Codable, Identifiable, Hashable, Sendable {
     var bindingDisplayName: String {
         binding?.displayName ?? "Unbound"
     }
+}
+
+struct LegacyIdentityPackageSeed: Sendable {
+    let authFileId: String
+    let authIndex: String
+    let provider: AIProvider
+    let accountKey: String
+    let displayName: String
+    let packageName: String
+    let note: String?
+    let proxy: IdentityProxyConfig
+    let proxyPassword: String?
+    let uaProfile: UserAgentProfile
+    let tlsProfile: TLSFingerprintProfile
+}
+
+struct IdentityPackageMigrationResult: Hashable, Sendable {
+    let migratedCount: Int
+    let skippedCount: Int
 }
 
 struct IdentityPackageImportIssue: Identifiable, Hashable, Sendable {

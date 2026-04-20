@@ -245,6 +245,17 @@ actor ManagementAPIClient {
         _ = try await makeRequest("/auth-files/status", method: "PATCH", body: body)
     }
 
+    func refreshAuthFileStatus(name: String, trigger: String = "manual") async throws -> AuthFileStatusRefreshResponse {
+        struct Request: Encodable {
+            let name: String
+            let trigger: String
+        }
+
+        let body = try JSONEncoder().encode(Request(name: name, trigger: trigger))
+        let data = try await makeRequest("/auth-files/refresh-status", method: "POST", body: body)
+        return try JSONDecoder().decode(AuthFileStatusRefreshResponse.self, from: data)
+    }
+
     func setAuthFileProxyURL(name: String, proxyURL: String) async throws {
         struct Request: Encodable {
             let name: String
@@ -257,6 +268,17 @@ actor ManagementAPIClient {
         }
 
         let body = try JSONEncoder().encode(Request(name: name, proxyURL: proxyURL))
+        _ = try await makeRequest("/auth-files/fields", method: "PATCH", body: body)
+    }
+
+    func setAuthFileNote(name: String, note: String?) async throws {
+        struct Request: Encodable {
+            let name: String
+            let note: String?
+        }
+
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = try JSONEncoder().encode(Request(name: name, note: trimmedNote?.isEmpty == true ? nil : trimmedNote))
         _ = try await makeRequest("/auth-files/fields", method: "PATCH", body: body)
     }
 
@@ -295,12 +317,17 @@ actor ManagementAPIClient {
         return try JSONDecoder().decode(UsageStats.self, from: data)
     }
     
-    func getOAuthURL(for provider: AIProvider, projectId: String? = nil) async throws -> OAuthURLResponse {
+    func getOAuthURL(for provider: AIProvider, projectId: String? = nil, targetAuthName: String? = nil) async throws -> OAuthURLResponse {
         var endpoint = provider.oauthEndpoint
         var queryParams: [String] = []
         
         if let projectId = projectId, provider == .gemini {
             queryParams.append("project_id=\(projectId)")
+        }
+
+        if let targetAuthName, !targetAuthName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let encoded = targetAuthName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? targetAuthName
+            queryParams.append("auth_name=\(encoded)")
         }
         
         let webUIProviders: [AIProvider] = [.antigravity, .claude, .codex, .gemini, .iflow, .kiro]
@@ -319,6 +346,77 @@ actor ManagementAPIClient {
     func pollOAuthStatus(state: String) async throws -> OAuthStatusResponse {
         let data = try await makeRequest("/get-auth-status?state=\(state)")
         return try JSONDecoder().decode(OAuthStatusResponse.self, from: data)
+    }
+
+    func fetchOAuthReauthHistory(authName: String? = nil, limit: Int = 20) async throws -> OAuthReauthHistoryResponse {
+        var queryItems: [String] = []
+
+        if let authName {
+            let trimmed = authName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmed
+                queryItems.append("auth_name=\(encoded)")
+            }
+        }
+
+        if limit > 0 {
+            queryItems.append("limit=\(limit)")
+        }
+
+        let endpoint: String
+        if queryItems.isEmpty {
+            endpoint = "/oauth-reauth-history"
+        } else {
+            endpoint = "/oauth-reauth-history?" + queryItems.joined(separator: "&")
+        }
+
+        let data = try await makeRequest(endpoint)
+        return try JSONDecoder().decode(OAuthReauthHistoryResponse.self, from: data)
+    }
+
+    func cancelOAuthSession(state: String) async throws -> OAuthCancelResponse {
+        let encoded = state.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? state
+        let data = try await makeRequest("/oauth-session?state=\(encoded)", method: "DELETE")
+        return try JSONDecoder().decode(OAuthCancelResponse.self, from: data)
+    }
+
+    func submitOAuthCallback(for provider: AIProvider, redirectURL: String) async throws -> OAuthCallbackResponse {
+        struct Request: Encodable {
+            let provider: String
+            let redirectURL: String
+
+            enum CodingKeys: String, CodingKey {
+                case provider
+                case redirectURL = "redirect_url"
+            }
+        }
+
+        let trimmedRedirectURL = redirectURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRedirectURL.isEmpty else {
+            throw APIError.invalidRequest("Callback URL is required")
+        }
+
+        let body = try JSONEncoder().encode(
+            Request(
+                provider: oauthCallbackProviderName(for: provider),
+                redirectURL: trimmedRedirectURL
+            )
+        )
+        let data = try await makeRequest("/oauth-callback", method: "POST", body: body)
+        return try JSONDecoder().decode(OAuthCallbackResponse.self, from: data)
+    }
+
+    private func oauthCallbackProviderName(for provider: AIProvider) -> String {
+        switch provider {
+        case .claude:
+            return "anthropic"
+        case .gemini:
+            return "gemini"
+        case .copilot:
+            return "github"
+        default:
+            return provider.rawValue
+        }
     }
     
     func fetchLogs(after: Int? = nil) async throws -> LogsResponse {

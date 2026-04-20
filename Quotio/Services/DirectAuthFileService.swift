@@ -20,6 +20,7 @@ struct DirectAuthFile: Identifiable, Sendable, Hashable {
     let accountType: String?    // pro, free, etc.
     let isDisabled: Bool
     let proxyURL: String?
+    let note: String?
     let filePath: String
     let source: AuthFileSource
     let filename: String
@@ -134,6 +135,7 @@ actor DirectAuthFileService {
                 accountType: nil,
                 isDisabled: false,
                 proxyURL: nil,
+                note: nil,
                 filePath: filePath,
                 source: .cliProxyApi,
                 filename: file
@@ -172,6 +174,7 @@ actor DirectAuthFileService {
         let accountType = json["account_type"] as? String
         let isDisabled = json["disabled"] as? Bool ?? false
         let proxyURL = (json["proxy_url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = (json["note"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // For Kiro: if email is empty, try to use provider (e.g., "Google") as identifier
         if provider == .kiro && (email == nil || email?.isEmpty == true) {
@@ -197,6 +200,7 @@ actor DirectAuthFileService {
             accountType: accountType,
             isDisabled: isDisabled,
             proxyURL: proxyURL?.isEmpty == true ? nil : proxyURL,
+            note: note?.isEmpty == true ? nil : note,
             filePath: filePath,
             source: .cliProxyApi,
             filename: filename
@@ -478,6 +482,10 @@ actor DirectAuthFileService {
 
     func updateProxyURL(filePath: String, proxyURL: String?) throws {
         try updateStringField(filePath: filePath, key: "proxy_url", value: proxyURL)
+    }
+
+    func updateNote(filePath: String, note: String?) throws {
+        try updateStringField(filePath: filePath, key: "note", value: note)
     }
 
     func updateUserAgent(filePath: String, userAgent: String?) throws {

@@ -14,6 +14,10 @@ struct IdentityPackagesScreen: View {
     @State private var showImportSheet = false
     @State private var showGenerateSheet = false
     @State private var importResultMessage: String?
+    @State private var isMigratingLegacyPackages = false
+    @State private var didEmitEmptyStateSmokeLog = false
+    @State private var didRunFixtureFlowSmoke = false
+    @State private var isRunningFixtureFlowSmoke = false
 
     private var selectedPackage: RuntimeIdentityPackage? {
         guard let selectedPackageID else { return viewModel.identityPackages.first }
@@ -33,179 +37,197 @@ struct IdentityPackagesScreen: View {
         selectedPackage?.isBound == false
     }
 
+    private var isIsolatedRuntime: Bool {
+        !RuntimeProfile.isPrimaryApp
+    }
+
     var body: some View {
-        HSplitView {
-            List(selection: $selectedPackageID) {
-                ForEach(viewModel.identityPackages) { package in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(package.name)
-                                .font(.headline)
-                            Spacer()
-                            statusBadge(for: package.status)
-                        }
-
-                        Text(package.proxy.displayValue)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Text(package.bindingDisplayName)
-                            .font(.caption)
-                            .foregroundStyle(package.isBound ? .primary : .secondary)
-                    }
-                    .tag(package.id)
-                    .padding(.vertical, 4)
-                }
-            }
-            .frame(minWidth: 280, idealWidth: 320)
-
-            Group {
-                if let draftPackage {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            detailSection(title: "Overview") {
-                                TextField("Identity package name", text: binding(for: \.name, default: ""))
-                                    .textFieldStyle(.roundedBorder)
-
-                                detailRow(label: "Status", value: draftPackage.status.displayName)
-                                if let statusReason = draftPackage.statusReason, !statusReason.isEmpty {
-                                    detailRow(label: "Status Note", value: statusReason)
-                                }
-                                detailRow(label: "Bound Account", value: draftPackage.bindingDisplayName)
-                                detailRow(label: "Package ID", value: draftPackage.id.uuidString)
-                            }
-
-                            detailSection(title: "Proxy") {
-                                Picker("Scheme", selection: proxyBinding(for: \.scheme, default: .http)) {
-                                    ForEach(IdentityProxyScheme.allCases, id: \.self) { scheme in
-                                        Text(scheme.rawValue.uppercased())
-                                            .tag(scheme)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
-
-                                TextField("Host", text: proxyBinding(for: \.host, default: ""))
-                                    .textFieldStyle(.roundedBorder)
-
-                                TextField("Port", value: proxyBinding(for: \.port, default: 0), format: .number)
-                                    .textFieldStyle(.roundedBorder)
-
-                                TextField("Username", text: proxyOptionalBinding(for: \.username))
-                                    .textFieldStyle(.roundedBorder)
-
-                                SecureField("Password", text: $draftProxyPassword)
-                                    .textFieldStyle(.roundedBorder)
-
-                                detailRow(
-                                    label: "Password Storage",
-                                    value: draftPackage.proxy.passwordRef == nil ? "Not stored" : "Stored in Keychain"
-                                )
-
-                                detailRow(
-                                    label: "Password Ref",
-                                    value: draftPackage.proxy.passwordRef ?? "Generated on save"
-                                )
-
-                                Text("代理密码会保存在 Keychain 中；模型里只保留 `passwordRef`。")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            detailSection(title: "User-Agent") {
-                                detailRow(label: "Profile", value: draftPackage.uaProfile.shortDisplayName)
-                                Text(draftPackage.uaProfile.userAgent)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
-                            }
-
-                            detailSection(title: "TLS") {
-                                detailRow(label: "Profile", value: draftPackage.tlsProfile.shortDisplayName)
-                                detailRow(label: "Mode", value: draftPackage.tlsProfile.mode.displayName)
-                                detailRow(label: "ALPN", value: draftPackage.tlsProfile.alpn.joined(separator: ", "))
-                                Text("TLS 指纹当前仅为模型预留，尚未接入真实运行时执行层。")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            detailSection(title: "Verification") {
-                                detailRow(
-                                    label: "Last Result",
-                                    value: verificationLabel(for: draftPackage)
-                                )
-                                detailRow(
-                                    label: "Exit IP",
-                                    value: draftPackage.verification?.lastExitIPAddress ?? "Unknown"
-                                )
-                                detailRow(
-                                    label: "TLS Digest",
-                                    value: draftPackage.verification?.lastTLSDigest ?? "Unknown"
-                                )
-                                if let note = draftPackage.verification?.note, !note.isEmpty {
-                                    detailRow(label: "Verification Note", value: note)
-                                }
-
-                                Text("这些状态按钮只记录 Quotio 本地运维状态，不代表真实运行时已经完成验证或强绑定。")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
+        Group {
+            if viewModel.identityPackages.isEmpty {
+                emptyStateView
+            } else {
+                HSplitView {
+                    List(selection: $selectedPackageID) {
+                        ForEach(viewModel.identityPackages) { package in
+                            VStack(alignment: .leading, spacing: 6) {
                                 HStack {
-                                    Button("Mark Verification Failed") {
-                                        markVerificationFailure()
-                                    }
-                                    .disabled(draftPackage.status == .verificationFailed)
-
-                                    Button("Mark Blocked") {
-                                        markBlocked()
-                                    }
-                                    .disabled(draftPackage.status == .blocked)
-
+                                    Text(package.name)
+                                        .font(.headline)
                                     Spacer()
-
-                                    Button("Clear Local Status") {
-                                        clearOperationalStatus()
-                                    }
-                                    .disabled(!canClearOperationalStatus)
+                                    statusBadge(for: package.status)
                                 }
-                            }
 
-                            HStack {
-                                Button("Reset") {
-                                    syncDraftFromSelection()
-                                }
-                                .disabled(!hasUnsavedChanges)
-
-                                Spacer()
-
-                                Button("Delete", role: .destructive) {
-                                    showDeleteConfirmation = true
-                                }
-                                .disabled(!canDeleteSelectedPackage)
-
-                                Button("Save") {
-                                    saveDraft()
-                                }
-                                .keyboardShortcut(.defaultAction)
-                                .disabled(!canSaveDraft)
-                            }
-
-                            if !canDeleteSelectedPackage {
-                                Text("已绑定身份包不可直接删除，请先解绑账号。")
+                                Text(package.proxy.displayValue)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+
+                                Text(package.bindingDisplayName)
+                                    .font(.caption)
+                                    .foregroundStyle(package.isBound ? .primary : .secondary)
                             }
+                            .tag(package.id)
+                            .padding(.vertical, 4)
                         }
-                        .padding(20)
                     }
-                } else {
-                    ContentUnavailableView(
-                        "No Identity Packages",
-                        systemImage: "shield.lefthalf.filled.badge.checkmark",
-                        description: Text("Create your first runtime identity package to start assigning OAuth accounts.")
-                    )
+                    .frame(minWidth: 280, idealWidth: 320)
+
+                    Group {
+                        if let draftPackage {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 20) {
+                                    if isIsolatedRuntime {
+                                        runtimeScopeBanner
+                                    }
+
+                                    detailSection(title: "Overview") {
+                                        TextField("Identity package name", text: binding(for: \.name, default: ""))
+                                            .textFieldStyle(.roundedBorder)
+
+                                        Text("Notes")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        TextEditor(text: optionalStringBinding(for: \.note))
+                                            .frame(minHeight: 80)
+                                            .padding(8)
+                                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+
+                                        detailRow(label: "Status", value: draftPackage.status.displayName)
+                                        if let statusReason = draftPackage.statusReason, !statusReason.isEmpty {
+                                            detailRow(label: "Status Note", value: statusReason)
+                                        }
+                                        detailRow(label: "Bound Account", value: draftPackage.bindingDisplayName)
+                                        detailRow(label: "Package ID", value: draftPackage.id.uuidString)
+                                    }
+
+                                    detailSection(title: "Proxy") {
+                                        Picker("Scheme", selection: proxyBinding(for: \.scheme, default: .http)) {
+                                            ForEach(IdentityProxyScheme.allCases, id: \.self) { scheme in
+                                                Text(scheme.rawValue.uppercased())
+                                                    .tag(scheme)
+                                            }
+                                        }
+                                        .pickerStyle(.segmented)
+
+                                        TextField("Host", text: proxyBinding(for: \.host, default: ""))
+                                            .textFieldStyle(.roundedBorder)
+
+                                        TextField("Port", value: proxyBinding(for: \.port, default: 0), format: .number)
+                                            .textFieldStyle(.roundedBorder)
+
+                                        TextField("Username", text: proxyOptionalBinding(for: \.username))
+                                            .textFieldStyle(.roundedBorder)
+
+                                        SecureField("Password", text: $draftProxyPassword)
+                                            .textFieldStyle(.roundedBorder)
+
+                                        detailRow(
+                                            label: "Password Storage",
+                                            value: draftPackage.proxy.passwordRef == nil ? "Not stored" : "Stored in Keychain"
+                                        )
+
+                                        detailRow(
+                                            label: "Password Ref",
+                                            value: draftPackage.proxy.passwordRef ?? "Generated on save"
+                                        )
+
+                                        Text("代理密码会保存在 Keychain 中；模型里只保留 `passwordRef`。")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    detailSection(title: "User-Agent") {
+                                        detailRow(label: "Profile", value: draftPackage.uaProfile.shortDisplayName)
+                                        Text(draftPackage.uaProfile.userAgent)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .textSelection(.enabled)
+                                    }
+
+                                    detailSection(title: "TLS") {
+                                        detailRow(label: "Profile", value: draftPackage.tlsProfile.shortDisplayName)
+                                        detailRow(label: "Mode", value: draftPackage.tlsProfile.mode.displayName)
+                                        detailRow(label: "ALPN", value: draftPackage.tlsProfile.alpn.joined(separator: ", "))
+                                        Text("TLS 指纹当前仅为模型预留，尚未接入真实运行时执行层。")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    detailSection(title: "Verification") {
+                                        detailRow(
+                                            label: "Last Result",
+                                            value: verificationLabel(for: draftPackage)
+                                        )
+                                        detailRow(
+                                            label: "Exit IP",
+                                            value: draftPackage.verification?.lastExitIPAddress ?? "Unknown"
+                                        )
+                                        detailRow(
+                                            label: "TLS Digest",
+                                            value: draftPackage.verification?.lastTLSDigest ?? "Unknown"
+                                        )
+                                        if let note = draftPackage.verification?.note, !note.isEmpty {
+                                            detailRow(label: "Verification Note", value: note)
+                                        }
+
+                                        Text("这些状态按钮只记录 Quotio 本地运维状态，不代表真实运行时已经完成验证或强绑定。")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+
+                                        HStack {
+                                            Button("Mark Verification Failed") {
+                                                markVerificationFailure()
+                                            }
+                                            .disabled(draftPackage.status == .verificationFailed)
+
+                                            Button("Mark Blocked") {
+                                                markBlocked()
+                                            }
+                                            .disabled(draftPackage.status == .blocked)
+
+                                            Spacer()
+
+                                            Button("Clear Local Status") {
+                                                clearOperationalStatus()
+                                            }
+                                            .disabled(!canClearOperationalStatus)
+                                        }
+                                    }
+
+                                    HStack {
+                                        Button("Reset") {
+                                            syncDraftFromSelection()
+                                        }
+                                        .disabled(!hasUnsavedChanges)
+
+                                        Spacer()
+
+                                        Button("Delete", role: .destructive) {
+                                            showDeleteConfirmation = true
+                                        }
+                                        .disabled(!canDeleteSelectedPackage)
+
+                                        Button("Save") {
+                                            saveDraft()
+                                        }
+                                        .keyboardShortcut(.defaultAction)
+                                        .disabled(!canSaveDraft)
+                                    }
+
+                                    if !canDeleteSelectedPackage {
+                                        Text("已绑定身份包不可直接删除，请先解绑账号。")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(20)
+                            }
+                        } else {
+                            emptyStateView
+                        }
+                    }
+                    .frame(minWidth: 420)
                 }
             }
-            .frame(minWidth: 420)
         }
         .navigationTitle("Identity Packages")
         .sheet(isPresented: $showImportSheet) {
@@ -221,21 +243,40 @@ struct IdentityPackagesScreen: View {
             }
         }
         .onAppear {
+            if RuntimeProfile.identityPackagesEmptyStateSmokeEnabled || RuntimeProfile.identityPackagesFixtureFlowSmokeEnabled {
+                uiSmokeLog("identity-screen-appeared count=\(viewModel.identityPackages.count)")
+            }
             if selectedPackageID == nil {
                 selectedPackageID = viewModel.identityPackages.first?.id
             }
             syncDraftFromSelection()
+            scheduleFixtureFlowSmokeIfNeeded()
         }
         .onChange(of: selectedPackageID) { _, _ in
             syncDraftFromSelection()
+            scheduleFixtureFlowSmokeIfNeeded()
         }
         .onChange(of: viewModel.identityPackages) { _, _ in
             if selectedPackage == nil {
                 selectedPackageID = viewModel.identityPackages.first?.id
             }
             syncDraftFromSelection()
+            if viewModel.identityPackages.isEmpty {
+                didRunFixtureFlowSmoke = false
+            }
+            scheduleFixtureFlowSmokeIfNeeded()
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    Task { await migrateLegacyPackages() }
+                } label: {
+                    Image(systemName: "arrow.down.doc")
+                }
+                .help("Migrate existing account identity data into identity packages")
+                .disabled(isMigratingLegacyPackages)
+            }
+
             ToolbarItem(placement: .automatic) {
                 Button {
                     showImportSheet = true
@@ -287,6 +328,114 @@ struct IdentityPackagesScreen: View {
         } message: {
             Text(importResultMessage ?? "")
         }
+    }
+
+    private var emptyStateView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                .font(.system(size: 42))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 8) {
+                Text("No Identity Packages")
+                    .font(.title3.weight(.semibold))
+
+                Text("Create, batch-generate, or import identity packages before binding them to provider accounts.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
+
+            if isIsolatedRuntime {
+                runtimeScopeBanner
+                    .frame(maxWidth: 560)
+            }
+
+            ViewThatFits {
+                HStack(spacing: 12) {
+                    migrateLegacyPackagesButton
+                    createPackageButton
+                    generatePackagesButton
+                    importPackagesButton
+                }
+
+                VStack(spacing: 12) {
+                    migrateLegacyPackagesButton
+                    createPackageButton
+                    generatePackagesButton
+                    importPackagesButton
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+        .onAppear {
+            emitEmptyStateSmokeLogIfNeeded()
+        }
+    }
+
+    private var runtimeScopeBanner: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "externaldrive.badge.person.crop")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("当前是隔离运行时")
+                    .font(.subheadline.weight(.semibold))
+
+                Text("当前实例使用 `\(RuntimeProfile.bundleIdentifier)` 命名空间。身份包只保存在这个实例自己的本地记录里，不会显示正式版 Quotio 的身份包。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var createPackageButton: some View {
+        Button {
+            viewModel.createIdentityPackage()
+            selectedPackageID = viewModel.identityPackages.first?.id
+        } label: {
+            Label("Create Identity Package", systemImage: "plus")
+        }
+        .buttonStyle(.borderedProminent)
+    }
+
+    private var migrateLegacyPackagesButton: some View {
+        Button {
+            Task { await migrateLegacyPackages() }
+        } label: {
+            if isMigratingLegacyPackages {
+                Label("Migrating…", systemImage: "arrow.triangle.2.circlepath")
+            } else {
+                Label("Migrate Existing Accounts", systemImage: "arrow.down.doc")
+            }
+        }
+        .buttonStyle(.bordered)
+        .disabled(isMigratingLegacyPackages)
+    }
+
+    private var generatePackagesButton: some View {
+        Button {
+            showGenerateSheet = true
+        } label: {
+            Label("Batch Generate", systemImage: "square.stack.3d.up.badge.a")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var importPackagesButton: some View {
+        Button {
+            showImportSheet = true
+        } label: {
+            Label("Import Proxies", systemImage: "square.and.arrow.down")
+        }
+        .buttonStyle(.bordered)
     }
 
     @ViewBuilder
@@ -360,9 +509,79 @@ struct IdentityPackagesScreen: View {
         )
     }
 
+    private func optionalStringBinding(for keyPath: WritableKeyPath<RuntimeIdentityPackage, String?>) -> Binding<String> {
+        Binding(
+            get: { draftPackage?[keyPath: keyPath] ?? "" },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                draftPackage?[keyPath: keyPath] = trimmed.isEmpty ? nil : trimmed
+            }
+        )
+    }
+
     private func syncDraftFromSelection() {
         draftPackage = selectedPackage
         draftProxyPassword = selectedProxyPassword
+    }
+
+    private func scheduleFixtureFlowSmokeIfNeeded() {
+        guard RuntimeProfile.identityPackagesFixtureFlowSmokeEnabled else {
+            return
+        }
+
+        Task { @MainActor in
+            await runFixtureFlowSmokeIfNeeded()
+        }
+    }
+
+    private func emitEmptyStateSmokeLogIfNeeded() {
+        guard RuntimeProfile.identityPackagesEmptyStateSmokeEnabled,
+              !didEmitEmptyStateSmokeLog,
+              viewModel.identityPackages.isEmpty else {
+            return
+        }
+
+        didEmitEmptyStateSmokeLog = true
+        uiSmokeLog(
+            "identity-empty-state-ready bundle=\(RuntimeProfile.bundleIdentifier) isolated=\(!RuntimeProfile.isPrimaryApp) actions=migrate,create,generate,import"
+        )
+    }
+
+    private func runFixtureFlowSmokeIfNeeded() async {
+        guard RuntimeProfile.identityPackagesFixtureFlowSmokeEnabled,
+              !didRunFixtureFlowSmoke,
+              !isRunningFixtureFlowSmoke,
+              selectedPackageID != nil,
+              draftPackage != nil else {
+            return
+        }
+
+        isRunningFixtureFlowSmoke = true
+        didRunFixtureFlowSmoke = true
+        defer { isRunningFixtureFlowSmoke = false }
+
+        uiSmokeLog(
+            "identity-fixture-ready name=\(selectedPackage?.name ?? "unknown") status=\(selectedPackage?.status.rawValue ?? "unknown")"
+        )
+
+        draftPackage?.proxy.host = "updated.identity.local"
+        draftPackage?.proxy.port = 8443
+        saveDraft()
+        uiSmokeLog(
+            "identity-fixture-saved host=\(selectedPackage?.proxy.host ?? "unknown") port=\(selectedPackage?.proxy.port ?? 0)"
+        )
+
+        markBlocked()
+        uiSmokeLog("identity-fixture-blocked status=\(selectedPackage?.status.rawValue ?? "unknown")")
+
+        clearOperationalStatus()
+        uiSmokeLog("identity-fixture-cleared status=\(selectedPackage?.status.rawValue ?? "unknown")")
+    }
+
+    private func uiSmokeLog(_ message: String) {
+        #if DEBUG
+        RuntimeIsolationDebugLog.write("[ui-smoke] \(message)")
+        #endif
     }
 
     private func saveDraft() {
@@ -397,6 +616,18 @@ struct IdentityPackagesScreen: View {
         syncDraftFromSelection()
     }
 
+    private func migrateLegacyPackages() async {
+        guard !isMigratingLegacyPackages else { return }
+        isMigratingLegacyPackages = true
+        defer { isMigratingLegacyPackages = false }
+
+        let result = await viewModel.migrateLegacyIdentityPackages()
+        if result.migratedCount > 0 {
+            selectedPackageID = viewModel.identityPackages.first?.id
+        }
+        importResultMessage = migrationMessage(for: result)
+    }
+
     private func importMessage(for result: IdentityPackageImportResult) -> String {
         if result.issues.isEmpty {
             return "Imported \(result.importedCount) identity package(s)."
@@ -422,6 +653,13 @@ struct IdentityPackagesScreen: View {
 
         \(issuePreview)\(suffix)
         """
+    }
+
+    private func migrationMessage(for result: IdentityPackageMigrationResult) -> String {
+        if result.migratedCount == 0 {
+            return "No legacy account identity data was migrated."
+        }
+        return "Migrated \(result.migratedCount) identity package(s). Skipped \(result.skippedCount) account(s) that were already bound or had no legacy identity data."
     }
 
     private func statusBadge(for status: IdentityPackageStatus) -> some View {

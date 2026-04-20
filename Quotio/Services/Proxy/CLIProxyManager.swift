@@ -281,6 +281,7 @@ final class CLIProxyManager {
         try? FileManager.default.createDirectory(atPath: authDir, withIntermediateDirectories: true)
         
         ensureConfigExists()
+        ensureManagementPanelAutoUpdateDisabledInConfig()
     }
 
     /// Restart the proxy if it is currently running.
@@ -511,6 +512,7 @@ final class CLIProxyManager {
 
         remote-management:
           allow-remote: false
+          disable-auto-update-panel: true
           secret-key: "\(managementKey)"
 
         debug: false
@@ -542,6 +544,58 @@ final class CLIProxyManager {
             content.replaceSubrange(range, with: "secret-key: \"\(managementKey)\"")
             try? content.write(toFile: configPath, atomically: true, encoding: .utf8)
         }
+    }
+
+    private func ensureManagementPanelAutoUpdateDisabledInConfig() {
+        guard FileManager.default.fileExists(atPath: configPath),
+              let content = try? String(contentsOfFile: configPath, encoding: .utf8) else { return }
+
+        var lines = content.components(separatedBy: .newlines)
+        guard let remoteManagementIndex = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces) == "remote-management:"
+        }) else {
+            return
+        }
+
+        var sectionEnd = remoteManagementIndex + 1
+        while sectionEnd < lines.count {
+            let line = lines[sectionEnd]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty && !line.hasPrefix("  ") {
+                break
+            }
+            sectionEnd += 1
+        }
+
+        let desiredLine = "  disable-auto-update-panel: true"
+        var didChange = false
+        if let existingIndex = (remoteManagementIndex + 1..<sectionEnd).first(where: {
+            lines[$0].trimmingCharacters(in: .whitespaces).hasPrefix("disable-auto-update-panel:")
+        }) {
+            if lines[existingIndex] != desiredLine {
+                lines[existingIndex] = desiredLine
+                didChange = true
+            }
+        } else {
+            let insertIndex: Int
+            if let allowRemoteIndex = (remoteManagementIndex + 1..<sectionEnd).first(where: {
+                lines[$0].trimmingCharacters(in: .whitespaces).hasPrefix("allow-remote:")
+            }) {
+                insertIndex = allowRemoteIndex + 1
+            } else {
+                insertIndex = remoteManagementIndex + 1
+            }
+            lines.insert(desiredLine, at: insertIndex)
+            didChange = true
+        }
+
+        guard didChange else { return }
+
+        var updatedContent = lines.joined(separator: "\n")
+        if content.hasSuffix("\n") {
+            updatedContent += "\n"
+        }
+        try? updatedContent.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
     
     /// Regenerates the management key with staged persistence and rollback on failure.
@@ -860,6 +914,7 @@ final class CLIProxyManager {
         await cleanupOrphanProcesses()
         
         syncSecretKeyInConfig()
+        ensureManagementPanelAutoUpdateDisabledInConfig()
         syncProxyURLInConfig()
         syncCustomProvidersToConfig()
         
@@ -1930,6 +1985,7 @@ extension CLIProxyManager {
         
         remote-management:
           allow-remote: false
+          disable-auto-update-panel: true
           secret-key: "\(UUID().uuidString)"
         
         debug: false

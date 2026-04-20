@@ -356,6 +356,7 @@ private struct QuotaAccountRow: View {
             runtimeOnly: false,
             source: "file",
             path: nil,
+            note: nil,
             email: "[email protected]",
             accountType: nil,
             account: nil,

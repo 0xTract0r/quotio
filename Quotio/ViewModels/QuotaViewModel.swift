@@ -33,6 +33,7 @@ final class QuotaViewModel {
     @ObservationIgnored private var warmupModelCache: [WarmupAccountKey: (models: [WarmupModelInfo], fetchedAt: Date)] = [:]
     @ObservationIgnored private let warmupModelCacheTTL: TimeInterval = 28800
     @ObservationIgnored private var lastProxyURL: String?
+    @ObservationIgnored private var lastAccountRemarks: [String: String] = [:]
     
     /// Request tracker for monitoring API requests through ProxyBridge
     let requestTracker = RequestTracker.shared
@@ -50,6 +51,8 @@ final class QuotaViewModel {
     
     @ObservationIgnored private var lastKnownAccountStatuses: [String: String] = [:]
     @ObservationIgnored private var pendingAccountSetup: PendingAccountSetup?
+    @ObservationIgnored private var oauthPollingTask: Task<Void, Never>?
+    @ObservationIgnored private var lastSilentAuthStatusRefreshAt: [String: Date] = [:]
     
     var currentPage: NavigationPage = .dashboard
     var authFiles: [AuthFile] = []
@@ -64,6 +67,7 @@ final class QuotaViewModel {
 
     /// Notification name for quota data updates (used for menu bar refresh)
     static let quotaDataDidChangeNotification = Notification.Name("QuotaViewModel.quotaDataDidChange")
+    private let silentAuthStatusRefreshCooldown: TimeInterval = 15
     
     /// Direct auth files for quota-only mode
     var directAuthFiles: [DirectAuthFile] = []
@@ -179,6 +183,25 @@ final class QuotaViewModel {
 
     init() {
         self.proxyManager = CLIProxyManager.shared
+        if let initialPage = RuntimeProfile.initialNavigationPage {
+            self.currentPage = initialPage
+        }
+        #if DEBUG
+        if RuntimeProfile.initialNavigationPage != nil
+            || RuntimeProfile.identityPackagesEmptyStateSmokeEnabled
+            || RuntimeProfile.identityPackagesFixtureFlowSmokeEnabled
+            || RuntimeProfile.providersReauthSmokeEnabled
+            || RuntimeProfile.providersIdentityBindingSmokeEnabled {
+            RuntimeIsolationDebugLog.write(
+                "[ui-smoke] quota-vm-init current_page=\(currentPage.rawValue) " +
+                "initial_page=\(RuntimeProfile.initialNavigationPage?.rawValue ?? "nil") " +
+                "identity_empty=\(RuntimeProfile.identityPackagesEmptyStateSmokeEnabled) " +
+                "identity_fixture=\(RuntimeProfile.identityPackagesFixtureFlowSmokeEnabled) " +
+                "providers_reauth=\(RuntimeProfile.providersReauthSmokeEnabled) " +
+                "providers_identity_binding=\(RuntimeProfile.providersIdentityBindingSmokeEnabled)"
+            )
+        }
+        #endif
         loadPersistedIDEQuotas()
         syncIdentityPackageState()
         setupRefreshCadenceCallback()
@@ -186,7 +209,9 @@ final class QuotaViewModel {
         setupAppActivationObserver()
         restartWarmupScheduler()
         lastProxyURL = normalizedProxyURL(UserDefaults.standard.string(forKey: "proxyURL"))
+        lastAccountRemarks = Self.storedAccountRemarks()
         setupProxyURLObserver()
+        setupAccountRemarksObserver()
     }
 
     deinit {
@@ -211,6 +236,34 @@ final class QuotaViewModel {
         }
     }
 
+    private func setupAccountRemarksObserver() {
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+
+                let currentRemarks = Self.storedAccountRemarks()
+                guard currentRemarks != self.lastAccountRemarks else { return }
+
+                let changedKeys = Set(currentRemarks.keys).union(self.lastAccountRemarks.keys).filter {
+                    currentRemarks[$0] != self.lastAccountRemarks[$0]
+                }
+                self.lastAccountRemarks = currentRemarks
+
+                guard !changedKeys.isEmpty else { return }
+                await self.syncLocalRemarksToAuthFileNotesIfNeeded(
+                    in: self.authFiles,
+                    limitedToMetadataKeys: Set(changedKeys),
+                    refreshSnapshotAfterWrite: true,
+                    operationName: "syncLocalRemarksToAuthFileNotes"
+                )
+            }
+        }
+    }
+
     private func normalizedProxyURL(_ rawValue: String?) -> String? {
         guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawValue.isEmpty else {
@@ -219,6 +272,14 @@ final class QuotaViewModel {
 
         let sanitized = ProxyURLValidator.sanitize(rawValue)
         return sanitized.isEmpty ? nil : sanitized
+    }
+
+    private nonisolated static func storedAccountRemarks(in userDefaults: UserDefaults = .standard) -> [String: String] {
+        let rawRemarks = userDefaults.dictionary(forKey: AccountMetadataStore.remarksStorageKey) as? [String: String] ?? [:]
+        return rawRemarks.reduce(into: [:]) { partialResult, entry in
+            guard let normalized = trimmedNonEmpty(entry.value) else { return }
+            partialResult[entry.key] = normalized
+        }
     }
 
     /// Update proxy configuration for all quota fetchers
@@ -473,6 +534,10 @@ final class QuotaViewModel {
             syncIdentityPackageState()
         }
         return deleted
+    }
+
+    func migrateLegacyIdentityPackages(force: Bool = true) async -> IdentityPackageMigrationResult {
+        await migrateLegacyIdentityPackages(from: authFiles, force: force)
     }
     
     /// Refresh quotas directly without proxy (for Quota-Only Mode)
@@ -1295,7 +1360,11 @@ final class QuotaViewModel {
                 let apiKeys = try await client.fetchAPIKeys()
                 return (newAuthFiles, usageStats, apiKeys)
             }
-            let newAuthFiles = snapshot.0
+            let newAuthFiles = await syncLocalRemarksToAuthFileNotesIfNeeded(
+                in: snapshot.0,
+                refreshSnapshotAfterWrite: true,
+                operationName: "refreshData.syncLocalRemarksToAuthFileNotes"
+            )
 
             // Only update timestamp if auth files actually changed (account added/removed)
             let oldNames = Set(self.authFiles.map { $0.name })
@@ -1306,6 +1375,7 @@ final class QuotaViewModel {
 
             self.authFiles = newAuthFiles
             syncIdentityPackageState(reconcilingWith: newAuthFiles)
+            await autoMigrateLegacyIdentityPackagesIfNeeded(from: newAuthFiles)
 
             self.usageStats = snapshot.1
             self.apiKeys = snapshot.2
@@ -1330,11 +1400,23 @@ final class QuotaViewModel {
                     await refreshAllQuotas()
                 }
             }
+
+            await silentlyRefreshProblemAuthFilesIfNeeded()
         } catch {
             if !Task.isCancelled {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    func loadProvidersScreenData() async {
+        await loadDirectAuthFiles()
+
+        guard modeManager.isRemoteProxyMode || proxyManager.proxyStatus.running else {
+            return
+        }
+
+        await refreshData()
     }
     
     func manualRefresh() async {
@@ -1581,6 +1663,12 @@ final class QuotaViewModel {
         if let remark = pending.remark {
             let metadataKey = AccountMetadataStore.authFileKey(provider: provider, fileName: targetAuthFile.name)
             accountMetadataStore.setRemark(remark, for: metadataKey)
+
+            do {
+                try await updateAuthFileNote(remark, for: targetAuthFile, refreshAfterWrite: false)
+            } catch {
+                Log.warning("applyPendingAccountSetupIfNeeded: failed to sync note for \(targetAuthFile.name) - \(error.localizedDescription)")
+            }
         }
 
         if let proxyURL = pending.proxyURL {
@@ -1631,8 +1719,21 @@ final class QuotaViewModel {
         return formatter.date(from: value)
     }
     
-    func startOAuth(for provider: AIProvider, projectId: String? = nil, authMethod: AuthCommand? = nil, remark: String? = nil, proxyURL: String? = nil) async {
-        preparePendingAccountSetup(for: provider, remark: remark, proxyURL: proxyURL)
+    func startOAuth(
+        for provider: AIProvider,
+        projectId: String? = nil,
+        authMethod: AuthCommand? = nil,
+        remark: String? = nil,
+        proxyURL: String? = nil,
+        targetAuthName: String? = nil
+    ) async {
+        errorMessage = nil
+
+        if targetAuthName == nil {
+            preparePendingAccountSetup(for: provider, remark: remark, proxyURL: proxyURL)
+        } else {
+            pendingAccountSetup = nil
+        }
 
         // GitHub Copilot uses Device Code Flow via CLI binary, not Management API
         if provider == .copilot {
@@ -1646,27 +1747,32 @@ final class QuotaViewModel {
             return
         }
 
-        oauthState = OAuthState(provider: provider, status: .waiting)
+        oauthPollingTask?.cancel()
+        oauthPollingTask = nil
+        oauthState = OAuthState(provider: provider, status: .waiting, targetAuthName: targetAuthName)
         
         do {
             let response = try await withManagementClient(operationName: "startOAuth") { client in
-                try await client.getOAuthURL(for: provider, projectId: projectId)
+                try await client.getOAuthURL(for: provider, projectId: projectId, targetAuthName: targetAuthName)
             }
             
             guard response.status == "ok", let urlString = response.url, let state = response.state else {
-                oauthState = OAuthState(provider: provider, status: .error, error: response.error)
+                oauthState = OAuthState(provider: provider, status: .error, error: response.error, targetAuthName: targetAuthName)
                 return
             }
             
             // Store URL for copy/open buttons (don't auto-open browser)
-            oauthState = OAuthState(provider: provider, status: .polling, state: state, authURL: urlString)
-            await pollOAuthStatus(state: state, provider: provider)
+            oauthState = OAuthState(provider: provider, status: .polling, state: state, authURL: urlString, targetAuthName: targetAuthName)
+            oauthPollingTask = Task { @MainActor [weak self] in
+                await self?.pollOAuthStatus(state: state, provider: provider, targetAuthName: targetAuthName)
+            }
             
         } catch {
             if apiClient == nil {
                 clearPendingAccountSetup(for: provider)
             }
-            oauthState = OAuthState(provider: provider, status: .error, error: error.localizedDescription)
+            oauthPollingTask = nil
+            oauthState = OAuthState(provider: provider, status: .error, error: error.localizedDescription, targetAuthName: targetAuthName)
         }
     }
     
@@ -1765,40 +1871,146 @@ final class QuotaViewModel {
         oauthState = OAuthState(provider: .kiro, status: .error, error: "Authentication timeout")
     }
     
-    private func pollOAuthStatus(state: String, provider: AIProvider) async {
+    private func pollOAuthStatus(state: String, provider: AIProvider, targetAuthName: String? = nil) async {
         for _ in 0..<60 {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            do {
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            } catch {
+                oauthPollingTask = nil
+                return
+            }
+
+            if Task.isCancelled {
+                oauthPollingTask = nil
+                return
+            }
             
             do {
                 let response = try await withManagementClient(operationName: "pollOAuthStatus") { client in
                     try await client.pollOAuthStatus(state: state)
                 }
                 
-                switch response.status {
-                case "ok":
+                if response.isSuccess {
                     await refreshData()
                     await applyPendingAccountSetupIfNeeded(for: provider)
-                    oauthState = OAuthState(provider: provider, status: .success)
+                    oauthPollingTask = nil
+                    oauthState = OAuthState(provider: provider, status: .success, targetAuthName: targetAuthName)
                     return
-                case "error":
-                    clearPendingAccountSetup(for: provider)
-                    oauthState = OAuthState(provider: provider, status: .error, error: response.error)
-                    return
-                default:
-                    continue
                 }
+
+                if response.isCancelled {
+                    clearPendingAccountSetup(for: provider)
+                    oauthPollingTask = nil
+                    oauthState = OAuthState(
+                        provider: provider,
+                        status: .cancelled,
+                        error: response.error ?? "Authentication was cancelled",
+                        targetAuthName: targetAuthName
+                    )
+                    return
+                }
+
+                if response.isError {
+                    clearPendingAccountSetup(for: provider)
+                    oauthPollingTask = nil
+                    oauthState = OAuthState(provider: provider, status: .error, error: response.error, targetAuthName: targetAuthName)
+                    return
+                }
+
+                continue
             } catch {
+                if Task.isCancelled {
+                    oauthPollingTask = nil
+                    return
+                }
                 continue
             }
         }
         
+        oauthPollingTask = nil
         clearPendingAccountSetup(for: provider)
-        oauthState = OAuthState(provider: provider, status: .error, error: "OAuth timeout")
+        oauthState = OAuthState(provider: provider, status: .error, error: "OAuth timeout", targetAuthName: targetAuthName)
     }
     
-    func cancelOAuth() {
+    @discardableResult
+    func cancelOAuth() async -> OAuthCancellationResult {
+        guard let oauthState else {
+            pendingAccountSetup = nil
+            oauthPollingTask?.cancel()
+            oauthPollingTask = nil
+            errorMessage = nil
+            return .noActiveSession
+        }
+
+        guard let state = oauthState.state, !state.isEmpty else {
+            pendingAccountSetup = nil
+            oauthPollingTask?.cancel()
+            oauthPollingTask = nil
+            errorMessage = nil
+            self.oauthState = nil
+            return .cancelled
+        }
+
+        do {
+            let response = try await withManagementClient(operationName: "cancelOAuth") { client in
+                try await client.cancelOAuthSession(state: state)
+            }
+
+            guard response.didCancel else {
+                let message = response.error ?? "Failed to cancel authentication. The session may still be active."
+                applyOAuthCancellationFailure(message)
+                return .failed(message)
+            }
+        } catch {
+            let message = error.localizedDescription
+            Log.warning("cancelOAuth: failed to cancel remote oauth session - \(message)")
+            applyOAuthCancellationFailure(message)
+            return .failed(message)
+        }
+
+        oauthPollingTask?.cancel()
+        oauthPollingTask = nil
         pendingAccountSetup = nil
-        oauthState = nil
+        errorMessage = nil
+        self.oauthState = nil
+        return .cancelled
+    }
+
+    private func applyOAuthCancellationFailure(_ message: String) {
+        errorMessage = message
+        guard var oauthState else {
+            return
+        }
+
+        oauthState.error = message
+        self.oauthState = oauthState
+    }
+
+    func submitOAuthCallback(for provider: AIProvider, redirectURL: String) async throws {
+        guard let oauthState else {
+            throw APIError.invalidRequest("No active OAuth session")
+        }
+        guard oauthState.provider == provider else {
+            throw APIError.invalidRequest("OAuth provider does not match the active session")
+        }
+
+        switch oauthState.status {
+        case .waiting, .polling:
+            break
+        case .success, .cancelled, .error:
+            throw APIError.invalidRequest("OAuth session is not waiting for callback submission")
+        }
+
+        _ = try await withManagementClient(operationName: "submitOAuthCallback") { client in
+            try await client.submitOAuthCallback(for: provider, redirectURL: redirectURL)
+        }
+    }
+
+    func fetchOAuthReauthHistory(authName: String, limit: Int = 5) async throws -> [OAuthReauthHistoryEvent] {
+        let response = try await withManagementClient(operationName: "fetchOAuthReauthHistory") { client in
+            try await client.fetchOAuthReauthHistory(authName: authName, limit: limit)
+        }
+        return response.events
     }
     
     func deleteAuthFile(_ file: AuthFile) async {
@@ -1877,6 +2089,110 @@ final class QuotaViewModel {
         }
     }
 
+    func refreshAuthFileStatus(_ file: AuthFile, trigger: String = "manual") async throws -> AuthFileStatusRefreshResponse {
+        let response = try await withManagementClient(operationName: "refreshAuthFileStatus") { client in
+            try await client.refreshAuthFileStatus(name: file.name, trigger: trigger)
+        }
+        if trigger != "auto" {
+            lastSilentAuthStatusRefreshAt[file.name] = Date()
+        }
+        await refreshData()
+        return response
+    }
+
+    private func silentlyRefreshProblemAuthFilesIfNeeded() async {
+        let now = Date()
+        let candidates = authFiles.filter { authFileNeedsSilentStatusRefresh($0, now: now) }
+        guard !candidates.isEmpty else { return }
+
+        candidates.forEach { lastSilentAuthStatusRefreshAt[$0.name] = now }
+        var shouldReloadAuthFiles = false
+
+        for file in candidates {
+            do {
+                let response = try await withManagementClient(operationName: "silentRefreshAuthFileStatus") { client in
+                    try await client.refreshAuthFileStatus(name: file.name, trigger: "auto")
+                }
+                if let refreshedFile = response.file {
+                    mergeAuthFile(refreshedFile)
+                    shouldReloadAuthFiles = true
+                } else if response.isSuccess {
+                    shouldReloadAuthFiles = true
+                }
+            } catch {
+                Log.warning("silentRefreshAuthFileStatus: failed for \(file.name) - \(error.localizedDescription)")
+            }
+        }
+
+        if shouldReloadAuthFiles {
+            await reloadAuthFilesSnapshot()
+        }
+
+        pruneSilentAuthStatusRefreshCache(using: authFiles)
+    }
+
+    private func authFileNeedsSilentStatusRefresh(_ file: AuthFile, now: Date) -> Bool {
+        guard !file.disabled else { return false }
+        guard file.runtimeOnly != true else { return false }
+        guard file.providerType?.supportsOAuthReauthentication == true else { return false }
+
+        if let lastRefreshedAt = lastSilentAuthStatusRefreshAt[file.name],
+           now.timeIntervalSince(lastRefreshedAt) < silentAuthStatusRefreshCooldown {
+            return false
+        }
+
+        if file.unavailable || file.status == "error" {
+            return true
+        }
+
+        if file.status == "cooling" || file.status == "warning" {
+            return true
+        }
+
+        guard let statusMessage = normalizedProblemStatusMessage(for: file) else {
+            return false
+        }
+
+        return !statusMessage.isEmpty
+    }
+
+    private func normalizedProblemStatusMessage(for file: AuthFile) -> String? {
+        file.normalizedProblemStatus
+    }
+
+    private func mergeAuthFile(_ refreshedFile: AuthFile) {
+        guard let index = authFiles.firstIndex(where: { $0.id == refreshedFile.id || $0.name == refreshedFile.name }) else {
+            return
+        }
+
+        authFiles[index] = refreshedFile
+    }
+
+    private func reloadAuthFilesSnapshot() async {
+        do {
+            let fetchedAuthFiles = try await withManagementClient(operationName: "reloadAuthFilesSnapshot") { client in
+                try await client.fetchAuthFiles()
+            }
+            let latestAuthFiles = await syncLocalRemarksToAuthFileNotesIfNeeded(
+                in: fetchedAuthFiles,
+                refreshSnapshotAfterWrite: true,
+                operationName: "reloadAuthFilesSnapshot.syncLocalRemarksToAuthFileNotes"
+            )
+            authFiles = latestAuthFiles
+            syncIdentityPackageState(reconcilingWith: latestAuthFiles)
+            await autoMigrateLegacyIdentityPackagesIfNeeded(from: latestAuthFiles)
+            checkAccountStatusChanges()
+            pruneMenuBarItems()
+        } catch {
+            Log.warning("reloadAuthFilesSnapshot: failed - \(error.localizedDescription)")
+        }
+    }
+
+    private func pruneSilentAuthStatusRefreshCache(using files: [AuthFile]) {
+        let validNames = Set(files.map(\.name))
+        lastSilentAuthStatusRefreshAt = lastSilentAuthStatusRefreshAt.filter { validNames.contains($0.key) }
+    }
+
     func loadAuthFileProxyURL(_ file: AuthFile) async throws -> String? {
         let data = try await withManagementClient(operationName: "loadAuthFileProxyURL") { client in
             try await client.downloadAuthFile(name: file.name)
@@ -1886,6 +2202,47 @@ final class QuotaViewModel {
         }
 
         return await directAuthFileForProxyFallback(named: file.name)?.proxyURL
+    }
+
+    func updateAuthFileNote(
+        _ note: String?,
+        for file: AuthFile,
+        refreshAfterWrite: Bool = true
+    ) async throws {
+        let expectedNote = Self.trimmedNonEmpty(note)
+
+        do {
+            try await withManagementClient(operationName: "updateAuthFileNote") { client in
+                try await client.setAuthFileNote(name: file.name, note: expectedNote)
+            }
+        } catch let APIError.httpError(statusCode) where statusCode == 400 || statusCode == 404 {
+            guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
+                throw APIError.httpError(statusCode)
+            }
+            Log.warning("updateAuthFileNote: management API returned \(statusCode) for \(file.name), falling back to direct auth file update")
+            try await directAuthService.updateNote(filePath: directAuthFile.filePath, note: expectedNote)
+            if refreshAfterWrite {
+                await refreshData()
+                await loadDirectAuthFiles()
+            }
+            return
+        }
+
+        let persistedNote = try await withManagementClient(operationName: "verifyAuthFileNote") { client in
+            let data = try await client.downloadAuthFile(name: file.name)
+            return Self.parseNote(from: data)
+        }
+
+        if persistedNote != expectedNote,
+           let directAuthFile = await directAuthFileForProxyFallback(named: file.name) {
+            Log.warning("updateAuthFileNote: management API did not persist note for \(file.name), falling back to direct auth file update")
+            try await directAuthService.updateNote(filePath: directAuthFile.filePath, note: expectedNote)
+        }
+
+        if refreshAfterWrite {
+            await refreshData()
+            await loadDirectAuthFiles()
+        }
     }
 
     func updateAuthFileProxyURL(_ proxyURL: String?, for file: AuthFile) async throws {
@@ -1922,6 +2279,39 @@ final class QuotaViewModel {
             return Self.readStoredUserAgent(for: directAuthFile.provider, fromFileAt: directAuthFile.filePath)
         }
         return nil
+    }
+
+    func loadAuthFileRecoveredFingerprintProfile(
+        _ file: AuthFile,
+        metadataKey: String
+    ) async throws -> AccountFingerprintProfile? {
+        guard let provider = file.providerType else {
+            return nil
+        }
+
+        let data = try await withManagementClient(operationName: "loadAuthFileRecoveredFingerprintProfile") { client in
+            try await client.downloadAuthFile(name: file.name)
+        }
+
+        return Self.recoveredFingerprintProfile(
+            from: data,
+            provider: provider,
+            metadataKey: metadataKey,
+            generatedAt: Self.parseManagementTimestamp(file.updatedAt)
+                ?? Self.parseManagementTimestamp(file.createdAt)
+                ?? Self.parseManagementTimestamp(file.lastRefresh)
+        )
+    }
+
+    func loadDirectAuthFileRecoveredFingerprintProfile(
+        _ file: DirectAuthFile,
+        metadataKey: String
+    ) async -> AccountFingerprintProfile? {
+        Self.readRecoveredFingerprintProfile(
+            for: file.provider,
+            fromFileAt: file.filePath,
+            metadataKey: metadataKey
+        )
     }
 
     func updateAuthFileUserAgent(_ userAgent: String?, for file: AuthFile) async throws {
@@ -2089,6 +2479,11 @@ final class QuotaViewModel {
         await loadDirectAuthFiles()
     }
 
+    func updateDirectAuthFileNote(_ note: String?, for file: DirectAuthFile) async throws {
+        try await directAuthService.updateNote(filePath: file.filePath, note: note)
+        await loadDirectAuthFiles()
+    }
+
     func deleteDirectAuthFile(_ file: DirectAuthFile) async {
         do {
             try await directAuthService.deleteAuthFile(filePath: file.filePath)
@@ -2108,12 +2503,37 @@ final class QuotaViewModel {
         return trimmedProxyURL.isEmpty ? nil : trimmedProxyURL
     }
 
-    private static func parseUserAgent(from data: Data, provider: AIProvider?) -> String? {
+    private static func parseNote(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawNote = json["note"] as? String else {
+            return nil
+        }
+
+        let trimmedNote = rawNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedNote.isEmpty ? nil : trimmedNote
+    }
+
+    private nonisolated static func parseUserAgent(from data: Data, provider: AIProvider?) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
 
         return parseStoredUserAgent(from: json, provider: provider)
+    }
+
+    private nonisolated static func recoveredFingerprintProfile(
+        from data: Data,
+        provider: AIProvider,
+        metadataKey: String,
+        generatedAt: Date? = nil
+    ) -> AccountFingerprintProfile? {
+        AccountFingerprintProfile.recovered(
+            for: provider,
+            metadataKey: metadataKey,
+            generatedAt: generatedAt,
+            userAgent: parseUserAgent(from: data, provider: provider),
+            headers: parseHeaders(from: data)
+        )
     }
 
     private nonisolated static func readStringField(named key: String, fromFileAt path: String) -> String? {
@@ -2204,6 +2624,23 @@ final class QuotaViewModel {
         return parseStoredHeaders(from: json)
     }
 
+    private nonisolated static func readRecoveredFingerprintProfile(
+        for provider: AIProvider,
+        fromFileAt path: String,
+        metadataKey: String
+    ) -> AccountFingerprintProfile? {
+        guard let data = FileManager.default.contents(atPath: path) else {
+            return nil
+        }
+
+        return recoveredFingerprintProfile(
+            from: data,
+            provider: provider,
+            metadataKey: metadataKey,
+            generatedAt: fileModificationDate(at: path)
+        )
+    }
+
     private nonisolated static func sanitizedHeaders(_ headers: [String: String]) -> [String: String] {
         Dictionary(uniqueKeysWithValues: headers.compactMap { key, value in
             guard let trimmedKey = trimmedNonEmpty(key),
@@ -2216,6 +2653,116 @@ final class QuotaViewModel {
 
     private nonisolated static func normalizedHeaderNames(_ headerNames: [String]) -> Set<String> {
         Set(headerNames.compactMap { trimmedNonEmpty($0)?.lowercased() })
+    }
+
+    private nonisolated static func parseManagementTimestamp(_ value: String?) -> Date? {
+        guard let raw = trimmedNonEmpty(value) else {
+            return nil
+        }
+
+        let formatterWithFractional = ISO8601DateFormatter()
+        formatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatterWithFractional.date(from: raw) {
+            return date
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw)
+    }
+
+    private nonisolated static func fileModificationDate(at path: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date
+    }
+
+    private nonisolated static func migratedIdentityPackageName(displayName: String, provider: AIProvider) -> String {
+        let trimmedDisplayName = trimmedNonEmpty(displayName) ?? provider.displayName
+        return "\(trimmedDisplayName) Identity"
+    }
+
+    private nonisolated static func userAgentProfile(from profile: AccountFingerprintProfile) -> UserAgentProfile {
+        UserAgentProfile(
+            id: UUID(),
+            name: profile.userAgent.family.replacingOccurrences(of: "-", with: " ").capitalized,
+            userAgent: profile.userAgent.value,
+            secChUa: headerValue(named: "Sec-CH-UA", in: profile.upstreamHTTP?.headers),
+            secChUaMobile: headerValue(named: "Sec-CH-UA-Mobile", in: profile.upstreamHTTP?.headers),
+            secChUaPlatform: headerValue(named: "Sec-CH-UA-Platform", in: profile.upstreamHTTP?.headers),
+            acceptLanguage: headerValue(named: "Accept-Language", in: profile.upstreamHTTP?.headers)
+        )
+    }
+
+    private nonisolated static func tlsProfile(from profile: AccountFingerprintProfile) -> TLSFingerprintProfile {
+        TLSFingerprintProfile(
+            id: UUID(),
+            name: profile.tls.preset.replacingOccurrences(of: "-", with: " ").capitalized,
+            mode: tlsMode(for: profile.tls.preset),
+            clientHelloTemplate: nil,
+            alpn: profile.tls.alpn,
+            sniStrategy: trimmedNonEmpty(profile.tls.transport)
+        )
+    }
+
+    private nonisolated static func tlsMode(for preset: String) -> TLSFingerprintMode {
+        switch preset.lowercased() {
+        case "browser-like":
+            return .browserLike
+        case "custom-template":
+            return .customTemplate
+        default:
+            return .inherited
+        }
+    }
+
+    private nonisolated static func headerValue(
+        named targetName: String,
+        in headers: [String: String]?
+    ) -> String? {
+        guard let headers else { return nil }
+        return headers.first { key, _ in
+            key.caseInsensitiveCompare(targetName) == .orderedSame
+        }.flatMap { _, value in
+            trimmedNonEmpty(value)
+        }
+    }
+
+    private nonisolated static func identityPackageProxy(
+        from proxyURL: String?
+    ) -> (config: IdentityProxyConfig, password: String?) {
+        guard let sanitized = trimmedNonEmpty(proxyURL).map(ProxyURLValidator.sanitize),
+              ProxyURLValidator.validate(sanitized).isValid,
+              let components = URLComponents(string: sanitized),
+              let host = trimmedNonEmpty(components.host),
+              let schemeRaw = trimmedNonEmpty(components.scheme)?.lowercased(),
+              let scheme = IdentityProxyScheme(rawValue: schemeRaw) else {
+            return (.empty, nil)
+        }
+
+        let port = components.port ?? defaultPort(for: scheme)
+        let username = components.user?.removingPercentEncoding ?? components.user
+        let password = components.password?.removingPercentEncoding ?? components.password
+
+        return (
+            IdentityProxyConfig(
+                scheme: scheme,
+                host: host,
+                port: port,
+                username: trimmedNonEmpty(username),
+                passwordRef: nil
+            ),
+            trimmedNonEmpty(password)
+        )
+    }
+
+    private nonisolated static func defaultPort(for scheme: IdentityProxyScheme) -> Int {
+        switch scheme {
+        case .http:
+            return 80
+        case .https:
+            return 443
+        case .socks5:
+            return 1080
+        }
     }
 
     private nonisolated static func normalizedHeaders(_ headers: [String: String]) -> [String: String] {
@@ -2258,6 +2805,70 @@ final class QuotaViewModel {
         guard let value else { return nil }
         let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedValue.isEmpty ? nil : trimmedValue
+    }
+
+    private nonisolated static func combinedLegacyIdentityPackageNote(
+        remark: String?,
+        authNote: String?
+    ) -> String? {
+        let parts = [trimmedNonEmpty(remark), trimmedNonEmpty(authNote)].compactMap { $0 }
+        guard !parts.isEmpty else { return nil }
+
+        var orderedUniqueParts: [String] = []
+        for part in parts where !orderedUniqueParts.contains(part) {
+            orderedUniqueParts.append(part)
+        }
+        return orderedUniqueParts.joined(separator: "\n\n")
+    }
+
+    private func desiredRemarkNote(for authFile: AuthFile) -> String? {
+        let metadataKey = accountMetadataKey(for: authFile)
+        return accountMetadataStore.remark(for: metadataKey)
+            ?? legacyMetadataFallbackUserDefaults().flatMap { AccountMetadataStore.remark(for: metadataKey, in: $0) }
+    }
+
+    @discardableResult
+    private func syncLocalRemarksToAuthFileNotesIfNeeded(
+        in files: [AuthFile],
+        limitedToMetadataKeys: Set<String>? = nil,
+        refreshSnapshotAfterWrite: Bool,
+        operationName: String
+    ) async -> [AuthFile] {
+        guard !files.isEmpty else { return files }
+
+        var didWrite = false
+
+        for file in files {
+            let metadataKey = accountMetadataKey(for: file)
+            if let limitedToMetadataKeys, !limitedToMetadataKeys.contains(metadataKey) {
+                continue
+            }
+
+            guard let desiredNote = desiredRemarkNote(for: file),
+                  desiredNote != Self.trimmedNonEmpty(file.note) else {
+                continue
+            }
+
+            do {
+                try await updateAuthFileNote(desiredNote, for: file, refreshAfterWrite: false)
+                didWrite = true
+            } catch {
+                Log.warning("\(operationName): failed to sync note for \(file.name) - \(error.localizedDescription)")
+            }
+        }
+
+        guard didWrite, refreshSnapshotAfterWrite else { return files }
+
+        do {
+            let latestAuthFiles = try await withManagementClient(operationName: operationName + ".reload") { client in
+                try await client.fetchAuthFiles()
+            }
+            authFiles = latestAuthFiles
+            return latestAuthFiles
+        } catch {
+            Log.warning("\(operationName): failed to reload auth files after note sync - \(error.localizedDescription)")
+            return files
+        }
     }
 
     private func directAuthFileForProxyFallback(named name: String) async -> DirectAuthFile? {
@@ -2314,6 +2925,92 @@ final class QuotaViewModel {
 
         identityPackages = identityPackageService.sortedPackages
         identityBindings = identityPackageService.bindings
+    }
+
+    private func autoMigrateLegacyIdentityPackagesIfNeeded(from authFiles: [AuthFile]) async {
+        guard identityPackageService.needsLegacyAccountMigration else { return }
+        guard !authFiles.isEmpty else { return }
+        _ = await migrateLegacyIdentityPackages(from: authFiles, force: false)
+    }
+
+    private func migrateLegacyIdentityPackages(
+        from authFiles: [AuthFile],
+        force: Bool
+    ) async -> IdentityPackageMigrationResult {
+        guard force || identityPackageService.needsLegacyAccountMigration else {
+            return IdentityPackageMigrationResult(migratedCount: 0, skippedCount: 0)
+        }
+        guard !authFiles.isEmpty else {
+            return IdentityPackageMigrationResult(migratedCount: 0, skippedCount: 0)
+        }
+
+        let seeds = await buildLegacyIdentityPackageSeeds(from: authFiles)
+        let result = identityPackageService.migrateLegacyPackages(from: seeds)
+        syncIdentityPackageState(reconcilingWith: authFiles)
+        return result
+    }
+
+    private func buildLegacyIdentityPackageSeeds(from authFiles: [AuthFile]) async -> [LegacyIdentityPackageSeed] {
+        var seeds: [LegacyIdentityPackageSeed] = []
+        let fallbackDefaults = legacyMetadataFallbackUserDefaults()
+
+        for authFile in authFiles {
+            guard let provider = authFile.providerType,
+                  let authIndex = Self.trimmedNonEmpty(authFile.authIndex) else {
+                continue
+            }
+
+            if identityPackageService.binding(for: authFile.id) != nil || identityPackageService.package(for: authFile.id) != nil {
+                continue
+            }
+
+            let metadataKey = accountMetadataKey(for: authFile)
+            let remark = accountMetadataStore.remark(for: metadataKey)
+                ?? fallbackDefaults.flatMap { AccountMetadataStore.remark(for: metadataKey, in: $0) }
+            let authNote = Self.trimmedNonEmpty(authFile.note)
+            let combinedNote = Self.combinedLegacyIdentityPackageNote(remark: remark, authNote: authNote)
+            let fingerprintProfile = accountMetadataStore.fingerprintProfile(for: metadataKey)
+                ?? fallbackDefaults.flatMap { AccountMetadataStore.fingerprintProfile(for: metadataKey, in: $0) }
+            let proxyURL = try? await loadAuthFileProxyURL(authFile)
+            let (proxyConfig, proxyPassword) = Self.identityPackageProxy(from: proxyURL)
+
+            let effectiveFingerprint = fingerprintProfile ?? AccountFingerprintProfile.generate(for: provider, metadataKey: metadataKey)
+            let accountKey = authFile.quotaLookupKey.isEmpty ? authFile.name : authFile.quotaLookupKey
+            let displayName = Self.trimmedNonEmpty(authFile.label)
+                ?? Self.trimmedNonEmpty(authFile.email)
+                ?? Self.trimmedNonEmpty(authFile.account)
+                ?? authFile.name
+
+            seeds.append(
+                LegacyIdentityPackageSeed(
+                    authFileId: authFile.id,
+                    authIndex: authIndex,
+                    provider: provider,
+                    accountKey: accountKey,
+                    displayName: displayName,
+                    packageName: Self.migratedIdentityPackageName(displayName: displayName, provider: provider),
+                    note: combinedNote,
+                    proxy: proxyConfig,
+                    proxyPassword: proxyPassword,
+                    uaProfile: Self.userAgentProfile(from: effectiveFingerprint),
+                    tlsProfile: Self.tlsProfile(from: effectiveFingerprint)
+                )
+            )
+        }
+
+        return seeds
+    }
+
+    private func accountMetadataKey(for authFile: AuthFile) -> String {
+        guard let provider = authFile.providerType else {
+            return AccountMetadataStore.authFileKey(provider: .gemini, fileName: authFile.name)
+        }
+        return AccountMetadataStore.authFileKey(provider: provider, fileName: authFile.name)
+    }
+
+    private func legacyMetadataFallbackUserDefaults() -> UserDefaults? {
+        guard !RuntimeProfile.isPrimaryApp else { return nil }
+        return UserDefaults(suiteName: RuntimeProfile.primaryBundleIdentifier)
     }
 
     func importVertexServiceAccount(url: URL) async {
@@ -2612,8 +3309,47 @@ struct OAuthState {
     var state: String?
     var error: String?
     var authURL: String?
-    
-    enum OAuthStatus {
-        case waiting, polling, success, error
+    var targetAuthName: String?
+
+    init(
+        provider: AIProvider,
+        status: OAuthStatus,
+        state: String? = nil,
+        error: String? = nil,
+        authURL: String? = nil,
+        targetAuthName: String? = nil
+    ) {
+        self.provider = provider
+        self.status = status
+        self.state = state
+        self.error = error
+        self.authURL = authURL
+        self.targetAuthName = targetAuthName
+    }
+
+    enum OAuthStatus: Equatable {
+        case waiting, polling, success, cancelled, error
+    }
+}
+
+enum OAuthCancellationResult {
+    case noActiveSession
+    case cancelled
+    case failed(String)
+
+    var didCancel: Bool {
+        switch self {
+        case .noActiveSession, .cancelled:
+            return true
+        case .failed:
+            return false
+        }
+    }
+
+    var errorMessage: String? {
+        guard case .failed(let message) = self else {
+            return nil
+        }
+        return message
     }
 }

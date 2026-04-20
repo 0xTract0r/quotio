@@ -70,6 +70,14 @@ struct DashboardScreen: View {
     private var groupedDirectAuthFiles: [AIProvider: [DirectAuthFile]] {
         Dictionary(grouping: viewModel.directAuthFiles) { $0.provider }
     }
+
+    private var recentUsageDays: [UsageDaySnapshot] {
+        viewModel.usageStats?.usage?.recentUsageDays ?? []
+    }
+
+    private var shouldShowRecentUsage: Bool {
+        !recentUsageDays.isEmpty
+    }
     
     var body: some View {
         ScrollView {
@@ -114,7 +122,6 @@ struct DashboardScreen: View {
             OAuthSheet(provider: provider, projectId: $projectId) {
                 selectedProvider = nil
                 projectId = ""
-                viewModel.oauthState = nil
                 Task { await viewModel.refreshData() }
             }
             .environment(viewModel)
@@ -155,6 +162,9 @@ struct DashboardScreen: View {
             }
             
             kpiSection
+            if shouldShowRecentUsage {
+                recentUsageSection
+            }
             providerSection
             endpointSection
             tunnelSection
@@ -188,6 +198,9 @@ struct DashboardScreen: View {
             case .connected:
                 // Connected - show full dashboard similar to local mode
                 kpiSection
+                if shouldShowRecentUsage {
+                    recentUsageSection
+                }
                 providerSection
                 remoteEndpointSection
             case .connecting:
@@ -599,8 +612,13 @@ struct DashboardScreen: View {
             if provider == .vertex {
                 isImporterPresented = true
             } else {
-                viewModel.oauthState = nil
-                selectedProvider = provider
+                Task {
+                    let result = await viewModel.cancelOAuth()
+                    guard result.didCancel else {
+                        return
+                    }
+                    selectedProvider = provider
+                }
             }
         }
     }
@@ -650,6 +668,69 @@ struct DashboardScreen: View {
                 icon: "checkmark.circle.fill",
                 color: .orange
             )
+
+            KPICard(
+                title: "dashboard.cost".localized(),
+                value: usageCostValue,
+                subtitle: usageCostSubtitle,
+                icon: "dollarsign.circle.fill",
+                color: .yellow
+            )
+        }
+    }
+
+    private var usageCostValue: String {
+        guard let totalCost = viewModel.usageStats?.usage?.totalCostUSD else {
+            return "--"
+        }
+        return totalCost.formattedUSDCompact
+    }
+
+    private var usageCostSubtitle: String {
+        guard let usage = viewModel.usageStats?.usage else {
+            return "dashboard.total".localized()
+        }
+        if usage.hasEstimatedCost {
+            return "dashboard.estimated".localized()
+        }
+        return "dashboard.total".localized()
+    }
+
+    private var recentUsageSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(recentUsageDays) { day in
+                    HStack(spacing: 12) {
+                        Text(day.shortLabel)
+                            .font(.system(.body, design: .rounded).weight(.semibold))
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .leading)
+
+                        usageDayMetric(systemImage: "arrow.up.arrow.down", value: "\(day.requests)")
+                        usageDayMetric(systemImage: "text.word.spacing", value: day.tokens.formattedCompact)
+
+                        if let costUSD = day.costUSD {
+                            usageDayMetric(systemImage: "dollarsign.circle", value: costUSD.formattedUSDCompact)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        } label: {
+            Label("dashboard.recentUsage".localized(), systemImage: "calendar")
+                .font(.headline)
+        }
+    }
+
+    private func usageDayMetric(systemImage: String, value: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline)
+                .monospacedDigit()
         }
     }
     
@@ -668,8 +749,13 @@ struct DashboardScreen: View {
                             if provider == .vertex {
                                 isImporterPresented = true
                             } else {
-                                viewModel.oauthState = nil
-                                selectedProvider = provider
+                                Task {
+                                    let result = await viewModel.cancelOAuth()
+                                    guard result.didCancel else {
+                                        return
+                                    }
+                                    selectedProvider = provider
+                                }
                             }
                         } label: {
                             Label(provider.displayName, systemImage: "plus.circle")

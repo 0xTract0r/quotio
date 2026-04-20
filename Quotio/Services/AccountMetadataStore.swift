@@ -215,17 +215,201 @@ struct AccountFingerprintProfile: Codable, Equatable, Sendable {
             upstreamHTTP: upstreamHTTP
         )
     }
+
+    static func recovered(
+        for provider: AIProvider,
+        metadataKey: String,
+        generatedAt: Date? = nil,
+        userAgent: String?,
+        headers: [String: String]
+    ) -> AccountFingerprintProfile? {
+        let sanitizedHeaders = sanitizedHeaders(headers)
+        let resolvedUserAgent = trimmedNonEmpty(userAgent)
+            ?? headerValue(named: "User-Agent", in: sanitizedHeaders)
+
+        guard resolvedUserAgent != nil || !sanitizedHeaders.isEmpty else {
+            return nil
+        }
+
+        let base = generate(for: provider, metadataKey: metadataKey)
+        let recoveredHeaders = recoveredManagedHeaders(
+            from: sanitizedHeaders,
+            provider: provider,
+            resolvedUserAgent: resolvedUserAgent,
+            fallback: base.upstreamHTTP?.headers ?? [:]
+        )
+        let userAgentNotes = mergedNotes(
+            ["从当前 auth 文件恢复，便于在本地指纹档案缺失时继续展示与编辑。"],
+            base.userAgent.notes
+        )
+        let resolvedUserAgentProfile = AccountUserAgentProfile(
+            family: base.userAgent.family,
+            value: resolvedUserAgent ?? base.userAgent.value,
+            platform: base.userAgent.platform,
+            appVersion: inferredAppVersion(
+                for: provider,
+                userAgent: resolvedUserAgent,
+                headers: recoveredHeaders,
+                fallback: base.userAgent.appVersion
+            ),
+            notes: userAgentNotes
+        )
+
+        let resolvedUpstreamHTTP: AccountUpstreamHeaderProfile?
+        if let upstreamHTTP = base.upstreamHTTP, !recoveredHeaders.isEmpty {
+            resolvedUpstreamHTTP = AccountUpstreamHeaderProfile(
+                headers: recoveredHeaders,
+                notes: mergedNotes(
+                    ["以下内容从当前 auth 文件恢复，未依赖本地指纹档案。"],
+                    upstreamHTTP.notes
+                )
+            )
+        } else if !recoveredHeaders.isEmpty {
+            resolvedUpstreamHTTP = AccountUpstreamHeaderProfile(
+                headers: recoveredHeaders,
+                notes: ["以下内容从当前 auth 文件恢复，未依赖本地指纹档案。"]
+            )
+        } else {
+            resolvedUpstreamHTTP = base.upstreamHTTP
+        }
+
+        return AccountFingerprintProfile(
+            version: base.version,
+            generatedAt: generatedAt ?? base.generatedAt,
+            userAgent: resolvedUserAgentProfile,
+            tls: base.tls,
+            upstreamHTTP: resolvedUpstreamHTTP
+        )
+    }
+
+    private static func recoveredManagedHeaders(
+        from headers: [String: String],
+        provider: AIProvider,
+        resolvedUserAgent: String?,
+        fallback: [String: String]
+    ) -> [String: String] {
+        let managedHeaderNames = Set(managedHeaderNames(for: provider).map { $0.lowercased() })
+        guard !managedHeaderNames.isEmpty else {
+            return [:]
+        }
+
+        var merged = sanitizedHeaders(fallback)
+        for key in merged.keys where managedHeaderNames.contains(key.lowercased()) {
+            merged.removeValue(forKey: key)
+        }
+
+        for (key, value) in headers where managedHeaderNames.contains(key.lowercased()) {
+            merged[key] = value
+        }
+
+        if let resolvedUserAgent,
+           managedHeaderNames.contains("user-agent") {
+            merged["User-Agent"] = resolvedUserAgent
+        }
+
+        return sanitizedHeaders(merged)
+    }
+
+    private static func inferredAppVersion(
+        for provider: AIProvider,
+        userAgent: String?,
+        headers: [String: String],
+        fallback: String
+    ) -> String {
+        if provider == .codex,
+           let version = headerValue(named: "Version", in: headers) {
+            return version
+        }
+
+        guard let userAgent = trimmedNonEmpty(userAgent) else {
+            return fallback
+        }
+
+        let patterns: [String]
+        switch provider {
+        case .claude:
+            patterns = ["claude-cli/([0-9][0-9A-Za-z._-]*)"]
+        case .codex:
+            patterns = ["codex_cli_rs/([0-9][0-9A-Za-z._-]*)", "vscode/([0-9][0-9A-Za-z._-]*)"]
+        case .antigravity:
+            patterns = ["antigravity/([0-9][0-9A-Za-z._-]*)"]
+        default:
+            patterns = ["([0-9]+(?:\\.[0-9A-Za-z_-]+)+)"]
+        }
+
+        for pattern in patterns {
+            if let match = firstMatch(for: pattern, in: userAgent) {
+                return match
+            }
+        }
+
+        return fallback
+    }
+
+    private static func firstMatch(for pattern: String, in value: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        guard let match = regex.firstMatch(in: value, range: range),
+              match.numberOfRanges > 1,
+              let captureRange = Range(match.range(at: 1), in: value) else {
+            return nil
+        }
+        return String(value[captureRange])
+    }
+
+    private static func headerValue(named targetName: String, in headers: [String: String]) -> String? {
+        headers.first { key, _ in
+            key.caseInsensitiveCompare(targetName) == .orderedSame
+        }.flatMap { _, value in
+            trimmedNonEmpty(value)
+        }
+    }
+
+    private static func mergedNotes(_ primary: [String], _ secondary: [String]) -> [String] {
+        var merged: [String] = []
+        for note in (primary + secondary) {
+            guard let normalized = trimmedNonEmpty(note),
+                  !merged.contains(normalized) else {
+                continue
+            }
+            merged.append(normalized)
+        }
+        return merged
+    }
+
+    private static func sanitizedHeaders(_ headers: [String: String]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: headers.compactMap { key, value in
+            guard let trimmedKey = trimmedNonEmpty(key),
+                  let trimmedValue = trimmedNonEmpty(value) else {
+                return nil
+            }
+            return (trimmedKey, trimmedValue)
+        })
+    }
+
+    private static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
 }
 
 @MainActor
 @Observable
 final class AccountMetadataStore {
     static let shared = AccountMetadataStore()
+    nonisolated static let remarksStorageKey = "providers.accountRemarks"
+    nonisolated static let orderStorageKey = "providers.accountOrder"
+    nonisolated static let fingerprintStorageKey = "providers.accountFingerprints"
 
     @ObservationIgnored private let userDefaults = UserDefaults.standard
-    @ObservationIgnored private let storageKey = "providers.accountRemarks"
-    @ObservationIgnored private let orderStorageKey = "providers.accountOrder"
-    @ObservationIgnored private let fingerprintStorageKey = "providers.accountFingerprints"
+    @ObservationIgnored private let storageKey = AccountMetadataStore.remarksStorageKey
+    @ObservationIgnored private let orderStorageKey = AccountMetadataStore.orderStorageKey
+    @ObservationIgnored private let fingerprintStorageKey = AccountMetadataStore.fingerprintStorageKey
 
     private var remarksByKey: [String: String]
     private var accountOrderByProvider: [String: [String]]
@@ -258,6 +442,11 @@ final class AccountMetadataStore {
         Self.normalize(remarksByKey[key])
     }
 
+    nonisolated static func remark(for key: String, in userDefaults: UserDefaults) -> String? {
+        let remarks = userDefaults.dictionary(forKey: remarksStorageKey) as? [String: String] ?? [:]
+        return normalize(remarks[key])
+    }
+
     func setRemark(_ remark: String?, for key: String) {
         let normalized = Self.normalize(remark)
         let current = remarksByKey[key]
@@ -284,6 +473,14 @@ final class AccountMetadataStore {
 
     func fingerprintProfile(for key: String) -> AccountFingerprintProfile? {
         fingerprintsByKey[key]
+    }
+
+    nonisolated static func fingerprintProfile(for key: String, in userDefaults: UserDefaults) -> AccountFingerprintProfile? {
+        guard let data = userDefaults.data(forKey: fingerprintStorageKey),
+              let decoded = try? JSONDecoder().decode([String: AccountFingerprintProfile].self, from: data) else {
+            return nil
+        }
+        return decoded[key]
     }
 
     func setFingerprintProfile(_ profile: AccountFingerprintProfile?, for key: String) {

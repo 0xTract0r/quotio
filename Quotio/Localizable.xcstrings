@@ -4694,6 +4694,62 @@
         }
       }
     },
+    "dashboard.cost" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cost"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Coût"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Chi phí"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "费用"
+          }
+        }
+      }
+    },
+    "dashboard.estimated" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "estimated"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "estimé"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "ước tính"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "估算"
+          }
+        }
+      }
+    },
     "dashboard.failed" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5038,6 +5094,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "就绪"
+          }
+        }
+      }
+    },
+    "dashboard.recentUsage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Recent Usage"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Utilisation récente"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sử dụng gần đây"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "最近使用"
           }
         }
       }
@@ -10230,6 +10314,238 @@
         }
       }
     },
+    "oauth.callbackHint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If the OAuth redirect opened on another device or browser, paste the localhost callback URL here and submit it."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si la redirection OAuth s'est ouverte sur un autre appareil ou navigateur, collez ici l'URL localhost de rappel et envoyez-la."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nếu bước chuyển hướng OAuth mở trên thiết bị hoặc trình duyệt khác, hãy dán URL callback localhost vào đây rồi gửi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 OAuth 跳转发生在另一台设备或浏览器里，可将 localhost 回调 URL 粘贴到这里并提交。"
+          }
+        }
+      }
+    },
+    "oauth.callbackInvalidFormat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste a valid callback URL or query string."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collez une URL de rappel ou une chaîne de requête valide."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hãy dán URL callback hoặc chuỗi truy vấn hợp lệ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请粘贴有效的回调 URL 或查询字符串。"
+          }
+        }
+      }
+    },
+    "oauth.callbackMissingCode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Callback URL must include a code or error parameter."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'URL de rappel doit inclure un paramètre code ou error."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL callback phải chứa tham số code hoặc error."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回调 URL 必须包含 code 或 error 参数。"
+          }
+        }
+      }
+    },
+    "oauth.callbackMissingState" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Callback URL must include the state parameter."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'URL de rappel doit inclure le paramètre state."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL callback phải chứa tham số state."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回调 URL 必须包含 state 参数。"
+          }
+        }
+      }
+    },
+    "oauth.callbackPlaceholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://localhost:1455/auth/callback?code=...&state=..."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://localhost:1455/auth/callback?code=...&state=..."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://localhost:1455/auth/callback?code=...&state=..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://localhost:1455/auth/callback?code=...&state=..."
+          }
+        }
+      }
+    },
+    "oauth.callbackStateMismatch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Callback URL state does not match the current authentication session."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le state de l'URL de rappel ne correspond pas à la session d'authentification actuelle."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "State trong URL callback không khớp với phiên xác thực hiện tại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回调 URL 的 state 与当前认证会话不匹配。"
+          }
+        }
+      }
+    },
+    "oauth.callbackSubmitted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Callback submitted. Waiting for authentication to finish..."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rappel envoyé. En attente de la fin de l'authentification..."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đã gửi callback. Đang chờ xác thực hoàn tất..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回调已提交，等待认证完成..."
+          }
+        }
+      }
+    },
+    "oauth.callbackTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste callback URL"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coller l'URL de rappel"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dán URL callback"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴回调 URL"
+          }
+        }
+      }
+    },
     "oauth.closingSheet" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10545,6 +10861,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接成功！"
+          }
+        }
+      }
+    },
+    "oauth.submitCallback" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submit Callback"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoyer le rappel"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gửi callback"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交回调"
+          }
+        }
+      }
+    },
+    "oauth.submittingCallback" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submitting Callback..."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoi du rappel..."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang gửi callback..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在提交回调..."
           }
         }
       }
