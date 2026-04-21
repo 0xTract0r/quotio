@@ -1,6 +1,6 @@
 # CLIProxyAPIPlus 子模块维护说明
 
-最后更新：2026-04-14
+最后更新：2026-04-21
 
 ## 当前方案
 
@@ -9,15 +9,20 @@ Quotio 现在通过 Git submodule 引用维护中的 `CLIProxyAPIPlus`：
 - 子模块路径：`third_party/CLIProxyAPIPlus`
 - 子模块远端：`git@github.com:0xTract0r/CLIProxyAPIPlus.git`
 - 官方上游：`git@github.com:router-for-me/CLIProxyAPIPlus.git`
-- 当前对齐基线：`upstream/main`
+- 当前对齐基线：`0xTract0r/CLIProxyAPIPlus` 的 `main`，按需重放最小上游修复
 
-当前收敛后的策略不是继续长期维护一个大幅落后的 Quotio fork，而是：
+当前收敛后的策略不是每次模型编号变化都全量合并官方 `upstream/main`，而是：
 
-- 先以官方 `CLIProxyAPIPlus` 的 `upstream/main` 为基线
-- 只在确有必要时重放仍未被官方覆盖的 Quotio 定制补丁
+- 默认保持 Quotio 子模块 fork 主线可直接抓取父仓库记录的 gitlink
+- 对模型注册这类小缺口，优先把最小补丁重放到 fork `main`
+- 全量同步官方 `upstream/main` 必须作为单独任务审计冲突、运行时风险和本地定制补丁
 
-截至本次收敛，auth file `headers` 相关能力已经被官方主线吸收；当前仍保留的本地补丁仅剩：
+截至 Claude Opus 4.7 热修，本次没有把官方 `upstream/main` 的其它几百个提交合入子模块 fork 主线；只保留当前 fork 主线并追加 4.7 模型注册与 Claude 前缀兜底。
 
+当前 fork 主线仍保留 Quotio 侧运行时相关补丁，包括：
+
+- `feat(auth): support account metadata headers`
+- `fix(claude): apply saved managed headers upstream`
 - `fix(management): back off release checks on rate limits`
 
 `QUOTIO_TEST_CA_FILE` 属于历史定制能力；如果后续仍需要继续维护，必须先重新确认官方主线是否已具备等价能力，再决定是否重放。
@@ -75,8 +80,8 @@ build/CLIProxyAPIPlus/CLIProxyAPI
 
 1. 新开实现 worktree，不要在文档分支或 `master` 上直接开发
 2. 初始化子模块：`git submodule update --init --recursive third_party/CLIProxyAPIPlus`
-3. 先抓取官方上游并确认当前子模块相对 `upstream/main` 的领先/落后情况
-4. 优先从 `upstream/main` 开分支，不要直接在旧 Quotio 补丁分支上继续堆改动
+3. 先抓取 fork 与官方上游，确认当前子模块相对 `origin/main` 和 `upstream/main` 的领先/落后情况
+4. 小热修优先从 fork `origin/main` 开分支，只重放必要补丁；全量上游同步必须单独审计
 5. 进入 `third_party/CLIProxyAPIPlus` 子模块开发
 6. 如补丁仍需长期保留，再决定是否推送到 `0xTract0r/CLIProxyAPIPlus`
 7. 回到 Quotio 主仓库更新 submodule 指针
