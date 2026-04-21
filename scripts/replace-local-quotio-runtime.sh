@@ -29,7 +29,9 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-45}"
 FORCE_KILL="${FORCE_KILL:-0}"
 VERIFY_HEALTH="${VERIFY_HEALTH:-1}"
 VERIFY_MANAGEMENT="${VERIFY_MANAGEMENT:-1}"
-MANAGEMENT_EXPECT_TOKENS="${MANAGEMENT_EXPECT_TOKENS:-}"
+MANAGEMENT_EXPECT_TOKENS="${MANAGEMENT_EXPECT_TOKENS:-reauth_copy_link}"
+MANAGEMENT_FORBID_TOKENS="${MANAGEMENT_FORBID_TOKENS:-reauth_open_link,onOpenReauthLink,openReauthLink}"
+MANAGEMENT_RECHECK_DELAY="${MANAGEMENT_RECHECK_DELAY:-15}"
 REPLACE_CORE="${REPLACE_CORE:-auto}"
 
 usage() {
@@ -51,7 +53,13 @@ Environment:
   VERIFY_HEALTH=0|1      Curl internal /healthz after relaunch. Default: 1
   VERIFY_MANAGEMENT=0|1  Verify runtime management.html hash after replacement. Default: 1
   MANAGEMENT_EXPECT_TOKENS=a,b
-                        Optional comma-separated tokens that must appear in served /management.html
+                        Comma-separated tokens that must appear in served /management.html.
+                        Default: reauth_copy_link
+  MANAGEMENT_FORBID_TOKENS=a,b
+                        Comma-separated tokens that must not appear in served /management.html.
+                        Default: reauth_open_link,onOpenReauthLink,openReauthLink
+  MANAGEMENT_RECHECK_DELAY=<sec>
+                        Delay before rechecking served /management.html after relaunch. Default: 15
 
 Notes:
   - build-staging prepares app/core plus static/management.html under build/local-replace.
@@ -265,6 +273,50 @@ wait_for_port_state() {
   done
 }
 
+verify_management_tokens() {
+  local html_path="$1"
+  local label="$2"
+
+  python3 - "$html_path" "$MANAGEMENT_EXPECT_TOKENS" "$MANAGEMENT_FORBID_TOKENS" "$label" <<'PY'
+import sys
+from pathlib import Path
+
+html_path, expected_raw, forbidden_raw, label = sys.argv[1:5]
+text = Path(html_path).read_text(encoding="utf-8", errors="ignore")
+expected = [token.strip() for token in expected_raw.split(",") if token.strip()]
+forbidden = [token.strip() for token in forbidden_raw.split(",") if token.strip()]
+missing = [token for token in expected if token not in text]
+present = [token for token in forbidden if token in text]
+if missing:
+    raise SystemExit(f"{label} management.html missing required token(s): " + ", ".join(missing))
+if present:
+    raise SystemExit(f"{label} management.html contains forbidden token(s): " + ", ".join(present))
+print(f"{label}_required_tokens_ok=" + (",".join(expected) if expected else "<none>"))
+print(f"{label}_forbidden_tokens_absent=" + (",".join(forbidden) if forbidden else "<none>"))
+PY
+}
+
+verify_served_management_asset() {
+  local label="$1"
+  local source_management_hash="$2"
+  local served_management_path=""
+  local served_management_hash=""
+
+  served_management_path="$(mktemp "${TMPDIR:-/tmp}/quotio-management-served.XXXXXX.html")"
+  curl -fsS "http://127.0.0.1:${TARGET_CORE_PORT}/management.html" -o "$served_management_path"
+  served_management_hash="$(hash_file "$served_management_path")"
+
+  if [[ "$source_management_hash" != "$served_management_hash" ]]; then
+    rm -f "$served_management_path"
+    echo "Served management asset hash mismatch after replacement (${label}): source=${source_management_hash} served=${served_management_hash}" >&2
+    exit 1
+  fi
+
+  verify_management_tokens "$served_management_path" "served_${label}"
+  rm -f "$served_management_path"
+  echo "[verify] Served management asset matches staged source (${label})"
+}
+
 verify_management_asset() {
   local source_management_hash=""
   local target_management_hash=""
@@ -280,24 +332,28 @@ verify_management_asset() {
     exit 1
   fi
 
-  if [[ -z "$MANAGEMENT_EXPECT_TOKENS" ]]; then
+  verify_management_tokens "$TARGET_MANAGEMENT_PATH" "disk"
+
+  if [[ "$RELAUNCH" != "1" ]]; then
     echo "[verify] Management asset hash matches staged source"
+    echo "[verify] Skipping served management check because RELAUNCH=${RELAUNCH}"
     return 0
   fi
 
-  python3 - "$TARGET_CORE_PORT" "$MANAGEMENT_EXPECT_TOKENS" <<'PY'
-import sys
-import urllib.request
+  verify_served_management_asset "initial" "$source_management_hash"
 
-port = sys.argv[1]
-tokens = [token.strip() for token in sys.argv[2].split(",") if token.strip()]
-served = urllib.request.urlopen(f"http://127.0.0.1:{port}/management.html", timeout=10).read().decode("utf-8", "ignore")
-missing = [token for token in tokens if token not in served]
-if missing:
-    raise SystemExit("served management.html missing token(s): " + ", ".join(missing))
-print("served_tokens_ok=" + ",".join(tokens))
-PY
-  echo "[verify] Management page serves expected tokens: ${MANAGEMENT_EXPECT_TOKENS}"
+  if ! [[ "$MANAGEMENT_RECHECK_DELAY" =~ ^[0-9]+$ ]]; then
+    echo "MANAGEMENT_RECHECK_DELAY must be a non-negative integer: ${MANAGEMENT_RECHECK_DELAY}" >&2
+    exit 1
+  fi
+
+  if (( MANAGEMENT_RECHECK_DELAY > 0 )); then
+    echo "[verify] Waiting ${MANAGEMENT_RECHECK_DELAY}s before rechecking served management asset"
+    sleep "$MANAGEMENT_RECHECK_DELAY"
+    verify_served_management_asset "delayed" "$source_management_hash"
+  fi
+
+  echo "[verify] Management asset hash and tokens match staged source"
 }
 
 stop_pid() {
@@ -584,6 +640,8 @@ show_plan() {
   echo "  verify_health    : ${VERIFY_HEALTH}"
   echo "  verify_management: ${VERIFY_MANAGEMENT}"
   echo "  mgmt_expect      : ${MANAGEMENT_EXPECT_TOKENS:-<none>}"
+  echo "  mgmt_forbid      : ${MANAGEMENT_FORBID_TOKENS:-<none>}"
+  echo "  mgmt_recheck_sec : ${MANAGEMENT_RECHECK_DELAY}"
 }
 
 apply_replacement() {

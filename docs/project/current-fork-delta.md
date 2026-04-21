@@ -85,6 +85,7 @@
 - Codex OAuth auth 在本地正式 / 本地 dev / 远端 core 默认是独立副本；同一账号若多运行面并行 refresh，旧副本后续会出现 `invalid_grant` / `refresh_token_reused`。当前运维约束是：默认不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
 - 本地 `Quotio` / `Quotio Dev` 的 runtime 管理页真源是运行目录下的 `static/management.html`；本地替换脚本现在会把 `Cli-Proxy-API-Management-Center/dist/index.html` 一并 stage/replace，不能只看 app/core 是否更新
 - 本地 runtime 若要保留这套 fork 里的管理页改动，`config.yaml` 的 `remote-management.disable-auto-update-panel` 必须为 `true`；否则 core 启动后会从官方 `router-for-me/Cli-Proxy-API-Management-Center` release 重新拉取 `management.html`，把本地刚替换进去的页面覆盖回旧版
+- `scripts/replace-local-quotio-runtime.sh` 的 management 验收不能只看磁盘文件 hash；当前脚本默认还会校验 served `/management.html` 与 staged hash 一致、重启后延迟 15 秒复查一次，并用 token 门禁卡住回归：默认必须出现 `reauth_copy_link`，默认不得出现 `reauth_open_link` / `onOpenReauthLink` / `openReauthLink`
 - 本地正式 / dev runtime 的替换现在会把备份清单写到 `~/Library/Application Support/Quotio*/backups/local-runtime-replace/replace.<target>.<timestamp>.txt`，并支持用 `scripts/rollback-local-quotio-runtime.sh` 按最近一次或指定 manifest 一键回滚 app/core/management
 - usage 统计快照会持久化到 `~/Library/Application Support/Quotio*/.usage-statistics.json`；proxy core 启动时会自动 merge 恢复，所以“重启后历史没了”优先先排查宿主 UI 是否没有把 `requests_by_day` / `tokens_by_day` / `cost_by_day` 展示出来，而不是先假设 core 没落盘
 - usage 统计现在开始带官方价格估算的 `total_cost_usd` / `cost_by_day`，并区分 `cache_read_input_tokens` 与 `cache_write_input_tokens`；`gpt-5.3-codex-spark` 这类官方价格未最终确定的模型会标成 `pricing_status=unfinalized`，不能静默按 0 美元当成“免费”
