@@ -79,7 +79,7 @@
 当前还需要额外记住两个容易漏掉的行为边界：
 
 - provider 账号页现在支持“原账户就地重发 OAuth2 并替换原 oauth 文件”，不是只能新增账户；核心侧通过目标参数 `auth_name` 覆盖原 auth，并保留账户级 `prefix`、`proxy_url`、`headers`、`priority`、`note`、`disabled`
-- 管理后台与 Quotio 的原位重认证现在都支持“复制链接 / 取消 / localhost callback URL 回填”；对于需要在真实登录环境里打开授权链接、再把 `http://localhost:1455/...` 回填到发起端完成闭环的场景，已经有正式 UI 入口，不再需要手工拼 API
+- 管理后台与 Quotio 的原位重认证现在都支持“复制链接 / 取消 / localhost callback URL 回填”；管理后台为降低多账号误触风险，不再提供直接打开认证页按钮，需要在真实登录环境里打开授权链接时先复制链接，再把 `http://localhost:1455/...` 回填到发起端完成闭环
 - 重认证历史不再只能靠 auth 文件 `modified time` 猜测；core 会把事件落到 `<authDir>/.oauth-history/reauth.jsonl`，并通过只读 management API `/v0/management/oauth-reauth-history?auth_name=<name>&limit=<n>` 提供给 management 页面和 Quotio 展示
 - Codex `plus` 账号的可用模型轮询必须排除 `gpt-5.3-codex-spark`，不要把它当成可正常访问的可选模型
 - Codex OAuth auth 在本地正式 / 本地 dev / 远端 core 默认是独立副本；同一账号若多运行面并行 refresh，旧副本后续会出现 `invalid_grant` / `refresh_token_reused`。当前运维约束是：默认不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
