@@ -76,7 +76,9 @@
 - 本地 `Quotio` / `Quotio Dev` 的 runtime 管理页真源是运行目录下的 `static/management.html`；本地替换脚本现在会把 `Cli-Proxy-API-Management-Center/dist/index.html` 一并 stage/replace，不能只看 app/core 是否更新
 - 本地 runtime 若要保留这套 fork 里的管理页改动，`config.yaml` 的 `remote-management.disable-auto-update-panel` 必须为 `true`；否则 core 启动后会从官方 `router-for-me/Cli-Proxy-API-Management-Center` release 重新拉取 `management.html`，把本地刚替换进去的页面覆盖回旧版
 - 本地正式 / dev runtime 的替换现在会把备份清单写到 `~/Library/Application Support/Quotio*/backups/local-runtime-replace/replace.<target>.<timestamp>.txt`，并支持用 `scripts/rollback-local-quotio-runtime.sh` 按最近一次或指定 manifest 一键回滚 app/core/management
+- 本地正式 / dev runtime 的 `~/.cli-proxy-api*/logs` 现在默认执行年龄策略：`logs-compress-after-days: 7`、`logs-delete-after-days: 30`。含义是最近 7 天保留未压缩 `.log`，7 天以上压成 `.log.gz`，30 天以上的 `.log` / `.log.gz` 自动删除；`main.log` 受保护，不参与年龄清理
 - usage 统计快照会持久化到 `~/Library/Application Support/Quotio*/.usage-statistics.json`；proxy core 启动时会自动 merge 恢复，所以“重启后历史没了”优先先排查宿主 UI 是否没有把 `requests_by_day` / `tokens_by_day` / `cost_by_day` 展示出来，而不是先假设 core 没落盘
+- 本地 usage / token 历史不在 `~/.cli-proxy-api*/logs`；清理请求/响应日志时，默认要保留 `~/Library/Application Support/Quotio*/.usage-statistics.json` 和 `~/Library/Application Support/Quotio*/request-history.json`
 - usage 统计现在开始带官方价格估算的 `total_cost_usd` / `cost_by_day`，并区分 `cache_read_input_tokens` 与 `cache_write_input_tokens`；`gpt-5.3-codex-spark` 这类官方价格未最终确定的模型会标成 `pricing_status=unfinalized`，不能静默按 0 美元当成“免费”
 - management center 的 `/usage` 页面现在优先使用 core 返回的 request-level `cost_usd` / `pricing_status`，不再把浏览器 localStorage 里的模型价格当成唯一真源；页面下方的价格表只保留给旧快照或未内置定价模型做 fallback
 

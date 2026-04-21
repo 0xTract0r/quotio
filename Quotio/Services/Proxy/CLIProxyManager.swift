@@ -281,6 +281,7 @@ final class CLIProxyManager {
         try? FileManager.default.createDirectory(atPath: authDir, withIntermediateDirectories: true)
         
         ensureConfigExists()
+        ensureLogRetentionDefaultsInConfig()
         ensureManagementPanelAutoUpdateDisabledInConfig()
     }
 
@@ -517,6 +518,8 @@ final class CLIProxyManager {
 
         debug: false
         logging-to-file: false
+        logs-compress-after-days: 7
+        logs-delete-after-days: 30
         usage-statistics-enabled: true
 
         routing:
@@ -531,6 +534,53 @@ final class CLIProxyManager {
         """
 
         try? defaultConfig.write(toFile: configPath, atomically: true, encoding: .utf8)
+    }
+
+    private func ensureLogRetentionDefaultsInConfig() {
+        guard FileManager.default.fileExists(atPath: configPath),
+              let content = try? String(contentsOfFile: configPath, encoding: .utf8) else { return }
+
+        var lines = content.components(separatedBy: .newlines)
+        let hasCompressAfterDays = rootKeyIndex("logs-compress-after-days", in: lines) != nil
+        let hasDeleteAfterDays = rootKeyIndex("logs-delete-after-days", in: lines) != nil
+
+        guard !hasCompressAfterDays || !hasDeleteAfterDays else { return }
+
+        var insertions: [String] = []
+        if !hasCompressAfterDays {
+            insertions.append("logs-compress-after-days: 7")
+        }
+        if !hasDeleteAfterDays {
+            insertions.append("logs-delete-after-days: 30")
+        }
+
+        let insertIndex: Int
+        if !hasCompressAfterDays, let deleteIndex = rootKeyIndex("logs-delete-after-days", in: lines) {
+            insertIndex = deleteIndex
+        } else if hasCompressAfterDays, !hasDeleteAfterDays, let compressIndex = rootKeyIndex("logs-compress-after-days", in: lines) {
+            insertIndex = compressIndex + 1
+        } else if let loggingIndex = rootKeyIndex("logging-to-file", in: lines) {
+            insertIndex = loggingIndex + 1
+        } else if let usageIndex = rootKeyIndex("usage-statistics-enabled", in: lines) {
+            insertIndex = usageIndex
+        } else {
+            insertIndex = lines.count
+        }
+
+        lines.insert(contentsOf: insertions, at: insertIndex)
+
+        var updatedContent = lines.joined(separator: "\n")
+        if content.hasSuffix("\n") {
+            updatedContent += "\n"
+        }
+        try? updatedContent.write(toFile: configPath, atomically: true, encoding: .utf8)
+    }
+
+    private func rootKeyIndex(_ key: String, in lines: [String]) -> Int? {
+        lines.firstIndex { line in
+            line == line.trimmingCharacters(in: .whitespaces) &&
+            line.hasPrefix("\(key):")
+        }
     }
     
     private func syncSecretKeyInConfig() {
@@ -1990,6 +2040,8 @@ extension CLIProxyManager {
         
         debug: false
         logging-to-file: false
+        logs-compress-after-days: 7
+        logs-delete-after-days: 30
         usage-statistics-enabled: false
         
         routing:
