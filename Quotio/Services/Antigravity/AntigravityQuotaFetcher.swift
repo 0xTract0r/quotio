@@ -183,6 +183,7 @@ struct ModelQuota: Codable, Identifiable, Sendable {
         case "claude-opus-4-5-thinking": return "Claude Opus 4.5 (Thinking)"
         case "claude-opus-4-6": return "Claude Opus 4.6"
         case "claude-opus-4-6-thinking": return "Claude Opus 4.6 (Thinking)"
+        case "claude-opus-4-7": return "Claude Opus 4.7"
         case "claude-4-sonnet": return "Claude 4 Sonnet"
         case "claude-4-opus": return "Claude 4 Opus"
         // Codex quota names
