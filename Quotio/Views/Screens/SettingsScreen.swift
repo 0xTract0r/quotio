@@ -18,7 +18,7 @@ struct SettingsScreen: View {
             // Operating Mode
             OperatingModeSection()
             
-            // Remote Server Configuration - Only in Remote Proxy Mode
+            // Remote Server Configuration - Only in Remote Connection Mode
             if modeManager.isRemoteProxyMode {
                 RemoteServerSection()
                 UnifiedProxySettingsSection()
@@ -166,7 +166,7 @@ struct OperatingModeSection: View {
         case .monitor:
             Label("settings.appMode.quotaOnlyNote".localized(), systemImage: "info.circle")
                 .font(.caption)
-        case .remoteProxy:
+        case .remoteCore, .remoteProxy:
             Label("settings.appMode.remoteNote".localized(), systemImage: "info.circle")
                 .font(.caption)
         case .localProxy:
@@ -178,13 +178,13 @@ struct OperatingModeSection: View {
         guard mode != modeManager.currentMode else { return }
         
         // If switching to remote and no config exists, show config sheet
-        if mode == .remoteProxy && modeManager.remoteConfig == nil {
+        if mode.usesRemoteConnection && modeManager.remoteConfig == nil {
             showRemoteConfigSheet = true
             return
         }
         
         // Confirm when switching FROM local proxy mode (stops the local proxy)
-        if modeManager.currentMode == .localProxy && (mode == .monitor || mode == .remoteProxy) {
+        if modeManager.currentMode == .localProxy && (mode == .monitor || mode.usesRemoteConnection) {
             pendingMode = mode
             showModeChangeConfirmation = true
         } else {
@@ -221,10 +221,7 @@ struct RemoteServerSection: View {
             // Connection status
             connectionStatusRow
         } header: {
-            HStack(spacing: 8) {
-                Label("settings.remoteServer.title".localized(), systemImage: "network")
-                ExperimentalBadge()
-            }
+            Label("settings.remoteServer.title".localized(), systemImage: "network")
         } footer: {
             Text("settings.remoteServer.help".localized())
                 .font(.caption)
@@ -248,7 +245,7 @@ struct RemoteServerSection: View {
                     Text(config.displayName)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    Text(config.endpointURL)
+                    Text(config.clientBaseURL)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

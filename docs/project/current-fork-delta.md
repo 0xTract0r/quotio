@@ -56,6 +56,16 @@
 - `scripts/start-management-center.sh`
 - `scripts/replace-local-quotio-runtime.sh`
 
+### 补充：远端模式现在以“直连远端 core”作为主语义
+
+当前宿主侧远端连接不再默认等同于旧 experimental remote proxy。
+
+- 用户可见主模式现在是 `remote-core`：Quotio 直接连接远端 core 的 management API，本地不需要再拉起一个本机 core
+- 本地 CLI 配置会直接指向远端 core 的 client endpoint，而不是先写回本地监听再转发
+- 旧 `remote` 语义只保留给历史配置迁移；维护时不要再把它当成新的产品能力入口
+- `remote-core` 当前目标保留的能力包括：Providers、API Keys、Agents、Logs、quota / usage；本地专属能力如本地 core 控制、fallback、identity packages 仍只属于 `localProxy`
+- 隔离 smoke 或临时调试可用 `QUOTIO_REMOTE_ENDPOINT`、`QUOTIO_REMOTE_MANAGEMENT_KEY`、`QUOTIO_REMOTE_VERIFY_SSL` 注入远端连接，避免测试 app 读取 Keychain；正常用户配置仍应走 UI 持久化配置
+
 ### 4. 多身份指纹不是停留在想法
 
 这轮二次开发已经做过的关键能力包括：

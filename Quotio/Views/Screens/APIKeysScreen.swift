@@ -8,23 +8,34 @@ import AppKit
 
 struct APIKeysScreen: View {
     @Environment(QuotaViewModel.self) private var viewModel
+    @State private var modeManager = OperatingModeManager.shared
     
     @State private var newAPIKey: String = ""
     @State private var editingKeyIndex: Int? = nil
     @State private var editedKeyValue: String = ""
     @State private var showingAddKey: Bool = false
+
+    private var isManagementAvailable: Bool {
+        if modeManager.isRemoteProxyMode {
+            return modeManager.connectionStatus.isConnected && viewModel.apiClient != nil
+        }
+
+        return viewModel.proxyManager.proxyStatus.running && viewModel.apiClient != nil
+    }
     
     var body: some View {
         Group {
-            if !viewModel.proxyManager.proxyStatus.running {
-                proxyNotRunningView
-            } else {
+            if isManagementAvailable {
                 apiKeysListView
+            } else if modeManager.isRemoteProxyMode {
+                remoteUnavailableView
+            } else {
+                proxyNotRunningView
             }
         }
         .navigationTitle("nav.apiKeys".localized())
         .toolbar {
-            if viewModel.proxyManager.proxyStatus.running {
+            if isManagementAvailable {
                 ToolbarItemGroup {
                     Button {
                         newAPIKey = generateRandomKey()
@@ -50,6 +61,23 @@ struct APIKeysScreen: View {
             description: "apiKeys.proxyRequired".localized()
         ) {
             await viewModel.startProxy()
+        }
+    }
+
+    private var remoteUnavailableView: some View {
+        ContentUnavailableView {
+            Label("settings.remote.noConnection".localized(), systemImage: "network.slash")
+        } description: {
+            Text("settings.remoteServer.help".localized())
+        } actions: {
+            Button {
+                Task {
+                    await viewModel.reconnectRemote()
+                }
+            } label: {
+                Label("action.reconnect".localized(), systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
     

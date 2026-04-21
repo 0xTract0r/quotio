@@ -135,7 +135,7 @@ struct OperatingModeCard: View {
     private var badgeColor: Color {
         switch mode {
         case .monitor: return .green
-        case .remoteProxy: return .purple
+        case .remoteCore, .remoteProxy: return .purple
         default: return .gray
         }
     }

@@ -15,6 +15,7 @@ final class AgentSetupViewModel {
     private let configurationService = AgentConfigurationService()
     private let shellManager = ShellProfileManager()
     private let fallbackSettings = FallbackSettingsManager.shared
+    private let modeManager = OperatingModeManager.shared
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Quotio", category: "AgentSetup")
 
     var agentStatuses: [AgentStatus] = []
@@ -92,13 +93,7 @@ final class AgentSetupViewModel {
 
         selectedAgent = agent
 
-        // Use tunnel URL if active, otherwise use local proxy endpoint
-        let endpoint: String
-        if let tunnelURL = TunnelManager.shared.tunnelState.publicURL {
-            endpoint = tunnelURL
-        } else {
-            endpoint = proxyManager.clientEndpoint
-        }
+        let endpoint = resolvedClientEndpoint(using: proxyManager)
 
         // Create configuration with defaults first
         currentConfiguration = AgentConfiguration(
@@ -358,15 +353,11 @@ final class AgentSetupViewModel {
 
             // Use the first API key from the API Keys management interface
             // If no keys exist, fall back to managementKey
-            let apiKey = quotaViewModel?.apiKeys.first ?? proxyManager.managementKey
-
-            // Use tunnel URL if active, otherwise use local proxy endpoint
-            let modelEndpoint: String
-            if let tunnelURL = TunnelManager.shared.tunnelState.publicURL {
-                modelEndpoint = tunnelURL
-            } else {
-                modelEndpoint = proxyManager.clientEndpoint
-            }
+            let fallbackKey = modeManager.isRemoteProxyMode
+                ? (modeManager.remoteManagementKey ?? proxyManager.managementKey)
+                : proxyManager.managementKey
+            let apiKey = quotaViewModel?.apiKeys.first ?? fallbackKey
+            let modelEndpoint = resolvedClientEndpoint(using: proxyManager)
 
             config = AgentConfiguration(
                 agent: .claudeCode,
@@ -399,6 +390,20 @@ final class AgentSetupViewModel {
 
         refreshVirtualModels()
         return loadedFromRemote
+    }
+
+    private func resolvedClientEndpoint(using proxyManager: CLIProxyManager) -> String {
+        if modeManager.isRemoteProxyMode,
+           let remoteEndpoint = quotaViewModel?.currentClientBaseURL {
+            return remoteEndpoint
+        }
+
+        if let tunnelURL = TunnelManager.shared.tunnelState.publicURL,
+           modeManager.isLocalProxyMode {
+            return tunnelURL
+        }
+
+        return proxyManager.clientEndpoint
     }
 
     private func processModels(_ fetchedModels: [AvailableModel]) -> [AvailableModel] {

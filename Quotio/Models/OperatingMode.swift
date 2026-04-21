@@ -2,7 +2,7 @@
 //  OperatingMode.swift
 //  Quotio - CLIProxyAPI GUI Wrapper
 //
-//  Unified operating mode: Monitor (Quota-Only), Local Proxy, Remote Proxy
+//  Unified operating mode: Monitor (Quota-Only), Local Proxy, Remote Core
 //  Replaces the two-layer AppMode + ConnectionMode system
 //
 
@@ -16,7 +16,12 @@ import SwiftUI
 enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case monitor = "monitor"        // Quota tracking only (no proxy)
     case localProxy = "local"       // Run local proxy server
-    case remoteProxy = "remote"     // Connect to remote CLIProxyAPI
+    case remoteCore = "remote-core" // Connect directly to remote CLIProxyAPI core
+    case remoteProxy = "remote"     // Legacy experimental remote mode; kept for migration only
+
+    static var allCases: [OperatingMode] {
+        [.monitor, .localProxy, .remoteCore]
+    }
     
     var id: String { rawValue }
     
@@ -26,7 +31,7 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .monitor: return "onboarding.mode.monitor.title".localizedStatic()
         case .localProxy: return "onboarding.mode.localProxy.title".localizedStatic()
-        case .remoteProxy: return "onboarding.mode.remoteProxy.title".localizedStatic()
+        case .remoteCore, .remoteProxy: return "onboarding.mode.remoteProxy.title".localizedStatic()
         }
     }
     
@@ -34,7 +39,7 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .monitor: return "onboarding.mode.monitor.description".localizedStatic()
         case .localProxy: return "onboarding.mode.localProxy.description".localizedStatic()
-        case .remoteProxy: return "onboarding.mode.remoteProxy.description".localizedStatic()
+        case .remoteCore, .remoteProxy: return "onboarding.mode.remoteProxy.description".localizedStatic()
         }
     }
     
@@ -42,7 +47,7 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .monitor: return "chart.bar.fill"
         case .localProxy: return "server.rack"
-        case .remoteProxy: return "network"
+        case .remoteCore, .remoteProxy: return "network"
         }
     }
     
@@ -50,7 +55,7 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .monitor: return .green
         case .localProxy: return .blue
-        case .remoteProxy: return .purple
+        case .remoteCore, .remoteProxy: return .purple
         }
     }
     
@@ -58,6 +63,7 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .monitor: return "onboarding.mode.badge.default".localizedStatic()
         case .localProxy: return nil
+        case .remoteCore: return nil
         case .remoteProxy: return "badge.experimental".localizedStatic()
         }
     }
@@ -78,7 +84,7 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
                 "onboarding.mode.localProxy.feature2".localizedStatic(),
                 "onboarding.mode.localProxy.feature3".localizedStatic()
             ]
-        case .remoteProxy:
+        case .remoteCore, .remoteProxy:
             return [
                 "onboarding.mode.remoteProxy.feature1".localizedStatic(),
                 "onboarding.mode.remoteProxy.feature2".localizedStatic(),
@@ -92,6 +98,11 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
     /// Whether proxy server functionality is available
     var supportsProxy: Bool {
         self != .monitor
+    }
+
+    /// Whether this mode talks to a remote core over the management API.
+    var usesRemoteConnection: Bool {
+        self == .remoteCore || self == .remoteProxy
     }
     
     /// Whether local proxy controls (start/stop) should be shown
@@ -116,6 +127,21 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
     
     /// Whether CLI agent configuration is available
     var supportsAgentConfig: Bool {
+        self == .localProxy || self == .remoteCore
+    }
+
+    /// Whether proxy logs should be visible from the sidebar.
+    var supportsLogs: Bool {
+        self == .localProxy || self == .remoteCore
+    }
+
+    /// Whether fallback configuration is available.
+    var supportsFallbackConfig: Bool {
+        self == .localProxy
+    }
+
+    /// Whether local identity package management should be visible.
+    var supportsIdentityPackages: Bool {
         self == .localProxy
     }
     
@@ -125,6 +151,8 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
         case .monitor:
             return [.dashboard, .quota, .providers, .settings, .about]
         case .localProxy:
+            return [.dashboard, .quota, .providers, .agents, .apiKeys, .logs, .settings, .about]
+        case .remoteCore:
             return [.dashboard, .quota, .providers, .agents, .apiKeys, .logs, .settings, .about]
         case .remoteProxy:
             return [.dashboard, .quota, .providers, .apiKeys, .settings, .about]
@@ -143,7 +171,7 @@ enum OperatingMode: String, Codable, CaseIterable, Identifiable, Sendable {
         case "full":
             switch connectionMode {
             case .remote:
-                return .remoteProxy
+                return .remoteCore
             default:
                 return .localProxy
             }
@@ -169,7 +197,7 @@ final class OperatingModeManager {
     /// Whether onboarding has been completed
     private(set) var hasCompletedOnboarding: Bool
     
-    /// Remote connection configuration (only used in remoteProxy mode)
+    /// Remote connection configuration (used by remote connection modes)
     private(set) var remoteConfig: RemoteConnectionConfig?
     
     /// Remote connection status
@@ -182,7 +210,8 @@ final class OperatingModeManager {
     
     var isMonitorMode: Bool { currentMode == .monitor }
     var isLocalProxyMode: Bool { currentMode == .localProxy }
-    var isRemoteProxyMode: Bool { currentMode == .remoteProxy }
+    var isRemoteCoreMode: Bool { currentMode == .remoteCore }
+    var isRemoteProxyMode: Bool { currentMode.usesRemoteConnection }
     
     /// Whether any proxy mode is active
     var isProxyMode: Bool { currentMode != .monitor }
@@ -192,6 +221,10 @@ final class OperatingModeManager {
     
     /// Management key for remote config (from Keychain)
     var remoteManagementKey: String? {
+        if let override = RuntimeProfile.remoteManagementKeyOverride {
+            return override
+        }
+
         guard let config = remoteConfig else { return nil }
         return KeychainHelper.getManagementKey(for: config.id)
     }
@@ -210,7 +243,7 @@ final class OperatingModeManager {
     private init() {
         if let overrideMode = RuntimeProfile.operatingModeOverride {
             self.currentMode = overrideMode
-            self.hasCompletedOnboarding = RuntimeProfile.skipOnboarding || overrideMode == .localProxy || overrideMode == .monitor || overrideMode == .remoteProxy
+            self.hasCompletedOnboarding = RuntimeProfile.skipOnboarding || overrideMode == .localProxy || overrideMode == .monitor || overrideMode.usesRemoteConnection
         } else {
             // Check for migration from legacy modes first
             let needsMigration = Self.checkNeedsMigration()
@@ -233,9 +266,14 @@ final class OperatingModeManager {
         if RuntimeProfile.skipOnboarding {
             self.hasCompletedOnboarding = true
         }
+
+        if currentMode == .remoteProxy {
+            currentMode = .remoteCore
+            UserDefaults.standard.set(OperatingMode.remoteCore.rawValue, forKey: "operatingMode")
+        }
         
         // Load remote config if in remote mode
-        if currentMode == .remoteProxy {
+        if currentMode.usesRemoteConnection {
             loadRemoteConfig()
         }
     }
@@ -248,7 +286,7 @@ final class OperatingModeManager {
         UserDefaults.standard.set(mode.rawValue, forKey: "operatingMode")
         
         // Reset connection status when switching modes
-        if mode != .remoteProxy {
+        if !mode.usesRemoteConnection {
             connectionStatus = .disconnected
         }
     }
@@ -280,7 +318,7 @@ final class OperatingModeManager {
     func switchToRemote(config: RemoteConnectionConfig, managementKey: String, fromOnboarding: Bool = false) {
         saveRemoteConfig(config)
         KeychainHelper.saveManagementKey(managementKey, for: config.id)
-        setMode(.remoteProxy)
+        setMode(.remoteCore)
         
         if fromOnboarding {
             hasCompletedOnboarding = true
@@ -298,6 +336,11 @@ final class OperatingModeManager {
     
     /// Load remote config from storage
     private func loadRemoteConfig() {
+        if let overrideConfig = RuntimeProfile.remoteConnectionConfigOverride {
+            remoteConfig = overrideConfig
+            return
+        }
+
         if let data = UserDefaults.standard.data(forKey: "remoteConnectionConfig"),
            let config = try? JSONDecoder().decode(RemoteConnectionConfig.self, from: data) {
             remoteConfig = config
@@ -312,7 +355,7 @@ final class OperatingModeManager {
         remoteConfig = nil
         UserDefaults.standard.removeObject(forKey: "remoteConnectionConfig")
         
-        if isRemoteProxyMode {
+        if currentMode.usesRemoteConnection {
             setMode(.monitor)
         }
     }
@@ -337,6 +380,7 @@ final class OperatingModeManager {
         if var config = remoteConfig {
             config = RemoteConnectionConfig(
                 endpointURL: config.endpointURL,
+                managementEndpointOverride: config.managementEndpointOverride,
                 displayName: config.displayName,
                 verifySSL: config.verifySSL,
                 timeoutSeconds: config.timeoutSeconds,

@@ -65,6 +65,18 @@ final class QuotaViewModel {
     var errorMessage: String?
     var oauthState: OAuthState?
 
+    var currentClientBaseURL: String? {
+        if modeManager.isRemoteProxyMode {
+            return modeManager.remoteConfig?.clientBaseURL
+        }
+        return proxyManager.clientEndpoint
+    }
+
+    var currentClientAPIBaseURL: String? {
+        guard let currentClientBaseURL else { return nil }
+        return currentClientBaseURL + "/v1"
+    }
+
     /// Notification name for quota data updates (used for menu bar refresh)
     static let quotaDataDidChangeNotification = Notification.Name("QuotaViewModel.quotaDataDidChange")
     private let silentAuthStatusRefreshCooldown: TimeInterval = 15
@@ -357,6 +369,8 @@ final class QuotaViewModel {
     private func restartAutoRefresh() {
         if modeManager.isMonitorMode {
             startQuotaOnlyAutoRefresh()
+        } else if modeManager.isRemoteProxyMode {
+            startAutoRefresh()
         } else if proxyManager.proxyStatus.running {
             startAutoRefresh()
         } else {
@@ -1422,12 +1436,18 @@ final class QuotaViewModel {
     func manualRefresh() async {
         if modeManager.isMonitorMode {
             await refreshQuotasDirectly()
+        } else if modeManager.isRemoteProxyMode {
+            await refreshData()
         } else if proxyManager.proxyStatus.running {
             await refreshData()
         } else {
             await refreshQuotasUnified()
         }
         lastQuotaRefreshTime = Date()
+    }
+
+    private var allowsLocalAuthFileFallback: Bool {
+        !modeManager.isRemoteProxyMode
     }
     
     func refreshAllQuotas() async {
@@ -2201,6 +2221,9 @@ final class QuotaViewModel {
             return proxyURL
         }
 
+        guard allowsLocalAuthFileFallback else {
+            return nil
+        }
         return await directAuthFileForProxyFallback(named: file.name)?.proxyURL
     }
 
@@ -2216,6 +2239,9 @@ final class QuotaViewModel {
                 try await client.setAuthFileNote(name: file.name, note: expectedNote)
             }
         } catch let APIError.httpError(statusCode) where statusCode == 400 || statusCode == 404 {
+            guard allowsLocalAuthFileFallback else {
+                throw APIError.httpError(statusCode)
+            }
             guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
                 throw APIError.httpError(statusCode)
             }
@@ -2235,6 +2261,9 @@ final class QuotaViewModel {
 
         if persistedNote != expectedNote,
            let directAuthFile = await directAuthFileForProxyFallback(named: file.name) {
+            guard allowsLocalAuthFileFallback else {
+                throw APIError.invalidResponse
+            }
             Log.warning("updateAuthFileNote: management API did not persist note for \(file.name), falling back to direct auth file update")
             try await directAuthService.updateNote(filePath: directAuthFile.filePath, note: expectedNote)
         }
@@ -2259,6 +2288,9 @@ final class QuotaViewModel {
 
         if persistedProxyURL != expectedProxyURL,
            let directAuthFile = await directAuthFileForProxyFallback(named: file.name) {
+            guard allowsLocalAuthFileFallback else {
+                throw APIError.invalidResponse
+            }
             Log.warning("updateAuthFileProxyURL: management API did not persist proxy_url for \(file.name), falling back to direct auth file update")
             try await directAuthService.updateProxyURL(filePath: directAuthFile.filePath, proxyURL: expectedProxyURL)
         }
@@ -2275,6 +2307,9 @@ final class QuotaViewModel {
             return userAgent
         }
 
+        guard allowsLocalAuthFileFallback else {
+            return nil
+        }
         if let directAuthFile = await directAuthFileForProxyFallback(named: file.name) {
             return Self.readStoredUserAgent(for: directAuthFile.provider, fromFileAt: directAuthFile.filePath)
         }
@@ -2317,6 +2352,9 @@ final class QuotaViewModel {
     func updateAuthFileUserAgent(_ userAgent: String?, for file: AuthFile) async throws {
         switch Self.userAgentStorage(for: file.providerType) {
         case .authField:
+            guard allowsLocalAuthFileFallback else {
+                throw APIError.invalidRequest("Remote mode does not support direct auth-file user-agent updates")
+            }
             guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
                 throw DirectAuthFileError.invalidAuthFile
             }
@@ -2334,6 +2372,9 @@ final class QuotaViewModel {
                     )
                 }
             } catch let APIError.httpError(statusCode) where statusCode == 400 || statusCode == 404 {
+                guard allowsLocalAuthFileFallback else {
+                    throw APIError.httpError(statusCode)
+                }
                 guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
                     throw APIError.httpError(statusCode)
                 }
@@ -2354,6 +2395,9 @@ final class QuotaViewModel {
             }
 
             if persistedUserAgent != expectedUserAgent {
+                guard allowsLocalAuthFileFallback else {
+                    throw APIError.invalidResponse
+                }
                 guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
                     throw APIError.invalidResponse
                 }
@@ -2400,6 +2444,9 @@ final class QuotaViewModel {
                 try await client.setAuthFileHeaders(name: file.name, headers: mergedHeaders)
             }
         } catch let APIError.httpError(statusCode) where statusCode == 400 || statusCode == 404 {
+            guard allowsLocalAuthFileFallback else {
+                throw APIError.httpError(statusCode)
+            }
             guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
                 throw APIError.httpError(statusCode)
             }
@@ -2424,6 +2471,9 @@ final class QuotaViewModel {
         )
 
         if Self.normalizedHeaders(persistedManagedHeaders) != Self.normalizedHeaders(expectedManagedHeaders) {
+            guard allowsLocalAuthFileFallback else {
+                throw APIError.invalidResponse
+            }
             guard let directAuthFile = await directAuthFileForProxyFallback(named: file.name) else {
                 throw APIError.invalidResponse
             }
