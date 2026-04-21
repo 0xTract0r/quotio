@@ -29,6 +29,7 @@ Quotio 现在通过 Git submodule 引用维护中的 `CLIProxyAPIPlus`：
 - 唯一开发真源：`third_party/CLIProxyAPIPlus`
 - 唯一推荐构建入口：`./scripts/manage-cliproxy-plus.sh build`
 - 任何实现 worktree 都必须先初始化子模块，再开始编码
+- 父仓库记录的 submodule commit 必须能从 `.gitmodules` 里配置的远端 URL 直接抓到；不要把仅存在于本地对象库、临时 branch 或仅存在于 `upstream/*` 而未同步到 `0xTract0r/CLIProxyAPIPlus` 的 commit 直接写进 gitlink
 
 以下路径都不能再被当成开发真源：
 
