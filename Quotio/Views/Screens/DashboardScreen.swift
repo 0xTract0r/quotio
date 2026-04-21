@@ -78,6 +78,29 @@ struct DashboardScreen: View {
     private var shouldShowRecentUsage: Bool {
         !recentUsageDays.isEmpty
     }
+
+    private var addableProviders: [AIProvider] {
+        if modeManager.isLocalProxyMode {
+            return AIProvider.allCases.filter { $0.supportsManualAuth }
+        } else if modeManager.isRemoteProxyMode {
+            return AIProvider.allCases.filter { $0.supportsManualAuth && $0.supportsRemoteCoreMode }
+        } else {
+            return AIProvider.allCases.filter { $0.supportsQuotaOnlyMode && $0.supportsManualAuth }
+        }
+    }
+
+    private var disconnectedManualProviders: [AIProvider] {
+        viewModel.disconnectedProviders.filter { provider in
+            guard provider.supportsManualAuth else { return false }
+            if modeManager.isRemoteProxyMode {
+                return provider.supportsRemoteCoreMode
+            }
+            if modeManager.isMonitorMode {
+                return provider.supportsQuotaOnlyMode
+            }
+            return true
+        }
+    }
     
     var body: some View {
         ScrollView {
@@ -106,7 +129,7 @@ struct DashboardScreen: View {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task {
-                        if modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running {
+                        if modeManager.isRemoteProxyMode || (modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running) {
                             await viewModel.refreshData()
                         } else {
                             await viewModel.refreshQuotasUnified()
@@ -147,7 +170,7 @@ struct DashboardScreen: View {
             }
         }
         .task {
-            if modeManager.isLocalProxyMode {
+            if modeManager.currentMode.supportsAgentConfig {
                 await viewModel.agentSetupViewModel.refreshAgentStatuses()
             }
         }
@@ -282,7 +305,7 @@ struct DashboardScreen: View {
                 .font(.headline)
             
             if let config = modeManager.remoteConfig {
-                Text(config.endpointURL)
+                Text(config.clientBaseURL)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -317,7 +340,7 @@ struct DashboardScreen: View {
             HStack {
                 if let config = modeManager.remoteConfig {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(config.endpointURL)
+                        Text(config.clientBaseURL)
                             .font(.system(.body, design: .monospaced))
                             .textSelection(.enabled)
                         
@@ -332,7 +355,7 @@ struct DashboardScreen: View {
                 Spacer()
                 
                 Button {
-                    if let url = modeManager.remoteConfig?.endpointURL {
+                    if let url = modeManager.remoteConfig?.clientBaseURL {
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
                         pasteboard.setString(url, forType: .string)
@@ -599,7 +622,7 @@ struct DashboardScreen: View {
         alert.messageText = "providers.addProvider".localized()
         alert.informativeText = "onboarding.addProviderDesc".localized()
         
-        for provider in AIProvider.allCases {
+        for provider in addableProviders {
             alert.addButton(withTitle: provider.displayName)
         }
         alert.addButton(withTitle: "action.cancel".localized())
@@ -607,8 +630,8 @@ struct DashboardScreen: View {
         let response = alert.runModal()
         let index = response.rawValue - 1000
         
-        if index >= 0 && index < AIProvider.allCases.count {
-            let provider = AIProvider.allCases[index]
+        if index >= 0 && index < addableProviders.count {
+            let provider = addableProviders[index]
             if provider == .vertex {
                 isImporterPresented = true
             } else {
@@ -627,7 +650,10 @@ struct DashboardScreen: View {
         let installedAgents = viewModel.agentSetupViewModel.agentStatuses.filter { $0.installed }
         guard let firstAgent = installedAgents.first else { return }
         
-        let apiKey = viewModel.apiKeys.first ?? viewModel.proxyManager.managementKey
+        let fallbackKey = modeManager.isRemoteProxyMode
+            ? (modeManager.remoteManagementKey ?? viewModel.proxyManager.managementKey)
+            : viewModel.proxyManager.managementKey
+        let apiKey = viewModel.apiKeys.first ?? fallbackKey
         viewModel.agentSetupViewModel.startConfiguration(for: firstAgent.agent, apiKey: apiKey)
         sheetPresentationID = UUID()
         selectedAgentForConfig = firstAgent.agent
@@ -744,7 +770,7 @@ struct DashboardScreen: View {
                         ProviderChip(provider: provider, count: viewModel.authFilesByProvider[provider]?.count ?? 0)
                     }
                     
-                    ForEach(viewModel.disconnectedProviders.filter { $0.supportsManualAuth }) { provider in
+                    ForEach(disconnectedManualProviders) { provider in
                         Button {
                             if provider == .vertex {
                                 isImporterPresented = true
@@ -775,8 +801,7 @@ struct DashboardScreen: View {
 
     /// The display endpoint for clients to connect to
     private var displayEndpoint: String {
-        // Always use client endpoint - all traffic should go through Quotio's proxy
-        return viewModel.proxyManager.clientEndpoint + "/v1"
+        viewModel.currentClientAPIBaseURL ?? (viewModel.proxyManager.clientEndpoint + "/v1")
     }
 
     private var endpointSection: some View {

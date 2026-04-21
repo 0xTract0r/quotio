@@ -36,7 +36,7 @@ final class OnboardingViewModel {
     @ObservationIgnored private let modeManager = OperatingModeManager.shared
     
     var visibleSteps: [OnboardingStep] {
-        if selectedMode == .remoteProxy {
+        if selectedMode.usesRemoteConnection {
             return [.welcome, .modeSelection, .remoteSetup, .providers, .completion]
         } else {
             return [.welcome, .modeSelection, .providers, .completion]
@@ -92,7 +92,7 @@ final class OnboardingViewModel {
     }
     
     func completeOnboarding() {
-        if selectedMode == .remoteProxy {
+        if selectedMode.usesRemoteConnection {
             let config = RemoteConnectionConfig(
                 endpointURL: remoteEndpoint,
                 displayName: "Remote Server"

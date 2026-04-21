@@ -160,8 +160,35 @@ enum RuntimeProfile {
         boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_IDENTITY_BINDING") ?? false
     }
 
+    static var remoteManagementKeyOverride: String? {
+        stringValue(for: "QUOTIO_REMOTE_MANAGEMENT_KEY")
+    }
+
+    static var remoteConnectionConfigOverride: RemoteConnectionConfig? {
+        guard let endpointURL = stringValue(for: "QUOTIO_REMOTE_ENDPOINT") else {
+            return nil
+        }
+
+        return RemoteConnectionConfig(
+            endpointURL: endpointURL,
+            managementEndpointOverride: stringValue(for: "QUOTIO_REMOTE_MANAGEMENT_ENDPOINT"),
+            displayName: stringValue(for: "QUOTIO_REMOTE_DISPLAY_NAME") ?? "Remote Core",
+            verifySSL: boolValue(for: "QUOTIO_REMOTE_VERIFY_SSL") ?? true,
+            timeoutSeconds: remoteTimeoutSecondsOverride ?? 30,
+            id: stringValue(for: "QUOTIO_REMOTE_CONFIG_ID") ?? "runtime-remote-override"
+        )
+    }
+
     static func queueLabel(_ suffix: String) -> String {
         bundleIdentifier + "." + suffix
+    }
+
+    private static var remoteTimeoutSecondsOverride: Int? {
+        guard let value = intValue(for: "QUOTIO_REMOTE_TIMEOUT_SECONDS"),
+              value > 0 else {
+            return nil
+        }
+        return value
     }
 
     private static var namespaceSuffix: String {
@@ -404,6 +431,17 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
             return false  // GLM: only via Custom Providers; Cursor/Trae: only reads from local app database
         default:
             return true
+        }
+    }
+
+    /// Whether this provider can be onboarded while Quotio is connected to a remote core.
+    /// Remote mode only supports management-backed OAuth/import flows, not local CLI auth or local-only token stores.
+    var supportsRemoteCoreMode: Bool {
+        switch self {
+        case .claude, .codex, .gemini, .qwen, .iflow, .antigravity, .vertex:
+            return true
+        default:
+            return false
         }
     }
 

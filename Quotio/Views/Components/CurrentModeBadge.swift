@@ -66,7 +66,7 @@ struct CurrentModeBadge: View {
             return "mode.monitor".localized()
         case .localProxy:
             return "mode.localProxy".localized()
-        case .remoteProxy:
+        case .remoteCore, .remoteProxy:
             return "mode.remoteProxy".localized()
         }
     }
@@ -82,7 +82,7 @@ struct CurrentModeBadge: View {
             } else {
                 return "status.stopped".localized()
             }
-        case .remoteProxy:
+        case .remoteCore, .remoteProxy:
             switch modeManager.connectionStatus {
             case .connected:
                 return "status.connected".localized()

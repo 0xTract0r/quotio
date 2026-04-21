@@ -443,19 +443,20 @@ struct ContentView: View {
                               systemImage: "person.2.badge.key")
                             .tag(NavigationPage.providers)
 
-                        if modeManager.isLocalProxyMode {
+                        if modeManager.currentMode.supportsIdentityPackages {
                             Label("Identity Packages", systemImage: "shield.lefthalf.filled.badge.checkmark")
                                 .tag(NavigationPage.identityPackages)
                         }
                         
-                        // Proxy mode only (local or remote)
-                        if modeManager.isProxyMode {
+                        if modeManager.currentMode.supportsFallbackConfig {
                             HStack(spacing: 6) {
                                 Label("nav.fallback".localized(), systemImage: "arrow.triangle.branch")
                                 ExperimentalBadge()
                             }
                             .tag(NavigationPage.fallback)
+                        }
 
+                        if modeManager.isProxyMode {
                             if modeManager.currentMode.supportsAgentConfig {
                                 Label("nav.agents".localized(), systemImage: "terminal")
                                     .tag(NavigationPage.agents)
@@ -464,7 +465,7 @@ struct ContentView: View {
                             Label("nav.apiKeys".localized(), systemImage: "key.horizontal")
                                 .tag(NavigationPage.apiKeys)
                             
-                            if modeManager.isLocalProxyMode && loggingToFile {
+                            if modeManager.currentMode.supportsLogs && (modeManager.isRemoteProxyMode || loggingToFile) {
                                 Label("nav.logs".localized(), systemImage: "doc.text")
                                     .tag(NavigationPage.logs)
                             }

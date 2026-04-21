@@ -236,6 +236,7 @@ struct AvailableModel: Identifiable, Codable, Hashable, Sendable {
 
     static let allModels: [AvailableModel] = [
         // Claude models
+        AvailableModel(id: "claude-opus-4-7", name: "claude-opus-4-7", provider: "anthropic", isDefault: false),
         AvailableModel(id: "gemini-claude-opus-4-6-thinking", name: "gemini-claude-opus-4-6-thinking", provider: "anthropic", isDefault: false),
         AvailableModel(id: "gemini-claude-opus-4-5-thinking", name: "gemini-claude-opus-4-5-thinking", provider: "anthropic", isDefault: false),
         AvailableModel(id: "gemini-claude-sonnet-4-5", name: "gemini-claude-sonnet-4-5", provider: "anthropic", isDefault: false),

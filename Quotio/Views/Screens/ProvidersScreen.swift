@@ -40,6 +40,8 @@ struct ProvidersScreen: View {
     private var addableProviders: [AIProvider] {
         if modeManager.isLocalProxyMode {
             return AIProvider.allCases.filter { $0.supportsManualAuth }
+        } else if modeManager.isRemoteProxyMode {
+            return AIProvider.allCases.filter { $0.supportsManualAuth && $0.supportsRemoteCoreMode }
         } else {
             return AIProvider.allCases.filter { $0.supportsQuotaOnlyMode && $0.supportsManualAuth }
         }
@@ -49,8 +51,8 @@ struct ProvidersScreen: View {
     private var groupedAccounts: [AIProvider: [AccountRowData]] {
         var groups: [AIProvider: [AccountRowData]] = [:]
 
-        if modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running {
-            // From proxy auth files (proxy running)
+        if (modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running) || modeManager.isRemoteProxyMode {
+            // From management-backed auth files (local proxy running or remote core connected)
             for file in viewModel.authFiles {
                 guard let provider = file.providerType else { continue }
                 let metadataKey = accountMetadataKey(for: file)
@@ -59,7 +61,8 @@ struct ProvidersScreen: View {
                     metadataKey: metadataKey,
                     remark: resolvedAccountRemark(for: metadataKey),
                     hasConfiguredProxy: effectiveProxyURL(for: file) != nil,
-                    identityPackage: viewModel.identityPackage(for: file)
+                    identityPackage: modeManager.isLocalProxyMode ? viewModel.identityPackage(for: file) : nil,
+                    supportsIdentityBinding: modeManager.isLocalProxyMode
                 )
                 groups[provider, default: []].append(data)
             }

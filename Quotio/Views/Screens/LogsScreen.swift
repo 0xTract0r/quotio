@@ -8,12 +8,21 @@ import SwiftUI
 struct LogsScreen: View {
     @Environment(QuotaViewModel.self) private var viewModel
     @Environment(LogsViewModel.self) private var logsViewModel
+    @State private var modeManager = OperatingModeManager.shared
     @State private var selectedTab: LogsTab = .requests
     @State private var autoScroll = true
     @State private var filterLevel: LogEntry.LogLevel? = nil
     @State private var searchText = ""
     @State private var requestFilterProvider: String? = nil
     @State private var expandedTraces: Set<UUID> = []
+
+    private var isManagementAvailable: Bool {
+        if modeManager.isRemoteProxyMode {
+            return modeManager.connectionStatus.isConnected && viewModel.apiClient != nil
+        }
+
+        return viewModel.proxyManager.proxyStatus.running && viewModel.apiClient != nil
+    }
     
     enum LogsTab: String, CaseIterable {
         case requests = "requests"
@@ -36,7 +45,9 @@ struct LogsScreen: View {
     
     var body: some View {
         Group {
-            if !viewModel.proxyManager.proxyStatus.running {
+            if modeManager.isRemoteProxyMode && !isManagementAvailable {
+                remoteUnavailableView
+            } else if !modeManager.isRemoteProxyMode && !isManagementAvailable {
                 ProxyRequiredView(
                     description: "logs.startProxy".localized()
                 ) {
@@ -74,10 +85,20 @@ struct LogsScreen: View {
         .task {
             // Configure LogsViewModel with proxy connection when screen appears
             if !logsViewModel.isConfigured {
-                logsViewModel.configure(
-                    baseURL: viewModel.proxyManager.managementURL,
-                    authKey: viewModel.proxyManager.managementKey
-                )
+                if modeManager.isRemoteProxyMode,
+                   let config = modeManager.remoteConfig,
+                   let managementKey = modeManager.remoteManagementKey {
+                    logsViewModel.configure(
+                        baseURL: config.managementBaseURL,
+                        authKey: managementKey,
+                        remoteConfig: config
+                    )
+                } else {
+                    logsViewModel.configure(
+                        baseURL: viewModel.proxyManager.managementURL,
+                        authKey: viewModel.proxyManager.managementKey
+                    )
+                }
             }
 
             if selectedTab == .proxyLogs {
@@ -96,6 +117,23 @@ struct LogsScreen: View {
             return "logs.searchRequests".localized()
         case .proxyLogs:
             return "logs.searchLogs".localized()
+        }
+    }
+
+    private var remoteUnavailableView: some View {
+        ContentUnavailableView {
+            Label("settings.remote.noConnection".localized(), systemImage: "network.slash")
+        } description: {
+            Text("settings.remoteServer.help".localized())
+        } actions: {
+            Button {
+                Task {
+                    await viewModel.reconnectRemote()
+                }
+            } label: {
+                Label("action.reconnect".localized(), systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
     

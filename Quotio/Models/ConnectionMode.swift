@@ -88,9 +88,14 @@ enum ConnectionMode: String, Codable, CaseIterable, Identifiable, Sendable {
 
 /// Configuration for connecting to a remote CLIProxyAPI instance
 struct RemoteConnectionConfig: Codable, Equatable, Sendable {
-    /// The base URL of the remote CLIProxyAPI management endpoint
-    /// Example: "https://proxy.example.com:8317/v0/management"
+    /// The primary URL of the remote CLIProxyAPI core entrypoint.
+    /// Users typically paste the remote core address here, for example:
+    /// "https://proxy.example.com:8317"
     var endpointURL: String
+
+    /// Optional override when management API is exposed on a different base URL.
+    /// If omitted, management requests are derived from `endpointURL`.
+    var managementEndpointOverride: String?
     
     /// Display name for this connection (user-defined)
     var displayName: String
@@ -109,6 +114,7 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
     
     init(
         endpointURL: String,
+        managementEndpointOverride: String? = nil,
         displayName: String = "Remote Server",
         verifySSL: Bool = true,
         timeoutSeconds: Int = 30,
@@ -116,6 +122,7 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
         id: String = UUID().uuidString
     ) {
         self.endpointURL = endpointURL
+        self.managementEndpointOverride = managementEndpointOverride
         self.displayName = displayName
         self.verifySSL = verifySSL
         self.timeoutSeconds = timeoutSeconds
@@ -132,23 +139,41 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
     var isValid: Bool {
         validationResult == .valid
     }
+
+    /// Normalized base URL for client traffic (no `/v1`, `/v0`, or management suffix).
+    nonisolated var clientBaseURL: String {
+        Self.normalizedBaseURL(endpointURL)
+    }
     
     /// Extract base URL for ManagementAPIClient
     /// Converts full endpoint to base management URL
     nonisolated var managementBaseURL: String {
-        var url = endpointURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Remove trailing slashes
+        let raw = managementEndpointOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? managementEndpointOverride ?? endpointURL
+            : endpointURL
+        return Self.normalizedManagementBaseURL(raw)
+    }
+
+    private static func normalizedBaseURL(_ rawURL: String) -> String {
+        var url = RemoteURLValidator.sanitize(rawURL)
+
+        for suffix in ["/v0/management", "/v0", "/v1"] {
+            if url.hasSuffix(suffix) {
+                url.removeLast(suffix.count)
+                break
+            }
+        }
+
         while url.hasSuffix("/") {
             url.removeLast()
         }
-        // Ensure it ends with /v0/management
-        if !url.hasSuffix("/v0/management") {
-            if url.hasSuffix("/v0") {
-                url += "/management"
-            } else {
-                url += "/v0/management"
-            }
-        }
+
+        return url
+    }
+
+    private static func normalizedManagementBaseURL(_ rawURL: String) -> String {
+        var url = normalizedBaseURL(rawURL)
+        url += "/v0/management"
         return url
     }
 }

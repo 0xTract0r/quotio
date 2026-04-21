@@ -29,8 +29,13 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-45}"
 FORCE_KILL="${FORCE_KILL:-0}"
 VERIFY_HEALTH="${VERIFY_HEALTH:-1}"
 VERIFY_MANAGEMENT="${VERIFY_MANAGEMENT:-1}"
-MANAGEMENT_EXPECT_TOKENS="${MANAGEMENT_EXPECT_TOKENS:-}"
+MANAGEMENT_EXPECT_TOKENS="${MANAGEMENT_EXPECT_TOKENS:-reauth_copy_link}"
+MANAGEMENT_FORBID_TOKENS="${MANAGEMENT_FORBID_TOKENS:-reauth_open_link,onOpenReauthLink,openReauthLink}"
+MANAGEMENT_RECHECK_DELAY="${MANAGEMENT_RECHECK_DELAY:-15}"
 REPLACE_CORE="${REPLACE_CORE:-auto}"
+PRESERVE_USAGE="${PRESERVE_USAGE:-1}"
+PRESERVE_USAGE_STRICT="${PRESERVE_USAGE_STRICT:-1}"
+MANAGEMENT_KEY="${MANAGEMENT_KEY:-}"
 
 usage() {
   cat <<'EOF'
@@ -50,8 +55,20 @@ Environment:
   FORCE_KILL=0|1         Escalate to SIGKILL if graceful stop times out. Default: 0
   VERIFY_HEALTH=0|1      Curl internal /healthz after relaunch. Default: 1
   VERIFY_MANAGEMENT=0|1  Verify runtime management.html hash after replacement. Default: 1
+  PRESERVE_USAGE=0|1     Export current usage before restart and import after relaunch. Default: 1
+  PRESERVE_USAGE_STRICT=0|1
+                        Fail apply if usage export/import fails while PRESERVE_USAGE=1.
+                        Default: 1
+  MANAGEMENT_KEY=...     Raw management key for usage export/import when Keychain/config
+                        auto-detection is unavailable.
   MANAGEMENT_EXPECT_TOKENS=a,b
-                        Optional comma-separated tokens that must appear in served /management.html
+                        Comma-separated tokens that must appear in served /management.html.
+                        Default: reauth_copy_link
+  MANAGEMENT_FORBID_TOKENS=a,b
+                        Comma-separated tokens that must not appear in served /management.html.
+                        Default: reauth_open_link,onOpenReauthLink,openReauthLink
+  MANAGEMENT_RECHECK_DELAY=<sec>
+                        Delay before rechecking served /management.html after relaunch. Default: 15
 
 Notes:
   - build-staging prepares app/core plus static/management.html under build/local-replace.
@@ -88,6 +105,99 @@ import sys
 
 print(os.path.realpath(sys.argv[1]))
 PY
+}
+
+trim_quotes() {
+  local value="$1"
+  value="${value#\"}"
+  value="${value%\"}"
+  value="${value#\'}"
+  value="${value%\'}"
+  printf '%s\n' "$value"
+}
+
+is_bcrypt_value() {
+  [[ "$1" =~ ^\$2[aby]\$ ]]
+}
+
+parse_remote_secret_key() {
+  local config_path="$1"
+  [[ -f "$config_path" ]] || return 0
+  awk '
+    /^[^[:space:]]/ {
+      in_block = ($0 ~ /^remote-management:[[:space:]]*$/)
+    }
+    in_block && /^[[:space:]]*secret-key:[[:space:]]*/ {
+      sub(/^[[:space:]]*secret-key:[[:space:]]*/, "", $0)
+      print
+      exit
+    }
+  ' "$config_path"
+}
+
+derive_keychain_service_from_support() {
+  local support_path="$1"
+  local app_dir
+  app_dir="$(basename "$support_path")"
+
+  if [[ "$app_dir" == "Quotio" ]]; then
+    printf 'dev.quotio.desktop.local-management\n'
+    return 0
+  fi
+
+  if [[ "$app_dir" == Quotio-* ]]; then
+    local suffix="${app_dir#Quotio-}"
+    suffix="$(printf '%s' "$suffix" | tr '[:upper:]' '[:lower:]')"
+    printf 'dev.quotio.desktop.%s.local-management\n' "$suffix"
+    return 0
+  fi
+
+  return 1
+}
+
+read_keychain_value() {
+  local service="$1"
+  security find-generic-password -s "$service" -a "local-management-key" -w 2>/dev/null || true
+}
+
+resolve_management_key() {
+  local derived_service=""
+  local derived_key=""
+  local config_secret=""
+
+  if [[ -n "$MANAGEMENT_KEY" ]]; then
+    RESOLVED_MANAGEMENT_KEY="$MANAGEMENT_KEY"
+    return 0
+  fi
+
+  if derived_service="$(derive_keychain_service_from_support "$TARGET_APP_SUPPORT")"; then
+    derived_key="$(read_keychain_value "$derived_service")"
+    if [[ -n "$derived_key" ]]; then
+      RESOLVED_MANAGEMENT_KEY="$derived_key"
+      return 0
+    fi
+  fi
+
+  config_secret="$(trim_quotes "$(parse_remote_secret_key "$TARGET_CONFIG_PATH")")"
+  if [[ -n "$config_secret" ]] && ! is_bcrypt_value "$config_secret"; then
+    RESOLVED_MANAGEMENT_KEY="$config_secret"
+    return 0
+  fi
+
+  return 1
+}
+
+preserve_usage_enabled() {
+  [[ "$PRESERVE_USAGE" == "1" ]]
+}
+
+preserve_usage_fail() {
+  local message="$1"
+  if preserve_usage_enabled && [[ "$PRESERVE_USAGE_STRICT" == "1" ]]; then
+    echo "$message" >&2
+    exit 1
+  fi
+  echo "[warn] ${message}" >&2
 }
 
 profile_value() {
@@ -265,6 +375,50 @@ wait_for_port_state() {
   done
 }
 
+verify_management_tokens() {
+  local html_path="$1"
+  local label="$2"
+
+  python3 - "$html_path" "$MANAGEMENT_EXPECT_TOKENS" "$MANAGEMENT_FORBID_TOKENS" "$label" <<'PY'
+import sys
+from pathlib import Path
+
+html_path, expected_raw, forbidden_raw, label = sys.argv[1:5]
+text = Path(html_path).read_text(encoding="utf-8", errors="ignore")
+expected = [token.strip() for token in expected_raw.split(",") if token.strip()]
+forbidden = [token.strip() for token in forbidden_raw.split(",") if token.strip()]
+missing = [token for token in expected if token not in text]
+present = [token for token in forbidden if token in text]
+if missing:
+    raise SystemExit(f"{label} management.html missing required token(s): " + ", ".join(missing))
+if present:
+    raise SystemExit(f"{label} management.html contains forbidden token(s): " + ", ".join(present))
+print(f"{label}_required_tokens_ok=" + (",".join(expected) if expected else "<none>"))
+print(f"{label}_forbidden_tokens_absent=" + (",".join(forbidden) if forbidden else "<none>"))
+PY
+}
+
+verify_served_management_asset() {
+  local label="$1"
+  local source_management_hash="$2"
+  local served_management_path=""
+  local served_management_hash=""
+
+  served_management_path="$(mktemp "${TMPDIR:-/tmp}/quotio-management-served.XXXXXX.html")"
+  curl -fsS "http://127.0.0.1:${TARGET_CORE_PORT}/management.html" -o "$served_management_path"
+  served_management_hash="$(hash_file "$served_management_path")"
+
+  if [[ "$source_management_hash" != "$served_management_hash" ]]; then
+    rm -f "$served_management_path"
+    echo "Served management asset hash mismatch after replacement (${label}): source=${source_management_hash} served=${served_management_hash}" >&2
+    exit 1
+  fi
+
+  verify_management_tokens "$served_management_path" "served_${label}"
+  rm -f "$served_management_path"
+  echo "[verify] Served management asset matches staged source (${label})"
+}
+
 verify_management_asset() {
   local source_management_hash=""
   local target_management_hash=""
@@ -280,24 +434,140 @@ verify_management_asset() {
     exit 1
   fi
 
-  if [[ -z "$MANAGEMENT_EXPECT_TOKENS" ]]; then
+  verify_management_tokens "$TARGET_MANAGEMENT_PATH" "disk"
+
+  if [[ "$RELAUNCH" != "1" ]]; then
     echo "[verify] Management asset hash matches staged source"
+    echo "[verify] Skipping served management check because RELAUNCH=${RELAUNCH}"
     return 0
   fi
 
-  python3 - "$TARGET_CORE_PORT" "$MANAGEMENT_EXPECT_TOKENS" <<'PY'
-import sys
-import urllib.request
+  verify_served_management_asset "initial" "$source_management_hash"
 
-port = sys.argv[1]
-tokens = [token.strip() for token in sys.argv[2].split(",") if token.strip()]
-served = urllib.request.urlopen(f"http://127.0.0.1:{port}/management.html", timeout=10).read().decode("utf-8", "ignore")
-missing = [token for token in tokens if token not in served]
-if missing:
-    raise SystemExit("served management.html missing token(s): " + ", ".join(missing))
-print("served_tokens_ok=" + ",".join(tokens))
+  if ! [[ "$MANAGEMENT_RECHECK_DELAY" =~ ^[0-9]+$ ]]; then
+    echo "MANAGEMENT_RECHECK_DELAY must be a non-negative integer: ${MANAGEMENT_RECHECK_DELAY}" >&2
+    exit 1
+  fi
+
+  if (( MANAGEMENT_RECHECK_DELAY > 0 )); then
+    echo "[verify] Waiting ${MANAGEMENT_RECHECK_DELAY}s before rechecking served management asset"
+    sleep "$MANAGEMENT_RECHECK_DELAY"
+    verify_served_management_asset "delayed" "$source_management_hash"
+  fi
+
+  echo "[verify] Management asset hash and tokens match staged source"
+}
+
+backup_usage_snapshot() {
+  TARGET_USAGE_EXPORT_CREATED=0
+  TARGET_USAGE_DISK_BACKUP_EXISTS=0
+
+  if ! preserve_usage_enabled; then
+    echo "[usage] Usage preservation disabled by PRESERVE_USAGE=${PRESERVE_USAGE}"
+    return 0
+  fi
+
+  if [[ -f "$TARGET_USAGE_FILE" ]]; then
+    cp "$TARGET_USAGE_FILE" "$TARGET_USAGE_DISK_BACKUP"
+    chmod 600 "$TARGET_USAGE_DISK_BACKUP" 2>/dev/null || true
+    TARGET_USAGE_DISK_BACKUP_EXISTS=1
+    echo "[usage] Backed up persisted usage snapshot: ${TARGET_USAGE_DISK_BACKUP}"
+  fi
+
+  if [[ -z "$(listener_pid "$TARGET_CORE_PORT")" ]]; then
+    if [[ "$TARGET_USAGE_DISK_BACKUP_EXISTS" == "1" ]]; then
+      cp "$TARGET_USAGE_DISK_BACKUP" "$TARGET_USAGE_EXPORT_BACKUP"
+      chmod 600 "$TARGET_USAGE_EXPORT_BACKUP" 2>/dev/null || true
+      TARGET_USAGE_EXPORT_CREATED=1
+      echo "[usage] Core is not running; using persisted usage snapshot for post-relaunch import"
+      return 0
+    fi
+    echo "[usage] Core is not running and no persisted usage snapshot exists"
+    return 0
+  fi
+
+  if ! resolve_management_key; then
+    preserve_usage_fail "Unable to resolve management key for usage export. Set MANAGEMENT_KEY=... or PRESERVE_USAGE=0 to bypass."
+    return 0
+  fi
+
+  if curl -fsS \
+      -H "Authorization: Bearer ${RESOLVED_MANAGEMENT_KEY}" \
+      "http://127.0.0.1:${TARGET_CORE_PORT}/v0/management/usage/export" \
+      -o "$TARGET_USAGE_EXPORT_BACKUP"; then
+    chmod 600 "$TARGET_USAGE_EXPORT_BACKUP" 2>/dev/null || true
+    TARGET_USAGE_EXPORT_CREATED=1
+    echo "[usage] Exported in-memory usage snapshot: ${TARGET_USAGE_EXPORT_BACKUP}"
+    return 0
+  fi
+
+  preserve_usage_fail "Failed to export usage statistics from running core on ${TARGET_CORE_PORT}"
+}
+
+restore_usage_snapshot() {
+  if ! preserve_usage_enabled; then
+    return 0
+  fi
+  if [[ "$RELAUNCH" != "1" ]]; then
+    echo "[usage] Skipping usage import because RELAUNCH=${RELAUNCH}"
+    return 0
+  fi
+  if [[ "${TARGET_USAGE_EXPORT_CREATED:-0}" != "1" || ! -s "$TARGET_USAGE_EXPORT_BACKUP" ]]; then
+    echo "[usage] No usage snapshot was exported; skipping post-relaunch import"
+    return 0
+  fi
+
+  if [[ -z "${RESOLVED_MANAGEMENT_KEY:-}" ]] && ! resolve_management_key; then
+    preserve_usage_fail "Unable to resolve management key for usage import. Usage export remains at ${TARGET_USAGE_EXPORT_BACKUP}"
+    return 0
+  fi
+
+  if curl -fsS -X POST \
+      -H "Authorization: Bearer ${RESOLVED_MANAGEMENT_KEY}" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${TARGET_USAGE_EXPORT_BACKUP}" \
+      "http://127.0.0.1:${TARGET_CORE_PORT}/v0/management/usage/import" \
+      -o "$TARGET_USAGE_IMPORT_RESPONSE"; then
+    chmod 600 "$TARGET_USAGE_IMPORT_RESPONSE" 2>/dev/null || true
+    echo "[usage] Imported preserved usage snapshot; response: ${TARGET_USAGE_IMPORT_RESPONSE}"
+    python3 - "$TARGET_USAGE_IMPORT_RESPONSE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+try:
+    data = json.loads(Path(sys.argv[1]).read_text())
+except Exception:
+    raise SystemExit(0)
+
+parts = []
+for key in ("added", "skipped", "total_requests", "failed_requests"):
+    if key in data:
+        parts.append(f"{key}={data[key]}")
+if parts:
+    print("usage_import_" + " ".join(parts))
 PY
-  echo "[verify] Management page serves expected tokens: ${MANAGEMENT_EXPECT_TOKENS}"
+    return 0
+  fi
+
+  preserve_usage_fail "Failed to import usage statistics after relaunch. Export remains at ${TARGET_USAGE_EXPORT_BACKUP}"
+}
+
+verify_core_ready() {
+  if curl -fsS "http://127.0.0.1:${TARGET_CORE_PORT}/healthz" >/dev/null 2>&1; then
+    echo "[verify] Internal core healthz is ready on ${TARGET_CORE_PORT}"
+    return 0
+  fi
+
+  if [[ -z "${RESOLVED_MANAGEMENT_KEY:-}" ]] && ! resolve_management_key; then
+    echo "[warn] /healthz unavailable and management key could not be resolved; port listener is the only readiness signal" >&2
+    return 0
+  fi
+
+  curl -fsS \
+    -H "Authorization: Bearer ${RESOLVED_MANAGEMENT_KEY}" \
+    "http://127.0.0.1:${TARGET_CORE_PORT}/v0/management/usage" >/dev/null
+  echo "[verify] Internal core management API is ready on ${TARGET_CORE_PORT}"
 }
 
 stop_pid() {
@@ -372,8 +642,10 @@ resolve_target_metadata() {
   TARGET_CLIENT_PORT="$(profile_value "$TARGET_PROFILE" proxy_port)"
   TARGET_CORE_PORT="$(profile_value "$TARGET_PROFILE" internal_proxy_port)"
   TARGET_CORE_PATH="${TARGET_APP_SUPPORT}/CLIProxyAPI"
+  TARGET_CONFIG_PATH="${TARGET_APP_SUPPORT}/config.yaml"
   TARGET_STATIC_DIR="${TARGET_APP_SUPPORT}/static"
   TARGET_MANAGEMENT_PATH="${TARGET_STATIC_DIR}/management.html"
+  TARGET_USAGE_FILE="${TARGET_APP_SUPPORT}/.usage-statistics.json"
   SOURCE_CORE_PATH="$STAGING_CORE"
   SOURCE_MANAGEMENT_PATH="$STAGING_MANAGEMENT_HTML"
   SOURCE_EXECUTABLE_NAME="$TARGET_EXECUTABLE_NAME"
@@ -562,6 +834,7 @@ show_plan() {
   echo "  target_app       : ${TARGET_APP_PATH_RESOLVED}"
   echo "  target_core      : ${TARGET_CORE_PATH}"
   echo "  target_management: ${TARGET_MANAGEMENT_PATH}"
+  echo "  target_usage     : ${TARGET_USAGE_FILE}"
   echo "  target_support   : ${TARGET_APP_SUPPORT}"
   echo "  target_auth_dir  : ${TARGET_AUTH_DIR}"
   echo "  client_port      : ${TARGET_CLIENT_PORT} (pid=$(listener_pid "$TARGET_CLIENT_PORT" || true))"
@@ -580,10 +853,15 @@ show_plan() {
   echo "  backup_app       : ${TARGET_APP_BACKUP}"
   echo "  backup_core      : ${TARGET_CORE_BACKUP}"
   echo "  backup_mgmt      : ${TARGET_MANAGEMENT_BACKUP}"
+  echo "  backup_usage_disk: ${TARGET_USAGE_DISK_BACKUP}"
+  echo "  backup_usage_api : ${TARGET_USAGE_EXPORT_BACKUP}"
   echo "  relaunch         : ${RELAUNCH}"
   echo "  verify_health    : ${VERIFY_HEALTH}"
   echo "  verify_management: ${VERIFY_MANAGEMENT}"
+  echo "  preserve_usage   : ${PRESERVE_USAGE} (strict=${PRESERVE_USAGE_STRICT})"
   echo "  mgmt_expect      : ${MANAGEMENT_EXPECT_TOKENS:-<none>}"
+  echo "  mgmt_forbid      : ${MANAGEMENT_FORBID_TOKENS:-<none>}"
+  echo "  mgmt_recheck_sec : ${MANAGEMENT_RECHECK_DELAY}"
 }
 
 apply_replacement() {
@@ -634,6 +912,7 @@ apply_replacement() {
     cp "$TARGET_MANAGEMENT_PATH" "$TARGET_MANAGEMENT_BACKUP"
     TARGET_MANAGEMENT_BACKUP_EXISTS=1
   fi
+  backup_usage_snapshot
   print_rollback_instructions
 
   if [[ -n "$app_pid" ]]; then
@@ -681,6 +960,9 @@ replace_core_reason=${CORE_REPLACE_REASON}
 backup_app=${TARGET_APP_BACKUP}
 backup_core=${TARGET_CORE_BACKUP}
 backup_management=${TARGET_MANAGEMENT_BACKUP}
+backup_usage_disk=${TARGET_USAGE_DISK_BACKUP}
+backup_usage_export=${TARGET_USAGE_EXPORT_BACKUP}
+usage_import_response=${TARGET_USAGE_IMPORT_RESPONSE}
 source_app=${SOURCE_APP_PATH}
 source_core=${SOURCE_CORE_PATH}
 source_management=${SOURCE_MANAGEMENT_PATH}
@@ -697,9 +979,9 @@ EOF
     wait_for_port_state "$TARGET_CLIENT_PORT" listening "$WAIT_TIMEOUT"
     wait_for_port_state "$TARGET_CORE_PORT" listening "$WAIT_TIMEOUT"
     if [[ "$VERIFY_HEALTH" == "1" ]]; then
-      curl -fsS "http://127.0.0.1:${TARGET_CORE_PORT}/healthz" >/dev/null
-      echo "[verify] Internal core healthz is ready on ${TARGET_CORE_PORT}"
+      verify_core_ready
     fi
+    restore_usage_snapshot
   fi
 
   if [[ "$VERIFY_MANAGEMENT" == "1" ]]; then
@@ -739,6 +1021,9 @@ case "$COMMAND" in
     TARGET_APP_BACKUP="${TARGET_BACKUP_ROOT}/$(basename "$TARGET_APP_PATH_RESOLVED").${TIMESTAMP}.bak"
     TARGET_CORE_BACKUP="${TARGET_BACKUP_ROOT}/CLIProxyAPI.${TIMESTAMP}.bak"
     TARGET_MANAGEMENT_BACKUP="${TARGET_BACKUP_ROOT}/management.html.${TIMESTAMP}.bak"
+    TARGET_USAGE_DISK_BACKUP="${TARGET_BACKUP_ROOT}/.usage-statistics.${TIMESTAMP}.bak"
+    TARGET_USAGE_EXPORT_BACKUP="${TARGET_BACKUP_ROOT}/usage-export.${TARGET}.${TIMESTAMP}.json"
+    TARGET_USAGE_IMPORT_RESPONSE="${TARGET_BACKUP_ROOT}/usage-import.${TARGET}.${TIMESTAMP}.json"
     TARGET_REPLACE_MANIFEST="${TARGET_BACKUP_ROOT}/replace.${TARGET}.${TIMESTAMP}.txt"
     apply_replacement
     ;;

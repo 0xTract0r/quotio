@@ -183,7 +183,8 @@ struct AccountRowData: Identifiable, Hashable {
         metadataKey: String? = nil,
         remark: String? = nil,
         hasConfiguredProxy: Bool = false,
-        identityPackage: RuntimeIdentityPackage? = nil
+        identityPackage: RuntimeIdentityPackage? = nil,
+        supportsIdentityBinding: Bool = true
     ) -> AccountRowData {
         let name = authFile.email ?? authFile.name
         return AccountRowData(
@@ -202,7 +203,7 @@ struct AccountRowData: Identifiable, Hashable {
             canToggleDisabled: true,
             canDelete: true,
             identityPackage: identityPackage,
-            supportsIdentityBinding: true
+            supportsIdentityBinding: supportsIdentityBinding
         )
     }
     

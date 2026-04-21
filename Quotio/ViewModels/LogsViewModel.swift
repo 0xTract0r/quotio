@@ -23,8 +23,12 @@ final class LogsViewModel {
     @ObservationIgnored private var lastLogTimestamp: Int?
     
     /// Configure the API client for fetching logs
-    func configure(baseURL: String, authKey: String) {
-        self.apiClient = ManagementAPIClient(baseURL: baseURL, authKey: authKey)
+    func configure(baseURL: String, authKey: String, remoteConfig: RemoteConnectionConfig? = nil) {
+        if let remoteConfig {
+            self.apiClient = ManagementAPIClient(config: remoteConfig, managementKey: authKey)
+        } else {
+            self.apiClient = ManagementAPIClient(baseURL: baseURL, authKey: authKey)
+        }
     }
     
     /// Check if the ViewModel is configured with an API client

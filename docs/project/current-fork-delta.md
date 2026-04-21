@@ -56,6 +56,16 @@
 - `scripts/start-management-center.sh`
 - `scripts/replace-local-quotio-runtime.sh`
 
+### 补充：远端模式现在以“直连远端 core”作为主语义
+
+当前宿主侧远端连接不再默认等同于旧 experimental remote proxy。
+
+- 用户可见主模式现在是 `remote-core`：Quotio 直接连接远端 core 的 management API，本地不需要再拉起一个本机 core
+- 本地 CLI 配置会直接指向远端 core 的 client endpoint，而不是先写回本地监听再转发
+- 旧 `remote` 语义只保留给历史配置迁移；维护时不要再把它当成新的产品能力入口
+- `remote-core` 当前目标保留的能力包括：Providers、API Keys、Agents、Logs、quota / usage；本地专属能力如本地 core 控制、fallback、identity packages 仍只属于 `localProxy`
+- 隔离 smoke 或临时调试可用 `QUOTIO_REMOTE_ENDPOINT`、`QUOTIO_REMOTE_MANAGEMENT_KEY`、`QUOTIO_REMOTE_VERIFY_SSL` 注入远端连接，避免测试 app 读取 Keychain；正常用户配置仍应走 UI 持久化配置
+
 ### 4. 多身份指纹不是停留在想法
 
 这轮二次开发已经做过的关键能力包括：
@@ -69,13 +79,15 @@
 当前还需要额外记住两个容易漏掉的行为边界：
 
 - provider 账号页现在支持“原账户就地重发 OAuth2 并替换原 oauth 文件”，不是只能新增账户；核心侧通过目标参数 `auth_name` 覆盖原 auth，并保留账户级 `prefix`、`proxy_url`、`headers`、`priority`、`note`、`disabled`
-- 管理后台与 Quotio 的原位重认证现在都支持“复制链接 / 取消 / localhost callback URL 回填”；对于需要在真实登录环境里打开授权链接、再把 `http://localhost:1455/...` 回填到发起端完成闭环的场景，已经有正式 UI 入口，不再需要手工拼 API
+- 管理后台与 Quotio 的原位重认证现在都支持“复制链接 / 取消 / localhost callback URL 回填”；管理后台为降低多账号误触风险，不再提供直接打开认证页按钮，需要在真实登录环境里打开授权链接时先复制链接，再把 `http://localhost:1455/...` 回填到发起端完成闭环
 - 重认证历史不再只能靠 auth 文件 `modified time` 猜测；core 会把事件落到 `<authDir>/.oauth-history/reauth.jsonl`，并通过只读 management API `/v0/management/oauth-reauth-history?auth_name=<name>&limit=<n>` 提供给 management 页面和 Quotio 展示
 - Codex `plus` 账号的可用模型轮询必须排除 `gpt-5.3-codex-spark`，不要把它当成可正常访问的可选模型
 - Codex OAuth auth 在本地正式 / 本地 dev / 远端 core 默认是独立副本；同一账号若多运行面并行 refresh，旧副本后续会出现 `invalid_grant` / `refresh_token_reused`。当前运维约束是：默认不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
 - 本地 `Quotio` / `Quotio Dev` 的 runtime 管理页真源是运行目录下的 `static/management.html`；本地替换脚本现在会把 `Cli-Proxy-API-Management-Center/dist/index.html` 一并 stage/replace，不能只看 app/core 是否更新
 - 本地 runtime 若要保留这套 fork 里的管理页改动，`config.yaml` 的 `remote-management.disable-auto-update-panel` 必须为 `true`；否则 core 启动后会从官方 `router-for-me/Cli-Proxy-API-Management-Center` release 重新拉取 `management.html`，把本地刚替换进去的页面覆盖回旧版
-- 本地正式 / dev runtime 的替换现在会把备份清单写到 `~/Library/Application Support/Quotio*/backups/local-runtime-replace/replace.<target>.<timestamp>.txt`，并支持用 `scripts/rollback-local-quotio-runtime.sh` 按最近一次或指定 manifest 一键回滚 app/core/management
+- `scripts/replace-local-quotio-runtime.sh` 的 management 验收不能只看磁盘文件 hash；当前脚本默认还会校验 served `/management.html` 与 staged hash 一致、重启后延迟 15 秒复查一次，并用 token 门禁卡住回归：默认必须出现 `reauth_copy_link`，默认不得出现 `reauth_open_link` / `onOpenReauthLink` / `openReauthLink`
+- 本地正式 / dev runtime 的替换现在会把备份清单写到 `~/Library/Application Support/Quotio*/backups/local-runtime-replace/replace.<target>.<timestamp>.txt`，并支持用 `scripts/rollback-local-quotio-runtime.sh` 按最近一次或指定 manifest 一键回滚 app/core/management；替换脚本默认 `PRESERVE_USAGE=1`，apply 前会备份磁盘 `.usage-statistics.json` 并优先导出运行中 core 的 `/v0/management/usage/export`，relaunch 后再导入 `/v0/management/usage/import`
+- 本地替换脚本的 core readiness 不应只依赖 `/healthz`；当前 core 可能没有该路由，脚本会在 `/healthz` 不可用时用带 management key 的 `/v0/management/usage` 作为 fallback 验证
 - 本地正式 / dev runtime 的 `~/.cli-proxy-api*/logs` 现在默认执行年龄策略：`logs-compress-after-days: 7`、`logs-delete-after-days: 30`。含义是最近 7 天保留未压缩 `.log`，7 天以上压成 `.log.gz`，30 天以上的 `.log` / `.log.gz` 自动删除；`main.log` 受保护，不参与年龄清理
 - usage 统计快照会持久化到 `~/Library/Application Support/Quotio*/.usage-statistics.json`；proxy core 启动时会自动 merge 恢复，所以“重启后历史没了”优先先排查宿主 UI 是否没有把 `requests_by_day` / `tokens_by_day` / `cost_by_day` 展示出来，而不是先假设 core 没落盘
 - 本地 usage / token 历史不在 `~/.cli-proxy-api*/logs`；清理请求/响应日志时，默认要保留 `~/Library/Application Support/Quotio*/.usage-statistics.json` 和 `~/Library/Application Support/Quotio*/request-history.json`
