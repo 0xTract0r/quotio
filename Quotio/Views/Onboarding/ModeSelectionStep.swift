@@ -136,6 +136,7 @@ struct OperatingModeCard: View {
         switch mode {
         case .monitor: return .green
         case .remoteCore, .remoteProxy: return .purple
+        case .remoteRelay: return .indigo
         default: return .gray
         }
     }

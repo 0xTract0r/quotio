@@ -7,6 +7,7 @@ import SwiftUI
 
 struct IdentityPackagesScreen: View {
     @Environment(QuotaViewModel.self) private var viewModel
+    @State private var modeManager = OperatingModeManager.shared
     @State private var selectedPackageID: UUID?
     @State private var draftPackage: RuntimeIdentityPackage?
     @State private var draftProxyPassword = ""
@@ -18,6 +19,8 @@ struct IdentityPackagesScreen: View {
     @State private var didEmitEmptyStateSmokeLog = false
     @State private var didRunFixtureFlowSmoke = false
     @State private var isRunningFixtureFlowSmoke = false
+    @State private var didLoadStoredProxyPassword = false
+    @State private var proxyPasswordDirty = false
 
     private var selectedPackage: RuntimeIdentityPackage? {
         guard let selectedPackageID else { return viewModel.identityPackages.first }
@@ -31,6 +34,25 @@ struct IdentityPackagesScreen: View {
     private var selectedProxyPassword: String {
         guard let selectedPackage else { return "" }
         return viewModel.identityPackageProxyPassword(for: selectedPackage.id)
+    }
+
+    private var isRemoteMode: Bool {
+        modeManager.currentMode.usesRemoteConnection
+    }
+
+    private var hasStoredProxyPassword: Bool {
+        selectedPackage?.proxy.passwordRef != nil
+    }
+
+    private var proxyPasswordBinding: Binding<String> {
+        Binding(
+            get: { draftProxyPassword },
+            set: { newValue in
+                draftProxyPassword = newValue
+                proxyPasswordDirty = true
+                didLoadStoredProxyPassword = true
+            }
+        )
     }
 
     private var canDeleteSelectedPackage: Bool {
@@ -75,6 +97,10 @@ struct IdentityPackagesScreen: View {
                         if let draftPackage {
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 20) {
+                                    if isRemoteMode {
+                                        remoteModeBanner
+                                    }
+
                                     if isIsolatedRuntime {
                                         runtimeScopeBanner
                                     }
@@ -117,13 +143,30 @@ struct IdentityPackagesScreen: View {
                                         TextField("Username", text: proxyOptionalBinding(for: \.username))
                                             .textFieldStyle(.roundedBorder)
 
-                                        SecureField("Password", text: $draftProxyPassword)
+                                        SecureField("Password", text: proxyPasswordBinding)
                                             .textFieldStyle(.roundedBorder)
 
                                         detailRow(
                                             label: "Password Storage",
                                             value: draftPackage.proxy.passwordRef == nil ? "Not stored" : "Stored in Keychain"
                                         )
+
+                                        if hasStoredProxyPassword {
+                                            HStack(spacing: 12) {
+                                                Button(didLoadStoredProxyPassword ? "Reload Saved Password" : "Load Saved Password") {
+                                                    loadStoredProxyPassword()
+                                                }
+                                                .buttonStyle(.bordered)
+
+                                                Text(
+                                                    didLoadStoredProxyPassword
+                                                        ? "Loaded from this Quotio instance's local Keychain."
+                                                        : "Not auto-loaded to avoid an unexpected local Keychain prompt."
+                                                )
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            }
+                                        }
 
                                         detailRow(
                                             label: "Password Ref",
@@ -396,6 +439,27 @@ struct IdentityPackagesScreen: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
+    private var remoteModeBanner: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "externaldrive.badge.icloud")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Remote mode still uses local identity packages")
+                    .font(.subheadline.weight(.semibold))
+
+                Text("Providers, logs, usage, and API keys come from the remote core. Identity packages and their saved proxy passwords still belong to this local Quotio instance.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
     private var createPackageButton: some View {
         Button {
             viewModel.createIdentityPackage()
@@ -521,7 +585,17 @@ struct IdentityPackagesScreen: View {
 
     private func syncDraftFromSelection() {
         draftPackage = selectedPackage
-        draftProxyPassword = selectedProxyPassword
+        proxyPasswordDirty = false
+
+        // Remote mode keeps identity-package data local today, so do not auto-read the
+        // saved proxy password from Keychain just by opening this detail view.
+        if isRemoteMode {
+            draftProxyPassword = ""
+            didLoadStoredProxyPassword = false
+        } else {
+            draftProxyPassword = selectedProxyPassword
+            didLoadStoredProxyPassword = hasStoredProxyPassword
+        }
     }
 
     private func scheduleFixtureFlowSmokeIfNeeded() {
@@ -587,8 +661,15 @@ struct IdentityPackagesScreen: View {
     private func saveDraft() {
         guard var draftPackage else { return }
         draftPackage.name = draftPackage.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        viewModel.updateIdentityPackage(draftPackage, proxyPassword: draftProxyPassword)
+        let proxyPasswordToPersist = proxyPasswordDirty ? draftProxyPassword : nil
+        viewModel.updateIdentityPackage(draftPackage, proxyPassword: proxyPasswordToPersist)
         syncDraftFromSelection()
+    }
+
+    private func loadStoredProxyPassword() {
+        draftProxyPassword = selectedProxyPassword
+        didLoadStoredProxyPassword = true
+        proxyPasswordDirty = false
     }
 
     private func deleteSelectedPackage() {

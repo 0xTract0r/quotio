@@ -12,6 +12,8 @@ final class CLIProxyManager {
     static let shared = CLIProxyManager()
     private static let debugTestCAFileDefaultsKey = "debugTestCAFile"
     private static let debugTestCAFileEnvironmentKey = "QUOTIO_TEST_CA_FILE"
+    private var remoteRelayActive = false
+    private var remoteRelayConfig: RemoteConnectionConfig?
     
     // MARK: - Two-Layer Proxy Architecture
     
@@ -32,7 +34,7 @@ final class CLIProxyManager {
         set {
             guard newValue != UserDefaults.standard.bool(forKey: "allowNetworkAccess") else { return }
             UserDefaults.standard.set(newValue, forKey: "allowNetworkAccess")
-            ensureConfigExists()
+            prepareLocalRuntimeConfiguration()
             if newValue {
                 ensureApiKeyExistsInConfig()
             }
@@ -209,6 +211,14 @@ final class CLIProxyManager {
     let configPath: String
     let authDir: String
     private(set) var managementKey: String
+    private var localManagementKeyState: LocalManagementKeyState
+
+    private enum LocalManagementKeyState {
+        case override
+        case persisted
+        case ephemeral
+        case persistenceFailed
+    }
     
     var port: UInt16 {
         get { proxyStatus.port }
@@ -244,6 +254,7 @@ final class CLIProxyManager {
     }
     
     init() {
+        let deferLocalRuntimePreparation = Self.shouldDeferLocalRuntimePreparation()
         let quotioDir = RuntimeProfile.applicationSupportDirectory()
         
         try? FileManager.default.createDirectory(at: quotioDir, withIntermediateDirectories: true)
@@ -251,18 +262,10 @@ final class CLIProxyManager {
         self.binaryPath = quotioDir.appendingPathComponent("CLIProxyAPI").path
         self.configPath = quotioDir.appendingPathComponent("config.yaml").path
         self.authDir = RuntimeProfile.authDirectoryPath
-        
-        if let overrideKey = RuntimeProfile.localManagementKeyOverride, !overrideKey.hasPrefix("$2a$") {
-            self.managementKey = overrideKey
-        } else if let savedKey = KeychainHelper.getLocalManagementKey(), !savedKey.hasPrefix("$2a$") {
-            self.managementKey = savedKey
-        } else {
-            let newKey = UUID().uuidString
-            self.managementKey = newKey
-            if !KeychainHelper.saveLocalManagementKey(newKey) {
-                Log.keychain("Failed to persist local management key, using in-memory value")
-            }
-        }
+
+        let resolvedKey = Self.resolveInitialLocalManagementKey(deferPersistence: deferLocalRuntimePreparation)
+        self.managementKey = resolvedKey.key
+        self.localManagementKeyState = resolvedKey.state
         
         if let overridePort = RuntimeProfile.proxyPortOverride {
             self.proxyStatus.port = overridePort
@@ -279,10 +282,74 @@ final class CLIProxyManager {
         // using UserDefaults.register(defaults:) which is the preferred approach
 
         try? FileManager.default.createDirectory(atPath: authDir, withIntermediateDirectories: true)
-        
+
+        if !deferLocalRuntimePreparation {
+            prepareLocalRuntimeConfiguration()
+        }
+    }
+
+    private static func shouldDeferLocalRuntimePreparation() -> Bool {
+        if let overrideMode = RuntimeProfile.operatingModeOverride {
+            return overrideMode != .localProxy
+        }
+
+        if let storedModeRaw = UserDefaults.standard.string(forKey: "operatingMode"),
+           let storedMode = OperatingMode(rawValue: storedModeRaw) {
+            return storedMode != .localProxy
+        }
+
+        return true
+    }
+
+    private static func resolveInitialLocalManagementKey(deferPersistence: Bool) -> (key: String, state: LocalManagementKeyState) {
+        if let overrideKey = RuntimeProfile.localManagementKeyOverride, !overrideKey.hasPrefix("$2a$") {
+            return (overrideKey, .override)
+        }
+
+        guard !deferPersistence else {
+            return (UUID().uuidString, .ephemeral)
+        }
+
+        if let savedKey = KeychainHelper.getLocalManagementKey(), !savedKey.hasPrefix("$2a$") {
+            return (savedKey, .persisted)
+        }
+
+        let newKey = UUID().uuidString
+        if KeychainHelper.saveLocalManagementKey(newKey) {
+            return (newKey, .persisted)
+        }
+
+        Log.keychain("Failed to persist local management key, using in-memory value")
+        return (newKey, .persistenceFailed)
+    }
+
+    private func prepareLocalRuntimeConfiguration() {
+        ensurePersistentLocalManagementKeyIfNeeded()
         ensureConfigExists()
         ensureLogRetentionDefaultsInConfig()
         ensureManagementPanelAutoUpdateDisabledInConfig()
+    }
+
+    private func ensurePersistentLocalManagementKeyIfNeeded() {
+        switch localManagementKeyState {
+        case .override, .persisted, .persistenceFailed:
+            return
+        case .ephemeral:
+            break
+        }
+
+        if let savedKey = KeychainHelper.getLocalManagementKey(), !savedKey.hasPrefix("$2a$") {
+            managementKey = savedKey
+            localManagementKeyState = .persisted
+            return
+        }
+
+        if KeychainHelper.saveLocalManagementKey(managementKey) {
+            localManagementKeyState = .persisted
+        } else {
+            localManagementKeyState = .persistenceFailed
+            Log.keychain("Failed to persist local management key, keeping in-memory value")
+        }
     }
 
     /// Restart the proxy if it is currently running.
@@ -291,6 +358,21 @@ final class CLIProxyManager {
         guard proxyStatus.running else { return }
 
         Task {
+            if remoteRelayActive, let relayConfig = remoteRelayConfig {
+                NSLog("[CLIProxyManager] Restarting remote relay to apply configuration changes...")
+                stopRemoteRelay()
+                try? await Task.sleep(nanoseconds: 500_000_000)
+
+                do {
+                    try await startRemoteRelay(config: relayConfig)
+                    NSLog("[CLIProxyManager] Remote relay restarted successfully")
+                } catch {
+                    NSLog("[CLIProxyManager] Failed to restart remote relay: \(error)")
+                    lastError = "Failed to restart relay: \(error.localizedDescription)"
+                }
+                return
+            }
+
             NSLog("[CLIProxyManager] Restarting proxy to apply configuration changes...")
             stop()
             // Wait 0.5s for ports to clear
@@ -657,6 +739,8 @@ final class CLIProxyManager {
         
         isRegeneratingKey = true
         defer { isRegeneratingKey = false }
+
+        prepareLocalRuntimeConfiguration()
         
         let previousKey = managementKey
         let newKey = UUID().uuidString
@@ -665,7 +749,10 @@ final class CLIProxyManager {
         
         guard proxyStatus.running else {
             if !KeychainHelper.saveLocalManagementKey(newKey) {
+                localManagementKeyState = .persistenceFailed
                 Log.keychain("Failed to persist regenerated management key while stopped")
+            } else {
+                localManagementKeyState = .persisted
             }
             return
         }
@@ -675,7 +762,10 @@ final class CLIProxyManager {
             try await Task.sleep(for: .milliseconds(500))
             try await start()
             if !KeychainHelper.saveLocalManagementKey(newKey) {
+                localManagementKeyState = .persistenceFailed
                 Log.keychain("Failed to persist regenerated management key after restart")
+            } else {
+                localManagementKeyState = .persisted
             }
         } catch {
             managementKey = previousKey
@@ -962,6 +1052,8 @@ final class CLIProxyManager {
         
         // Clean up any orphan processes from previous runs
         await cleanupOrphanProcesses()
+
+        prepareLocalRuntimeConfiguration()
         
         syncSecretKeyInConfig()
         ensureManagementPanelAutoUpdateDisabledInConfig()
@@ -1078,8 +1170,56 @@ final class CLIProxyManager {
             throw error
         }
     }
+
+    func startRemoteRelay(config: RemoteConnectionConfig) async throws {
+        guard !proxyStatus.running else { return }
+
+        isStarting = true
+        lastError = nil
+
+        defer { isStarting = false }
+
+        do {
+            try proxyBridge.configureRemote(
+                listenPort: proxyStatus.port,
+                remoteBaseURL: config.clientBaseURL,
+                verifySSL: config.verifySSL
+            )
+            proxyBridge.start()
+
+            try await Task.sleep(nanoseconds: 500_000_000)
+
+            guard proxyBridge.isRunning else {
+                throw ProxyError.startupFailedReason(proxyBridge.lastError ?? "Local relay listener did not become ready")
+            }
+
+            remoteRelayActive = true
+            remoteRelayConfig = config
+            proxyStatus.running = true
+            NSLog("[CLIProxyManager] Remote relay started: clients → \(proxyStatus.port) → \(config.clientBaseURL)")
+        } catch {
+            proxyBridge.stop()
+            remoteRelayActive = false
+            remoteRelayConfig = nil
+            proxyStatus.running = false
+            lastError = error.localizedDescription
+            throw error
+        }
+    }
+
+    func stopRemoteRelay() {
+        proxyBridge.stop()
+        remoteRelayActive = false
+        remoteRelayConfig = nil
+        proxyStatus.running = false
+    }
     
     func stop() {
+        if remoteRelayActive {
+            stopRemoteRelay()
+            return
+        }
+
         terminateAuthProcess()
         stopHealthMonitor()
         
@@ -1304,6 +1444,7 @@ final class CLIProxyManager {
 enum ProxyError: LocalizedError {
     case binaryNotFound
     case startupFailed
+    case startupFailedReason(String)
     case operationInProgress
     case networkError(String)
     case noCompatibleBinary
@@ -1316,6 +1457,8 @@ enum ProxyError: LocalizedError {
             return "CLIProxyAPI binary not found. Click 'Install' to download."
         case .startupFailed:
             return "Failed to start proxy server."
+        case .startupFailedReason(let reason):
+            return "Failed to start proxy server: \(reason)"
         case .operationInProgress:
             return "Another operation is already in progress. Please wait."
         case .networkError(let msg):

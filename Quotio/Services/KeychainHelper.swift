@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import LocalAuthentication
 import Security
 
 // MARK: - Keychain Helper
@@ -19,6 +20,8 @@ enum KeychainHelper {
     private static let warpTokensAccount = "warp-tokens"
     private static let localManagementDefaultsKey = "managementKey"
     private static let warpTokensDefaultsKey = "warpTokens"
+    private static let useDataProtectionKeychain = true
+    private static let legacyMigrationEnvironmentKey = "QUOTIO_ENABLE_LEGACY_KEYCHAIN_MIGRATION"
 
     // Legacy service names for keychain migration (newest first)
     private static let legacyRemoteServices = [
@@ -59,7 +62,7 @@ enum KeychainHelper {
         let account = "management-key-\(configId)"
         deleteData(service: remoteService, account: account)
         for legacy in legacyRemoteServices {
-            deleteData(service: legacy, account: account)
+            deleteLegacyData(service: legacy, account: account)
         }
     }
 
@@ -83,7 +86,12 @@ enum KeychainHelper {
         if let override = RuntimeProfile.localManagementKeyOverride {
             return override
         }
-        if let key = readString(service: localService, account: localManagementAccount) {
+        // Local runtime startup should not probe the classic login keychain and trigger access prompts.
+        if let key = readString(
+            service: localService,
+            account: localManagementAccount,
+            allowClassicFallback: false
+        ) {
             return key
         }
 
@@ -108,7 +116,7 @@ enum KeychainHelper {
         guard RuntimeProfile.localManagementKeyOverride == nil else { return }
         deleteData(service: localService, account: localManagementAccount)
         for legacy in legacyLocalServices {
-            deleteData(service: legacy, account: localManagementAccount)
+            deleteLegacyData(service: legacy, account: localManagementAccount)
         }
         UserDefaults.standard.removeObject(forKey: localManagementDefaultsKey)
     }
@@ -144,7 +152,7 @@ enum KeychainHelper {
     static func deleteWarpTokens() {
         deleteData(service: warpService, account: warpTokensAccount)
         for legacy in legacyWarpServices {
-            deleteData(service: legacy, account: warpTokensAccount)
+            deleteLegacyData(service: legacy, account: warpTokensAccount)
         }
         UserDefaults.standard.removeObject(forKey: warpTokensDefaultsKey)
     }
@@ -167,10 +175,14 @@ enum KeychainHelper {
     }
 
     private static func migrateData(from oldServices: [String], to newService: String, account: String) -> Data? {
+        guard legacyKeychainMigrationEnabled else {
+            return nil
+        }
+
         for oldService in oldServices {
-            guard let data = readData(service: oldService, account: account) else { continue }
+            guard let data = readLegacyData(service: oldService, account: account) else { continue }
             if saveData(data, service: newService, account: account) {
-                deleteData(service: oldService, account: account)
+                deleteLegacyData(service: oldService, account: account)
             }
             return data
         }
@@ -178,9 +190,13 @@ enum KeychainHelper {
     }
 
     private static func migrateString(from oldServices: [String], to newService: String, account: String) -> String? {
+        guard legacyKeychainMigrationEnabled else {
+            return nil
+        }
+
         // Non-destructive read: validate UTF-8 before committing the destructive migration
         for oldService in oldServices {
-            guard let data = readData(service: oldService, account: account) else { continue }
+            guard let data = readLegacyData(service: oldService, account: account) else { continue }
             guard let decoded = String(data: data, encoding: .utf8) else { continue }
             _ = migrateData(from: [oldService], to: newService, account: account)
             return decoded
@@ -192,13 +208,19 @@ enum KeychainHelper {
     private static func saveData(_ data: Data, service: String, account: String) -> Bool {
         deleteData(service: service, account: account)
 
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
+
+        if useDataProtectionKeychain {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+
+        applyNonInteractiveOptions(to: &query)
 
         let status = SecItemAdd(query as CFDictionary, nil)
         if status == errSecSuccess {
@@ -209,14 +231,40 @@ enum KeychainHelper {
         return false
     }
 
-    private static func readData(service: String, account: String) -> Data? {
-        let query: [String: Any] = [
+    private static func readData(
+        service: String,
+        account: String,
+        allowClassicFallback: Bool = true
+    ) -> Data? {
+        if let data = readData(service: service, account: account, useDataProtection: useDataProtectionKeychain) {
+            return data
+        }
+
+        guard allowClassicFallback else {
+            return nil
+        }
+
+        return copyClassicKeychainDataIfAvailable(service: service, account: account)
+    }
+
+    private static func readLegacyData(service: String, account: String) -> Data? {
+        readData(service: service, account: account, useDataProtection: false)
+    }
+
+    private static func readData(service: String, account: String, useDataProtection: Bool) -> Data? {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
+
+        if useDataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+
+        applyNonInteractiveOptions(to: &query)
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -232,8 +280,29 @@ enum KeychainHelper {
         return nil
     }
 
-    private static func readString(service: String, account: String) -> String? {
-        guard let data = readData(service: service, account: account) else {
+    private static func copyClassicKeychainDataIfAvailable(service: String, account: String) -> Data? {
+        guard useDataProtectionKeychain,
+              let data = readLegacyData(service: service, account: account) else {
+            return nil
+        }
+
+        if !saveData(data, service: service, account: account) {
+            Log.keychain("Failed to copy existing keychain item into Data Protection keychain (service: \(service), account: \(account))")
+        }
+
+        return data
+    }
+
+    private static func readString(
+        service: String,
+        account: String,
+        allowClassicFallback: Bool = true
+    ) -> String? {
+        guard let data = readData(
+            service: service,
+            account: account,
+            allowClassicFallback: allowClassicFallback
+        ) else {
             return nil
         }
 
@@ -241,15 +310,44 @@ enum KeychainHelper {
     }
 
     private static func deleteData(service: String, account: String) {
-        let query: [String: Any] = [
+        deleteData(service: service, account: account, useDataProtection: useDataProtectionKeychain)
+    }
+
+    private static func deleteLegacyData(service: String, account: String) {
+        deleteData(service: service, account: account, useDataProtection: false)
+    }
+
+    private static func deleteData(service: String, account: String, useDataProtection: Bool) {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
 
+        if useDataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+
+        applyNonInteractiveOptions(to: &query)
+
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
             Log.keychain("Keychain delete failed (service: \(service), account: \(account)): \(status)")
         }
+    }
+
+    private static func applyNonInteractiveOptions(to query: inout [String: Any]) {
+        query[kSecUseAuthenticationContext as String] = nonInteractiveContext()
+        query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+    }
+
+    private static func nonInteractiveContext() -> LAContext {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        return context
+    }
+
+    private static var legacyKeychainMigrationEnabled: Bool {
+        ProcessInfo.processInfo.environment[legacyMigrationEnvironmentKey] == "1"
     }
 }

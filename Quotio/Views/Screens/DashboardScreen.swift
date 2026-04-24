@@ -243,7 +243,7 @@ struct DashboardScreen: View {
                 .foregroundStyle(connectionStatusColor)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text("dashboard.remoteMode".localized())
+                Text(remoteModeTitle)
                     .font(.headline)
                 
                 if let config = modeManager.remoteConfig {
@@ -260,6 +260,10 @@ struct DashboardScreen: View {
         .padding()
         .background(connectionStatusColor.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var remoteModeTitle: String {
+        modeManager.isRemoteRelayMode ? "Remote Relay Mode" : "dashboard.remoteMode".localized()
     }
     
     private var connectionStatusColor: Color {
@@ -340,9 +344,25 @@ struct DashboardScreen: View {
             HStack {
                 if let config = modeManager.remoteConfig {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(config.clientBaseURL)
+                        Text(modeManager.isRemoteRelayMode ? displayEndpoint : config.clientBaseURL)
                             .font(.system(.body, design: .monospaced))
                             .textSelection(.enabled)
+
+                        if modeManager.isRemoteRelayMode {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(viewModel.proxyManager.proxyStatus.running ? .green : .gray)
+                                    .frame(width: 6, height: 6)
+                                Text(viewModel.proxyManager.proxyStatus.running ? "Local relay running" : "Local relay stopped")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text("Remote target: " + config.clientBaseURL)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
                         
                         if let lastConnected = config.lastConnected {
                             Text("dashboard.lastConnected".localized() + ": " + lastConnected.formatted(date: .abbreviated, time: .shortened))
@@ -355,7 +375,8 @@ struct DashboardScreen: View {
                 Spacer()
                 
                 Button {
-                    if let url = modeManager.remoteConfig?.clientBaseURL {
+                    if let config = modeManager.remoteConfig {
+                        let url = modeManager.isRemoteRelayMode ? displayEndpoint : config.clientBaseURL
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
                         pasteboard.setString(url, forType: .string)
@@ -364,6 +385,16 @@ struct DashboardScreen: View {
                     Image(systemName: "doc.on.doc")
                 }
                 .buttonStyle(.bordered)
+
+                if modeManager.isRemoteRelayMode {
+                    Button {
+                        Task { await viewModel.toggleProxy() }
+                    } label: {
+                        Image(systemName: viewModel.proxyManager.proxyStatus.running ? "stop.fill" : "play.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.proxyManager.isStarting)
+                }
             }
         } label: {
             Label("dashboard.remoteEndpoint".localized(), systemImage: "link")

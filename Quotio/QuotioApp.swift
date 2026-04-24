@@ -491,7 +491,7 @@ struct ContentView: View {
                     
                     // Status row - different per mode
                     Group {
-                        if modeManager.isLocalProxyMode {
+                        if modeManager.currentMode.supportsProxyControl {
                             ProxyStatusRow(viewModel: viewModel)
                         } else if modeManager.isRemoteProxyMode {
                             RemoteStatusRow()
@@ -510,8 +510,8 @@ struct ContentView: View {
             .navigationTitle("Quotio")
             .toolbar {
                 ToolbarItem {
-                    if modeManager.isLocalProxyMode {
-                        // Local proxy mode: proxy controls
+                    if modeManager.currentMode.supportsProxyControl {
+                        // Local proxy or remote relay mode: local entrypoint controls
                         if viewModel.proxyManager.isStarting {
                             SmallProgressView()
                         } else {
@@ -523,9 +523,9 @@ struct ContentView: View {
                             .help(viewModel.proxyManager.proxyStatus.running ? "action.stopProxy".localized() : "action.startProxy".localized())
                         }
                     } else {
-                        // Monitor or remote mode: refresh button
+                        // Monitor or direct remote mode: refresh button
                         Button {
-                            Task { await viewModel.refreshQuotasDirectly() }
+                            Task { await viewModel.manualRefresh() }
                         } label: {
                             Image(systemName: "arrow.clockwise")
                         }
@@ -543,7 +543,11 @@ struct ContentView: View {
             case .providers:
                 ProvidersScreen()
             case .identityPackages:
-                IdentityPackagesScreen()
+                if modeManager.currentMode.supportsIdentityPackages {
+                    IdentityPackagesScreen()
+                } else {
+                    DashboardScreen()
+                }
             case .fallback:
                 FallbackScreen()
             case .agents:
@@ -557,6 +561,19 @@ struct ContentView: View {
             case .about:
                 AboutScreen()
             }
+        }
+        .task {
+            ensureCurrentPageIsVisible()
+        }
+        .onChange(of: modeManager.currentMode) { _, _ in
+            ensureCurrentPageIsVisible()
+        }
+    }
+
+    private func ensureCurrentPageIsVisible() {
+        if viewModel.currentPage == .identityPackages,
+           !modeManager.currentMode.supportsIdentityPackages {
+            viewModel.currentPage = .dashboard
         }
     }
 }

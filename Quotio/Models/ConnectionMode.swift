@@ -96,6 +96,11 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
     /// Optional override when management API is exposed on a different base URL.
     /// If omitted, management requests are derived from `endpointURL`.
     var managementEndpointOverride: String?
+
+    /// Whether local clients should keep using Quotio's localhost entrypoint.
+    /// When enabled, Quotio starts a local relay instead of asking CLI tools to
+    /// connect directly to `clientBaseURL`.
+    var exposeLocalRelay: Bool
     
     /// Display name for this connection (user-defined)
     var displayName: String
@@ -115,6 +120,7 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
     init(
         endpointURL: String,
         managementEndpointOverride: String? = nil,
+        exposeLocalRelay: Bool = false,
         displayName: String = "Remote Server",
         verifySSL: Bool = true,
         timeoutSeconds: Int = 30,
@@ -123,11 +129,35 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
     ) {
         self.endpointURL = endpointURL
         self.managementEndpointOverride = managementEndpointOverride
+        self.exposeLocalRelay = exposeLocalRelay
         self.displayName = displayName
         self.verifySSL = verifySSL
         self.timeoutSeconds = timeoutSeconds
         self.lastConnected = lastConnected
         self.id = id
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case endpointURL
+        case managementEndpointOverride
+        case exposeLocalRelay
+        case displayName
+        case verifySSL
+        case timeoutSeconds
+        case lastConnected
+        case id
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        endpointURL = try container.decode(String.self, forKey: .endpointURL)
+        managementEndpointOverride = try container.decodeIfPresent(String.self, forKey: .managementEndpointOverride)
+        exposeLocalRelay = try container.decodeIfPresent(Bool.self, forKey: .exposeLocalRelay) ?? false
+        displayName = try container.decode(String.self, forKey: .displayName)
+        verifySSL = try container.decode(Bool.self, forKey: .verifySSL)
+        timeoutSeconds = try container.decode(Int.self, forKey: .timeoutSeconds)
+        lastConnected = try container.decodeIfPresent(Date.self, forKey: .lastConnected)
+        id = try container.decode(String.self, forKey: .id)
     }
     
     /// Validate the endpoint URL format
@@ -138,6 +168,19 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
     /// Whether the configuration is valid for connection
     var isValid: Bool {
         validationResult == .valid
+    }
+
+    func withLocalRelay(_ enabled: Bool) -> RemoteConnectionConfig {
+        RemoteConnectionConfig(
+            endpointURL: endpointURL,
+            managementEndpointOverride: managementEndpointOverride,
+            exposeLocalRelay: enabled,
+            displayName: displayName,
+            verifySSL: verifySSL,
+            timeoutSeconds: timeoutSeconds,
+            lastConnected: lastConnected,
+            id: id
+        )
     }
 
     /// Normalized base URL for client traffic (no `/v1`, `/v0`, or management suffix).

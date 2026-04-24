@@ -45,8 +45,8 @@ final class StatusBarMenuBuilder {
         menu.addItem(buildHeaderItem())
         menu.addItem(NSMenuItem.separator())
 
-        // 2. Network info (Proxy + Tunnel) - Local Proxy Mode only
-        if modeManager.isLocalProxyMode {
+        // 2. Network info (Proxy/Relay + Tunnel) for modes with a localhost client entrypoint.
+        if modeManager.currentMode.supportsProxyControl {
             menu.addItem(buildNetworkInfoItem())
             menu.addItem(NSMenuItem.separator())
         }

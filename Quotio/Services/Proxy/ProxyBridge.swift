@@ -14,7 +14,9 @@
 //
 
 import Foundation
+import Darwin
 import Network
+import Security
 
 // MARK: - Fallback Context
 
@@ -96,20 +98,86 @@ struct FallbackContext: Sendable {
 @MainActor
 @Observable
 final class ProxyBridge {
+    struct Target: Sendable {
+        let host: String
+        let port: UInt16
+        let hostHeader: String
+        let pathPrefix: String
+        let usesTLS: Bool
+        let verifySSL: Bool
+
+        static func local(port: UInt16) -> Target {
+            Target(
+                host: "127.0.0.1",
+                port: port,
+                hostHeader: "127.0.0.1:\(port)",
+                pathPrefix: "",
+                usesTLS: false,
+                verifySSL: true
+            )
+        }
+
+        static func remote(baseURL: String, verifySSL: Bool) throws -> Target {
+            guard let url = URL(string: baseURL),
+                  let scheme = url.scheme?.lowercased(),
+                  RemoteURLValidator.supportedSchemes.contains(scheme),
+                  let host = url.host,
+                  !host.isEmpty else {
+                throw ProxyBridgeError.invalidRemoteTarget
+            }
+
+            let portValue = url.port ?? (scheme == "https" ? 443 : 80)
+            guard let port = UInt16(exactly: portValue) else {
+                throw ProxyBridgeError.invalidRemoteTarget
+            }
+            let pathPrefix = url.path == "/" ? "" : url.path
+            let hostHeader = url.port == nil ? host : "\(host):\(port)"
+
+            return Target(
+                host: host,
+                port: port,
+                hostHeader: hostHeader,
+                pathPrefix: pathPrefix,
+                usesTLS: scheme == "https",
+                verifySSL: verifySSL
+            )
+        }
+
+        func forwardingPath(for path: String) -> String {
+            guard !pathPrefix.isEmpty else { return path }
+            let normalizedPath = path.hasPrefix("/") ? path : "/" + path
+            return pathPrefix + normalizedPath
+        }
+    }
+
+    enum ProxyBridgeError: LocalizedError {
+        case invalidRemoteTarget
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidRemoteTarget:
+                return "Invalid remote relay target"
+            }
+        }
+    }
     
     // MARK: - Properties
     
     private var listener: NWListener?
+    private var socketRelayListener: SocketHTTPRelayListener?
     private let stateQueue = DispatchQueue(label: "dev.quotio.desktop.proxy-bridge-state")
     
     /// The port this proxy listens on (user-facing port)
     private(set) var listenPort: UInt16 = 8080
+
+    /// Optional bind host for local-only relay exposure.
+    private(set) var listenHost: NWEndpoint.Host?
     
     /// The port CLIProxyAPI runs on (internal port)
     private(set) var targetPort: UInt16 = 18080
-    
-    /// Target host (always localhost)
-    private let targetHost = "127.0.0.1"
+
+    /// Target endpoint for forwarded client traffic.
+    private(set) var target = Target.local(port: 18080)
     
     /// Whether the proxy bridge is currently running
     private(set) var isRunning = false
@@ -164,7 +232,21 @@ final class ProxyBridge {
     ///   - targetPort: The port CLIProxyAPI runs on
     func configure(listenPort: UInt16, targetPort: UInt16) {
         self.listenPort = listenPort
+        self.listenHost = nil
         self.targetPort = targetPort
+        self.target = .local(port: targetPort)
+    }
+
+    /// Configure this bridge to expose a local client port backed by a remote core.
+    func configureRemote(listenPort: UInt16, remoteBaseURL: String, verifySSL: Bool) throws {
+        guard let loopback = IPv4Address("127.0.0.1") else {
+            throw ProxyBridgeError.invalidRemoteTarget
+        }
+
+        self.listenPort = listenPort
+        self.listenHost = .ipv4(loopback)
+        self.target = try .remote(baseURL: remoteBaseURL, verifySSL: verifySSL)
+        self.targetPort = target.port
     }
     
     /// Calculate internal port from user port (offset by 10000)
@@ -201,7 +283,12 @@ final class ProxyBridge {
                 return
             }
 
-            listener = try NWListener(using: parameters, on: port)
+            if let listenHost {
+                parameters.requiredLocalEndpoint = .hostPort(host: listenHost, port: port)
+                listener = try NWListener(using: parameters)
+            } else {
+                listener = try NWListener(using: parameters, on: port)
+            }
 
             listener?.stateUpdateHandler = { [weak self] state in
                 guard let weakSelf = self else { return }
@@ -221,6 +308,7 @@ final class ProxyBridge {
 
         } catch {
             lastError = error.localizedDescription
+            startSocketRelayFallback(reason: error.localizedDescription)
         }
     }
 
@@ -229,6 +317,8 @@ final class ProxyBridge {
         stateQueue.sync {
             listener?.cancel()
             listener = nil
+            socketRelayListener?.cancel()
+            socketRelayListener = nil
         }
 
         isRunning = false
@@ -240,13 +330,51 @@ final class ProxyBridge {
         switch state {
         case .ready:
             isRunning = true
+            lastError = nil
         case .failed(let error):
             isRunning = false
             lastError = error.localizedDescription
+            listener?.cancel()
+            listener = nil
+            startSocketRelayFallback(reason: error.localizedDescription)
         case .cancelled:
-            isRunning = false
+            isRunning = socketRelayListener != nil
         default:
             break
+        }
+    }
+
+    private func startSocketRelayFallback(reason: String) {
+        // Only remote-relay config sets a local-only listenHost. Keep the local proxy bridge
+        // on its existing NWListener path so fallback does not change local-mode semantics.
+        guard listenHost != nil, socketRelayListener == nil else { return }
+
+        do {
+            let fallback = try SocketHTTPRelayListener(
+                listenHost: "127.0.0.1",
+                listenPort: listenPort,
+                target: target
+            )
+            fallback.onConnectionAccepted = { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.totalRequests += 1
+                    self.activeConnections += 1
+                }
+            }
+            fallback.onConnectionClosed = { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.activeConnections = max(0, self.activeConnections - 1)
+                }
+            }
+            fallback.start()
+            socketRelayListener = fallback
+            isRunning = true
+            lastError = nil
+            NSLog("[ProxyBridge] NWListener failed (\(reason)); using socket HTTP relay fallback on 127.0.0.1:\(listenPort)")
+        } catch {
+            lastError = "\(reason); socket relay fallback failed: \(error.localizedDescription)"
         }
     }
 
@@ -445,8 +573,7 @@ final class ProxyBridge {
                 resolvedBody = body
             }
 
-            let targetPortValue = self.targetPort
-            let targetHostValue = self.targetHost
+            let targetValue = self.target
 
             self.forwardRequest(
                 method: method,
@@ -459,8 +586,7 @@ final class ProxyBridge {
                 startTime: startTime,
                 requestSize: data.count,
                 metadata: metadata,
-                targetPort: targetPortValue,
-                targetHost: targetHostValue,
+                target: targetValue,
                 fallbackContext: fallbackContext
             )
         }
@@ -650,6 +776,27 @@ final class ProxyBridge {
     
     // MARK: - Request Forwarding
 
+    private nonisolated func makeTLSOptions(for target: Target) -> NWProtocolTLS.Options? {
+        guard target.usesTLS else { return nil }
+
+        let options = NWProtocolTLS.Options()
+        target.host.withCString { serverName in
+            sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, serverName)
+        }
+
+        if !target.verifySSL {
+            sec_protocol_options_set_verify_block(
+                options.securityProtocolOptions,
+                { _, _, complete in
+                    complete(true)
+                },
+                DispatchQueue.global(qos: .userInitiated)
+            )
+        }
+
+        return options
+    }
+
     private nonisolated func forwardRequest(
         method: String,
         path: String,
@@ -661,24 +808,24 @@ final class ProxyBridge {
         startTime: Date,
         requestSize: Int,
         metadata: (provider: String?, model: String?, method: String, path: String),
-        targetPort: UInt16,
-        targetHost: String,
+        target: Target,
         fallbackContext: FallbackContext
     ) {
         // Create connection to CLIProxyAPI
-        guard let port = NWEndpoint.Port(rawValue: targetPort) else {
+        guard let port = NWEndpoint.Port(rawValue: target.port) else {
             sendError(to: originalConnection, statusCode: 500, message: "Invalid target port")
             return
         }
 
-        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(targetHost), port: port)
+        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(target.host), port: port)
 
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.enableKeepalive = true
         tcpOptions.keepaliveIdle = 30
         tcpOptions.keepaliveInterval = 5
         tcpOptions.keepaliveCount = 3
-        let parameters = NWParameters(tls: nil, tcp: tcpOptions)
+        let tlsOptions = makeTLSOptions(for: target)
+        let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
 
         let targetConnection = NWConnection(to: endpoint, using: parameters)
 
@@ -700,7 +847,7 @@ final class ProxyBridge {
         let capturedFallbackContext = fallbackContext
         let capturedHeaders = headers
         let capturedMethod = method
-        let capturedPath = path
+        let capturedPath = target.forwardingPath(for: path)
         let capturedVersion = version
 
         targetConnection.stateUpdateHandler = { [weak self] state in
@@ -721,7 +868,7 @@ final class ProxyBridge {
                 }
 
                 // Add our headers
-                forwardedRequest += "Host: \(targetHost):\(targetPort)\r\n"
+                forwardedRequest += "Host: \(target.hostHeader)\r\n"
                 forwardedRequest += "Connection: close\r\n"  // KEY: Force fresh connections
                 forwardedRequest += "Content-Length: \(body.utf8.count)\r\n"
                 forwardedRequest += "\r\n"
@@ -752,8 +899,7 @@ final class ProxyBridge {
                             method: capturedMethod,
                             path: capturedPath,
                             version: capturedVersion,
-                            targetPort: targetPort,
-                            targetHost: targetHost
+                            target: target
                         )
                     }
                 })
@@ -786,8 +932,7 @@ final class ProxyBridge {
         method: String,
         path: String,
         version: String,
-        targetPort: UInt16,
-        targetHost: String
+        target: Target
     ) {
         targetConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
@@ -836,8 +981,7 @@ final class ProxyBridge {
                                 startTime: startTime,
                                 requestSize: requestSize,
                                 metadata: metadata,
-                                targetPort: targetPort,
-                                targetHost: targetHost,
+                                target: target,
                                 fallbackContext: retryContext
                             )
                             return
@@ -885,8 +1029,7 @@ final class ProxyBridge {
                             startTime: startTime,
                             requestSize: requestSize,
                             metadata: metadata,
-                            targetPort: targetPort,
-                            targetHost: targetHost,
+                            target: target,
                             fallbackContext: nextContext
                         )
                     }
@@ -929,8 +1072,7 @@ final class ProxyBridge {
                                 method: method,
                                 path: path,
                                 version: version,
-                                targetPort: targetPort,
-                                targetHost: targetHost
+                                target: target
                             )
                         }
                     }
@@ -1087,5 +1229,457 @@ final class ProxyBridge {
         connection.send(content: responseData, completion: .contentProcessed { _ in
             connection.cancel()
         })
+    }
+}
+
+private final class SocketHTTPRelayListener: @unchecked Sendable {
+    private let listenHost: String
+    private let listenPort: UInt16
+    private let target: ProxyBridge.Target
+    private let queue = DispatchQueue(label: "dev.quotio.desktop.socket-http-relay-listener")
+    private var listenSocket: Int32 = -1
+    private var source: DispatchSourceRead?
+    private let activeConnectionsLock = NSLock()
+    private var activeConnections: [UUID: SocketHTTPRelayConnection] = [:]
+
+    var onConnectionAccepted: (@Sendable () -> Void)?
+    var onConnectionClosed: (@Sendable () -> Void)?
+
+    init(listenHost: String, listenPort: UInt16, target: ProxyBridge.Target) throws {
+        self.listenHost = listenHost
+        self.listenPort = listenPort
+        self.target = target
+        self.listenSocket = try Self.makeListenSocket(host: listenHost, port: listenPort)
+    }
+
+    deinit {
+        cancel()
+    }
+
+    func start() {
+        let readSource = DispatchSource.makeReadSource(fileDescriptor: listenSocket, queue: queue)
+        readSource.setEventHandler { [weak self] in
+            self?.acceptAvailableConnections()
+        }
+        readSource.setCancelHandler { [socket = listenSocket] in
+            if socket >= 0 {
+                Darwin.close(socket)
+            }
+        }
+        source = readSource
+        readSource.resume()
+    }
+
+    func cancel() {
+        source?.cancel()
+        source = nil
+        listenSocket = -1
+
+        let connections = removeAllActiveConnections()
+        for connection in connections {
+            connection.cancel()
+        }
+    }
+
+    private func acceptAvailableConnections() {
+        while true {
+            let clientSocket = Darwin.accept(listenSocket, nil, nil)
+            if clientSocket < 0 {
+                if errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR {
+                    return
+                }
+                return
+            }
+
+            Self.configureClientSocket(clientSocket)
+            onConnectionAccepted?()
+
+            let connectionId = UUID()
+            let connection = SocketHTTPRelayConnection(
+                clientSocket: clientSocket,
+                target: target,
+                onClose: { [weak self] in
+                    self?.removeActiveConnection(id: connectionId)
+                    self?.onConnectionClosed?()
+                }
+            )
+            storeActiveConnection(id: connectionId, connection: connection)
+            connection.start()
+        }
+    }
+
+    private func storeActiveConnection(id: UUID, connection: SocketHTTPRelayConnection) {
+        activeConnectionsLock.lock()
+        activeConnections[id] = connection
+        activeConnectionsLock.unlock()
+    }
+
+    private func removeActiveConnection(id: UUID) {
+        activeConnectionsLock.lock()
+        activeConnections[id] = nil
+        activeConnectionsLock.unlock()
+    }
+
+    private func removeAllActiveConnections() -> [SocketHTTPRelayConnection] {
+        activeConnectionsLock.lock()
+        let connections = Array(activeConnections.values)
+        activeConnections.removeAll()
+        activeConnectionsLock.unlock()
+        return connections
+    }
+
+    private static func makeListenSocket(host: String, port: UInt16) throws -> Int32 {
+        let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        var reuse: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+
+        var noSigPipe: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr.s_addr = inet_addr(host)
+
+        let bindResult = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+
+        guard bindResult == 0 else {
+            let code = POSIXErrorCode(rawValue: errno) ?? .EIO
+            Darwin.close(fd)
+            throw POSIXError(code)
+        }
+
+        guard Darwin.listen(fd, SOMAXCONN) == 0 else {
+            let code = POSIXErrorCode(rawValue: errno) ?? .EIO
+            Darwin.close(fd)
+            throw POSIXError(code)
+        }
+
+        let flags = fcntl(fd, F_GETFL, 0)
+        if flags >= 0 {
+            _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        }
+
+        return fd
+    }
+
+    private static func configureClientSocket(_ fd: Int32) {
+        var noSigPipe: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+
+        var timeout = timeval(tv_sec: 30, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+    }
+}
+
+private final class SocketHTTPRelayConnection: @unchecked Sendable {
+    private let clientSocket: Int32
+    private let target: ProxyBridge.Target
+    private let queue = DispatchQueue(label: "dev.quotio.desktop.socket-http-relay-connection")
+    private let onClose: (@Sendable () -> Void)?
+    private let closeLock = NSLock()
+    private var closed = false
+    private var targetConnection: NWConnection?
+
+    init(clientSocket: Int32, target: ProxyBridge.Target, onClose: (@Sendable () -> Void)?) {
+        self.clientSocket = clientSocket
+        self.target = target
+        self.onClose = onClose
+    }
+
+    func start() {
+        queue.async { [self] in
+            do {
+                let request = try Self.readHTTPRequest(from: clientSocket)
+                let forwardedRequest = try Self.rewriteRequest(request, target: target)
+                startTargetConnection(requestData: forwardedRequest)
+            } catch {
+                writeErrorResponse(statusCode: 400, message: "Bad Request")
+                close()
+            }
+        }
+    }
+
+    func cancel() {
+        close()
+    }
+
+    private func startTargetConnection(requestData: Data) {
+        guard let port = NWEndpoint.Port(rawValue: target.port) else {
+            writeErrorResponse(statusCode: 500, message: "Invalid target port")
+            close()
+            return
+        }
+
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.enableKeepalive = true
+        tcpOptions.keepaliveIdle = 30
+        tcpOptions.keepaliveInterval = 5
+        tcpOptions.keepaliveCount = 3
+
+        let parameters = NWParameters(tls: Self.makeTLSOptions(for: target), tcp: tcpOptions)
+        let connection = NWConnection(
+            to: .hostPort(host: NWEndpoint.Host(target.host), port: port),
+            using: parameters
+        )
+        targetConnection = connection
+
+        connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .ready:
+                self.sendRequest(requestData, to: connection)
+            case .failed:
+                self.writeErrorResponse(statusCode: 502, message: "Remote relay target failed")
+                self.close()
+            case .cancelled:
+                self.close()
+            default:
+                break
+            }
+        }
+        connection.start(queue: queue)
+    }
+
+    private func sendRequest(_ requestData: Data, to connection: NWConnection) {
+        connection.send(content: requestData, completion: .contentProcessed { [weak self, weak connection] error in
+            guard let self else { return }
+            guard error == nil, let connection else {
+                self.close()
+                return
+            }
+            self.receiveResponse(from: connection)
+        })
+    }
+
+    private func receiveResponse(from connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self, weak connection] data, _, isComplete, error in
+            guard let self else { return }
+
+            if let data, !data.isEmpty {
+                do {
+                    try Self.writeAll(data, to: self.clientSocket)
+                } catch {
+                    self.close()
+                    return
+                }
+            }
+
+            if isComplete || error != nil {
+                self.close()
+                return
+            }
+
+            if let connection {
+                self.receiveResponse(from: connection)
+            } else {
+                self.close()
+            }
+        }
+    }
+
+    private func close() {
+        closeLock.lock()
+        if closed {
+            closeLock.unlock()
+            return
+        }
+        closed = true
+        let connection = targetConnection
+        targetConnection = nil
+        closeLock.unlock()
+
+        connection?.cancel()
+        Darwin.shutdown(clientSocket, SHUT_RDWR)
+        Darwin.close(clientSocket)
+        onClose?()
+    }
+
+    private func writeErrorResponse(statusCode: Int, message: String) {
+        let reason: String
+        switch statusCode {
+        case 400: reason = "Bad Request"
+        case 500: reason = "Internal Server Error"
+        case 502: reason = "Bad Gateway"
+        default: reason = "Error"
+        }
+
+        let body = Data(message.utf8)
+        let headers = "HTTP/1.1 \(statusCode) \(reason)\r\n" +
+            "Content-Type: text/plain\r\n" +
+            "Content-Length: \(body.count)\r\n" +
+            "Connection: close\r\n" +
+            "\r\n"
+        let head = Data(headers.utf8)
+        var response = Data()
+        response.append(head)
+        response.append(body)
+        try? Self.writeAll(response, to: clientSocket)
+    }
+
+    private static func readHTTPRequest(from fd: Int32) throws -> Data {
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 65_536)
+        let maxRequestBytes = 64 * 1024 * 1024
+
+        while data.count < maxRequestBytes {
+            let count = Darwin.recv(fd, &buffer, buffer.count, 0)
+            if count > 0 {
+                data.append(buffer, count: count)
+                if requestIsComplete(data) {
+                    return data
+                }
+                continue
+            }
+
+            if count == 0 {
+                throw POSIXError(.ECONNRESET)
+            }
+
+            if errno == EINTR {
+                continue
+            }
+
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        throw POSIXError(.EOVERFLOW)
+    }
+
+    private static func requestIsComplete(_ data: Data) -> Bool {
+        guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)) else {
+            return false
+        }
+
+        let headerData = data[..<headerRange.upperBound]
+        guard let headerText = String(data: headerData, encoding: .utf8) else {
+            return false
+        }
+
+        let bodyBytes = data.count - headerRange.upperBound
+        let contentLength = headerText
+            .components(separatedBy: "\r\n")
+            .first { $0.range(of: #"^\s*content-length\s*:"#, options: [.regularExpression, .caseInsensitive]) != nil }
+            .flatMap { line -> Int? in
+                guard let separator = line.firstIndex(of: ":") else { return nil }
+                return Int(line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces))
+            }
+
+        return bodyBytes >= (contentLength ?? 0)
+    }
+
+    private static func rewriteRequest(_ request: Data, target: ProxyBridge.Target) throws -> Data {
+        guard let headerRange = request.range(of: Data("\r\n\r\n".utf8)) else {
+            throw POSIXError(.EINVAL)
+        }
+
+        let headerData = request[..<headerRange.lowerBound]
+        let bodyData = request[headerRange.upperBound...]
+
+        guard let headerText = String(data: headerData, encoding: .utf8) else {
+            throw POSIXError(.EINVAL)
+        }
+
+        var lines = headerText.components(separatedBy: "\r\n")
+        guard !lines.isEmpty else {
+            throw POSIXError(.EINVAL)
+        }
+
+        let requestLineParts = lines.removeFirst().split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+        guard requestLineParts.count == 3 else {
+            throw POSIXError(.EINVAL)
+        }
+
+        let method = String(requestLineParts[0])
+        let rawPath = normalizeRequestTarget(String(requestLineParts[1]))
+        let version = String(requestLineParts[2])
+        let forwardedPath = target.forwardingPath(for: rawPath)
+
+        var rewrittenLines = ["\(method) \(forwardedPath) \(version)"]
+        for line in lines where !line.isEmpty {
+            let lowercased = line.lowercased()
+            if lowercased.hasPrefix("host:")
+                || lowercased.hasPrefix("connection:")
+                || lowercased.hasPrefix("proxy-connection:") {
+                continue
+            }
+            rewrittenLines.append(line)
+        }
+
+        rewrittenLines.append("Host: \(target.hostHeader)")
+        rewrittenLines.append("Connection: close")
+
+        var rewritten = Data((rewrittenLines.joined(separator: "\r\n") + "\r\n\r\n").utf8)
+        rewritten.append(bodyData)
+        return rewritten
+    }
+
+    private static func normalizeRequestTarget(_ target: String) -> String {
+        guard let url = URL(string: target),
+              url.scheme != nil else {
+            return target
+        }
+
+        var path = url.path.isEmpty ? "/" : url.path
+        if let query = url.query, !query.isEmpty {
+            path += "?\(query)"
+        }
+        return path
+    }
+
+    private static func writeAll(_ data: Data, to fd: Int32) throws {
+        try data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+
+            var sent = 0
+            while sent < data.count {
+                let result = Darwin.send(fd, baseAddress.advanced(by: sent), data.count - sent, 0)
+                if result > 0 {
+                    sent += result
+                    continue
+                }
+
+                if result == 0 {
+                    throw POSIXError(.ECONNRESET)
+                }
+
+                if errno == EINTR {
+                    continue
+                }
+
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+        }
+    }
+
+    private static func makeTLSOptions(for target: ProxyBridge.Target) -> NWProtocolTLS.Options? {
+        guard target.usesTLS else { return nil }
+
+        let options = NWProtocolTLS.Options()
+        target.host.withCString { serverName in
+            sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, serverName)
+        }
+
+        if !target.verifySSL {
+            sec_protocol_options_set_verify_block(
+                options.securityProtocolOptions,
+                { _, _, complete in
+                    complete(true)
+                },
+                DispatchQueue.global(qos: .userInitiated)
+            )
+        }
+
+        return options
     }
 }

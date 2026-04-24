@@ -61,8 +61,8 @@ struct ProvidersScreen: View {
                     metadataKey: metadataKey,
                     remark: resolvedAccountRemark(for: metadataKey),
                     hasConfiguredProxy: effectiveProxyURL(for: file) != nil,
-                    identityPackage: modeManager.isLocalProxyMode ? viewModel.identityPackage(for: file) : nil,
-                    supportsIdentityBinding: modeManager.isLocalProxyMode
+                    identityPackage: modeManager.currentMode.supportsIdentityPackages ? viewModel.identityPackage(for: file) : nil,
+                    supportsIdentityBinding: modeManager.currentMode.supportsIdentityPackages
                 )
                 groups[provider, default: []].append(data)
             }
@@ -301,10 +301,11 @@ struct ProvidersScreen: View {
         ToolbarItem(placement: .automatic) {
             Button {
                 Task {
-                    if modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running {
+                    if modeManager.isRemoteProxyMode || (modeManager.isLocalProxyMode && viewModel.proxyManager.proxyStatus.running) {
                         await viewModel.refreshData()
-                        await viewModel.loadDirectAuthFiles()
-                    } else {
+                    }
+
+                    if !modeManager.isRemoteProxyMode {
                         await viewModel.loadDirectAuthFiles()
                     }
                     await viewModel.refreshAutoDetectedProviders()

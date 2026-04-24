@@ -625,11 +625,13 @@ actor ManagementAPIClient {
         return try JSONDecoder().decode(LatestVersionResponse.self, from: data)
     }
     
-    /// Check if proxy is responding by calling the debug endpoint.
-    /// This is simpler than /health which may not exist.
+    /// Check if the management API is responding.
+    /// Use `/auth-files` because it is part of the stable authenticated
+    /// management surface on both local and remote cores, unlike `/debug`
+    /// or `/healthz` which may be absent on some deployed builds.
     func checkProxyResponding() async -> Bool {
         do {
-            _ = try await makeRequest("/debug")
+            _ = try await makeRequest("/auth-files")
             return true
         } catch {
             return false

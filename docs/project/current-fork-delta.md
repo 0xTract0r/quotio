@@ -56,15 +56,19 @@
 - `scripts/start-management-center.sh`
 - `scripts/replace-local-quotio-runtime.sh`
 
-### 补充：远端模式现在以“直连远端 core”作为主语义
+### 补充：远端模式现在拆成直连与本机入口两种语义
 
 当前宿主侧远端连接不再默认等同于旧 experimental remote proxy。
 
 - 用户可见主模式现在是 `remote-core`：Quotio 直接连接远端 core 的 management API，本地不需要再拉起一个本机 core
 - 本地 CLI 配置会直接指向远端 core 的 client endpoint，而不是先写回本地监听再转发
+- 新增 `remote-relay`：Quotio 仍连接远端 core 的 management API，但本机只启动 localhost relay，不启动完整本地 core；Claude / Codex / Quo 等客户端仍写入 `http://127.0.0.1:<port>/v1`
+- `remote-relay` 下 Providers、API Keys、Logs、quota / usage、上游代理和 routing / retry 配置仍以远端 core 为真源；本地 request history 不作为日志真源
+- `remote-relay` 本机入口优先走既有 `ProxyBridge`，若 macOS `NWListener` 返回 `POSIX 22 / Invalid argument`，会仅在 remote relay 路径 fallback 到本机 `127.0.0.1:<port>` socket HTTP relay；这条 fallback 只负责转发到远端 core，不改变本地 core 模式语义
+- `remote-core` / `remote-relay` / `monitor` 启动时不应再预备本地 core runtime 或写 `local-management-key`；Keychain 读写默认非交互，legacy keychain migration 只有显式设置 `QUOTIO_ENABLE_LEGACY_KEYCHAIN_MIGRATION=1` 才启用
 - 旧 `remote` 语义只保留给历史配置迁移；维护时不要再把它当成新的产品能力入口
-- `remote-core` 当前目标保留的能力包括：Providers、API Keys、Agents、Logs、quota / usage；本地专属能力如本地 core 控制、fallback、identity packages 仍只属于 `localProxy`
-- 隔离 smoke 或临时调试可用 `QUOTIO_REMOTE_ENDPOINT`、`QUOTIO_REMOTE_MANAGEMENT_KEY`、`QUOTIO_REMOTE_VERIFY_SSL` 注入远端连接，避免测试 app 读取 Keychain；正常用户配置仍应走 UI 持久化配置
+- `remote-core` / `remote-relay` 当前目标保留的能力包括：Providers、API Keys、Agents、Logs、quota / usage；本地专属能力如本地 core 控制、fallback、identity packages 不再在远端模式暴露，避免把本地宿主状态误当成远端真源
+- 隔离 smoke 或临时调试可用 `QUOTIO_REMOTE_ENDPOINT`、`QUOTIO_REMOTE_MANAGEMENT_KEY`、`QUOTIO_REMOTE_VERIFY_SSL` 注入远端连接；需要强制本机入口时再加 `QUOTIO_REMOTE_EXPOSE_LOCAL_RELAY=1` 并把 `QUOTIO_OPERATING_MODE` 设为 `remote-relay`
 
 ### 4. 多身份指纹不是停留在想法
 

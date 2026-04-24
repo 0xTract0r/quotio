@@ -23,6 +23,7 @@
 开发测试、隔离运行、正式迁移与回滚操作。
 
 - [`remote-core-maintenance.md`](./operations/remote-core-maintenance.md): 远端 Linux core 作为当前运行真值时的维护规则与复验入口
+- [`remote-relay-ui-checklist.md`](./operations/remote-relay-ui-checklist.md): 本地 `Quotio Dev` 接远端 core 时的页面点击与同步验收清单
 - [`isolated-dev-testing.md`](./operations/isolated-dev-testing.md): Dev / Prod 隔离测试方案
 - [`dev-to-production-promotion.md`](./operations/dev-to-production-promotion.md): 从开发版收口到正式版的操作说明
 - [`linux-cliproxyapi-plus-deploy.md`](./operations/linux-cliproxyapi-plus-deploy.md): Linux 服务器上部署远程 `CLIProxyAPIPlus` 的实际记录与维护入口

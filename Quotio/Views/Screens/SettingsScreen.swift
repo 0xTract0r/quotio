@@ -73,9 +73,11 @@ struct SettingsScreen: View {
             PrivacySettingsSection()
             
             // Local Proxy Server - Only in Local Proxy Mode
-            if modeManager.isLocalProxyMode {
+            if modeManager.currentMode.supportsProxyControl {
                 LocalProxyServerSection()
-                UnifiedProxySettingsSection()
+                if modeManager.isLocalProxyMode {
+                    UnifiedProxySettingsSection()
+                }
             }
             
             // Notifications
@@ -114,6 +116,7 @@ struct OperatingModeSection: View {
     @State private var showModeChangeConfirmation = false
     @State private var pendingMode: OperatingMode?
     @State private var showRemoteConfigSheet = false
+    @State private var remoteConfigTargetMode: OperatingMode = .remoteCore
     
     var body: some View {
         Section {
@@ -151,7 +154,8 @@ struct OperatingModeSection: View {
             RemoteConnectionSheet(
                 existingConfig: modeManager.remoteConfig
             ) { config, managementKey in
-                modeManager.switchToRemote(config: config, managementKey: managementKey)
+                let relayConfig = config.withLocalRelay(remoteConfigTargetMode == .remoteRelay)
+                modeManager.switchToRemote(config: relayConfig, managementKey: managementKey, mode: remoteConfigTargetMode)
                 Task {
                     await viewModel.initialize()
                 }
@@ -169,6 +173,9 @@ struct OperatingModeSection: View {
         case .remoteCore, .remoteProxy:
             Label("settings.appMode.remoteNote".localized(), systemImage: "info.circle")
                 .font(.caption)
+        case .remoteRelay:
+            Label("Remote Relay keeps a localhost client endpoint while using the remote core for accounts, usage, and logs.", systemImage: "info.circle")
+                .font(.caption)
         case .localProxy:
             EmptyView()
         }
@@ -177,14 +184,16 @@ struct OperatingModeSection: View {
     private func handleModeSelection(_ mode: OperatingMode) {
         guard mode != modeManager.currentMode else { return }
         
-        // If switching to remote and no config exists, show config sheet
+        // Only require a saved remote config before prompting here. The key itself
+        // is resolved lazily when the user actually confirms the remote switch.
         if mode.usesRemoteConnection && modeManager.remoteConfig == nil {
+            remoteConfigTargetMode = mode
             showRemoteConfigSheet = true
             return
         }
         
-        // Confirm when switching FROM local proxy mode (stops the local proxy)
-        if modeManager.currentMode == .localProxy && (mode == .monitor || mode.usesRemoteConnection) {
+        // Confirm when switching away from a mode with a local entrypoint.
+        if modeManager.currentMode.supportsProxyControl && modeManager.currentMode != mode {
             pendingMode = mode
             showModeChangeConfirmation = true
         } else {
@@ -194,8 +203,28 @@ struct OperatingModeSection: View {
     }
     
     private func switchToMode(_ mode: OperatingMode) {
-        modeManager.switchMode(to: mode) {
-            viewModel.stopProxy()
+        if mode.usesRemoteConnection {
+            guard let config = modeManager.remoteConfig else {
+                remoteConfigTargetMode = mode
+                showRemoteConfigSheet = true
+                return
+            }
+
+            guard let managementKey = modeManager.remoteManagementKey else {
+                remoteConfigTargetMode = mode
+                showRemoteConfigSheet = true
+                return
+            }
+
+            modeManager.switchToRemote(
+                config: config.withLocalRelay(mode == .remoteRelay),
+                managementKey: managementKey,
+                mode: mode
+            )
+        } else {
+            modeManager.switchMode(to: mode) {
+                viewModel.stopProxy()
+            }
         }
         
         // Re-initialize based on new mode
@@ -326,7 +355,12 @@ struct RemoteServerSection: View {
     // MARK: - Actions
     
     private func saveRemoteConfig(_ config: RemoteConnectionConfig, managementKey: String) {
-        modeManager.switchToRemote(config: config, managementKey: managementKey)
+        let targetMode: OperatingMode = modeManager.isRemoteRelayMode ? .remoteRelay : .remoteCore
+        modeManager.switchToRemote(
+            config: config.withLocalRelay(targetMode == .remoteRelay),
+            managementKey: managementKey,
+            mode: targetMode
+        )
         
         Task {
             await viewModel.initialize()
@@ -719,6 +753,11 @@ struct LocalProxyServerSection: View {
     @AppStorage("allowNetworkAccess") private var allowNetworkAccess = false
     @State private var portText: String = ""
     @State private var isLoadingConfig = false  // Prevents onChange from firing during initial load
+    @State private var modeManager = OperatingModeManager.shared
+
+    private var isRemoteRelayMode: Bool {
+        modeManager.isRemoteRelayMode
+    }
     
     var body: some View {
         Section {
@@ -751,7 +790,9 @@ struct LocalProxyServerSection: View {
                     .textSelection(.enabled)
             }
             
-            ManagementKeyRow()
+            if !isRemoteRelayMode {
+                ManagementKeyRow()
+            }
             
             Toggle("settings.autoStartProxy".localized(), isOn: $autoStartProxy)
             
@@ -761,17 +802,25 @@ struct LocalProxyServerSection: View {
             Toggle("settings.autoRestartTunnel".localized(), isOn: $autoRestartTunnel)
                 .disabled(!viewModel.tunnelManager.installation.isInstalled)
                 
-            NetworkAccessSection(allowNetworkAccess: $allowNetworkAccess)
-                .onChange(of: allowNetworkAccess) { _, newValue in
-                    guard !isLoadingConfig else { return }
-                    viewModel.proxyManager.allowNetworkAccess = newValue
+            if !isRemoteRelayMode {
+                NetworkAccessSection(allowNetworkAccess: $allowNetworkAccess)
+                    .onChange(of: allowNetworkAccess) { _, newValue in
+                        guard !isLoadingConfig else { return }
+                        viewModel.proxyManager.allowNetworkAccess = newValue
+                    }
+            } else if let config = modeManager.remoteConfig {
+                LabeledContent("Remote target") {
+                    Text(config.clientBaseURL)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
                 }
+            }
                 
 
         } header: {
-            Label("settings.proxyServer".localized(), systemImage: "server.rack")
+            Label(isRemoteRelayMode ? "Local Relay" : "settings.proxyServer".localized(), systemImage: isRemoteRelayMode ? "point.3.connected.trianglepath.dotted" : "server.rack")
         } footer: {
-            Text("settings.restartProxy".localized())
+            Text(isRemoteRelayMode ? "Clients connect to this local endpoint; Quotio forwards traffic to the remote core." : "settings.restartProxy".localized())
                 .font(.caption)
         }
         .onAppear {

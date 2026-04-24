@@ -95,9 +95,10 @@ final class OnboardingViewModel {
         if selectedMode.usesRemoteConnection {
             let config = RemoteConnectionConfig(
                 endpointURL: remoteEndpoint,
+                exposeLocalRelay: selectedMode == .remoteRelay,
                 displayName: "Remote Server"
             )
-            modeManager.switchToRemote(config: config, managementKey: remoteManagementKey, fromOnboarding: true)
+            modeManager.switchToRemote(config: config, managementKey: remoteManagementKey, mode: selectedMode, fromOnboarding: true)
         } else {
             modeManager.completeOnboarding(mode: selectedMode)
         }

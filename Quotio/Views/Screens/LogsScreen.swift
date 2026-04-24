@@ -23,6 +23,10 @@ struct LogsScreen: View {
 
         return viewModel.proxyManager.proxyStatus.running && viewModel.apiClient != nil
     }
+
+    private var availableTabs: [LogsTab] {
+        modeManager.isRemoteRelayMode ? [.proxyLogs] : LogsTab.allCases
+    }
     
     enum LogsTab: String, CaseIterable {
         case requests = "requests"
@@ -57,7 +61,7 @@ struct LogsScreen: View {
                 VStack(spacing: 0) {
                     // Tab Picker
                     Picker("Tab", selection: $selectedTab) {
-                        ForEach(LogsTab.allCases, id: \.self) { tab in
+                        ForEach(availableTabs, id: \.self) { tab in
                             Label(tab.title, systemImage: tab.icon)
                                 .tag(tab)
                         }
@@ -83,6 +87,10 @@ struct LogsScreen: View {
             toolbarContent
         }
         .task {
+            if modeManager.isRemoteRelayMode {
+                selectedTab = .proxyLogs
+            }
+
             // Configure LogsViewModel with proxy connection when screen appears
             if !logsViewModel.isConfigured {
                 if modeManager.isRemoteProxyMode,
@@ -141,7 +149,13 @@ struct LogsScreen: View {
     
     private var requestHistoryView: some View {
         Group {
-            if viewModel.requestTracker.requestHistory.isEmpty {
+            if modeManager.isRemoteRelayMode {
+                ContentUnavailableView {
+                    Label("Remote logs are the source of truth", systemImage: "doc.text.magnifyingglass")
+                } description: {
+                    Text("Local request history is disabled in Remote Relay mode; use Proxy Logs for remote core logs.")
+                }
+            } else if viewModel.requestTracker.requestHistory.isEmpty {
                 ContentUnavailableView {
                     Label("logs.noRequests".localized(), systemImage: "arrow.up.arrow.down")
                 } description: {

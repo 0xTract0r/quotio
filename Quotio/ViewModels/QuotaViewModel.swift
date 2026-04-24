@@ -66,6 +66,9 @@ final class QuotaViewModel {
     var oauthState: OAuthState?
 
     var currentClientBaseURL: String? {
+        if modeManager.isRemoteRelayMode {
+            return proxyManager.clientEndpoint
+        }
         if modeManager.isRemoteProxyMode {
             return modeManager.remoteConfig?.clientBaseURL
         }
@@ -446,12 +449,33 @@ final class QuotaViewModel {
         let isConnected = await client.checkProxyResponding()
         
         if isConnected {
+            if modeManager.isRemoteRelayMode {
+                do {
+                    try await startRemoteRelay(config: config)
+                } catch {
+                    modeManager.setConnectionStatus(.error("Remote server connected, but local relay failed: \(error.localizedDescription)"))
+                    return
+                }
+            }
+
             modeManager.markConnected()
             await refreshData()
             startAutoRefresh()
         } else {
             modeManager.setConnectionStatus(.error("Could not connect to remote server"))
         }
+    }
+
+    private func startRemoteRelay(config: RemoteConnectionConfig) async throws {
+        requestTracker.stop()
+        requestTracker.resetRouteObserver()
+        proxyManager.proxyBridge.onRequestCompleted = nil
+
+        if proxyManager.proxyStatus.running {
+            proxyManager.stopRemoteRelay()
+        }
+
+        try await proxyManager.startRemoteRelay(config: config)
     }
     
     private func setupRemoteAPIClient(config: RemoteConnectionConfig, managementKey: String) async {
@@ -1264,11 +1288,28 @@ final class QuotaViewModel {
     }
     
     func toggleProxy() async {
+        if modeManager.isRemoteRelayMode {
+            if proxyManager.proxyStatus.running {
+                stopRemoteRelayEntrypoint()
+            } else {
+                await initializeRemoteMode()
+            }
+            return
+        }
+
         if proxyManager.proxyStatus.running {
             stopProxy()
         } else {
             await startProxy()
         }
+    }
+
+    private func stopRemoteRelayEntrypoint() {
+        requestTracker.stop()
+        requestTracker.resetRouteObserver()
+        proxyManager.proxyBridge.onRequestCompleted = nil
+        proxyManager.stopRemoteRelay()
+        restartWarmupScheduler()
     }
     
     private func setupAPIClient() {
@@ -1316,6 +1357,18 @@ final class QuotaViewModel {
     
     /// Attempt to recover an unresponsive proxy
     private func attemptProxyRecovery() async {
+        if modeManager.isRemoteRelayMode {
+            proxyManager.stopRemoteRelay()
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await initializeRemoteMode()
+            return
+        }
+
+        if modeManager.isRemoteProxyMode {
+            await reconnectRemote()
+            return
+        }
+
         // Check if process is still running
         if proxyManager.proxyStatus.running {
             // Proxy process is running but not responding - likely hung

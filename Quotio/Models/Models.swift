@@ -172,6 +172,7 @@ enum RuntimeProfile {
         return RemoteConnectionConfig(
             endpointURL: endpointURL,
             managementEndpointOverride: stringValue(for: "QUOTIO_REMOTE_MANAGEMENT_ENDPOINT"),
+            exposeLocalRelay: boolValue(for: "QUOTIO_REMOTE_EXPOSE_LOCAL_RELAY") ?? false,
             displayName: stringValue(for: "QUOTIO_REMOTE_DISPLAY_NAME") ?? "Remote Core",
             verifySSL: boolValue(for: "QUOTIO_REMOTE_VERIFY_SSL") ?? true,
             timeoutSeconds: remoteTimeoutSecondsOverride ?? 30,

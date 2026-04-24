@@ -12,6 +12,7 @@
 
 - 远端主机：`wisedata@10.1.1.201`
 - 人类客户端目标基线：Quotio -> `https://10.1.1.201:18317`
+- Quotio 接入方式：`remote-core` 直连远端 endpoint；或 `remote-relay` 保留本机 `127.0.0.1:<port>` 客户端入口并转发到远端 core
 - 管理页基线 URL：`https://10.1.1.201:18317/management.html`
 - 管理 key 文件：`/home/wisedata/deploy/cliproxyapi-plus/runtime/secrets.env`
 - 远端部署根目录：`/home/wisedata/deploy/cliproxyapi-plus`
@@ -43,7 +44,7 @@
 - `proxy-url` / `proxy_url`、上游代理转发、provider 出站链路改动
 - 准备让人类客户端继续接入 Quotio + 远端 core 的联调或验收
 
-本地 `Quotio Dev` 或本机临时 core 只算预检，不算最终验收。
+本地 `Quotio Dev` 或本机临时 core 只算预检，不算最终验收。若验收对象是 `remote-relay`，还必须确认本机监听端口只作为 relay，账号、token、logs、usage 与管理配置均从远端 core 拉取。
 
 ## 标准部署入口
 
@@ -140,6 +141,13 @@ management key 文件和取值逻辑不变；启用 HTTPS 后，变化的是：
 2. 用当前协议的 `BASE_URL` 调 `GET /management.html` 能打开管理页
 3. 用 `runtime/secrets.env` 里的管理 key 调 `GET ${BASE_URL}/v0/management/auth-files` 成功
 4. 对这次受影响的 provider / auth，至少做一次远端 provider-facing 复验
+
+若验收对象是 Quotio `remote-relay`，还要额外确认：
+
+- 本机只监听 `127.0.0.1:<localPort>`，不监听 `0.0.0.0`
+- `GET http://127.0.0.1:<localPort>/healthz` 能经 relay 返回远端 core 的健康结果
+- 经本机 relay 调 `/v0/management/auth-files`、`/v0/management/usage`、`/v0/management/logs` 能读到远端数据；不要把本地 request history 当成 remote-relay 日志真源
+- 隔离 smoke 日志中不应出现 `local-management-key` Keychain 读写弹框或系统交互；Keychain legacy migration 默认关闭
 
 说明：
 

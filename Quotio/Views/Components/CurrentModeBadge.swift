@@ -68,6 +68,8 @@ struct CurrentModeBadge: View {
             return "mode.localProxy".localized()
         case .remoteCore, .remoteProxy:
             return "mode.remoteProxy".localized()
+        case .remoteRelay:
+            return "Remote Relay"
         }
     }
     
@@ -92,6 +94,12 @@ struct CurrentModeBadge: View {
                 return "status.disconnected".localized()
             case .error:
                 return "status.error".localized()
+            }
+        case .remoteRelay:
+            if viewModel.proxyManager.proxyStatus.running {
+                return ":" + String(viewModel.proxyManager.port) + " - " + "status.running".localized()
+            } else {
+                return "status.stopped".localized()
             }
         }
     }
