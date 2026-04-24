@@ -41,6 +41,19 @@
 当前唯一真源是：
 
 - `third_party/CLIProxyAPIPlus`
+- 当前 fork remote：`git@github.com:0xTract0r/CLIProxyAPIPlus.git`
+- 当前主线 upstream：`git@github.com:router-for-me/CLIProxyAPI.git`
+- 已关闭的历史 Plus 仓库：`git@github.com:router-for-me/CLIProxyAPIPlus.git`
+
+当前还要补记一个容易误判的事实：
+
+- 截至 `2026-04-24`，`router-for-me/CLIProxyAPIPlus` 在本地匿名 HTTP / API 与 `git ls-remote` 视角下都返回 `404 / Not Found`
+- 本地 `third_party/CLIProxyAPIPlus/README.md` 明确把 `CLIProxyAPIPlus` 定义为 `CLIProxyAPI` 的 Plus 版本，非第三方 provider 改动应回 `CLIProxyAPI` 主线
+- GitHub API 里 `0xTract0r/CLIProxyAPIPlus` 的 `parent/source` 也都指向 `router-for-me/CLIProxyAPI`
+- 因此当前日常维护应区分两层：
+  - fork/origin 仍是 `0xTract0r/CLIProxyAPIPlus`
+  - 主线 upstream 应改按 `router-for-me/CLIProxyAPI` 理解
+- 已关闭的 `router-for-me/CLIProxyAPIPlus` 只保留为历史仓库名，不应再被写成当前 upstream
 
 配套入口：
 

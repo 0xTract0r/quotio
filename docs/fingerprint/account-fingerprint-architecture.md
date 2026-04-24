@@ -246,9 +246,10 @@
 当前维护策略以 [`cliproxy-plus-submodule.md`](../submodules/cliproxy-plus-submodule.md) 为准：
 
 - 子模块真源：`third_party/CLIProxyAPIPlus`
-- 官方上游：`git@github.com:router-for-me/CLIProxyAPIPlus.git`
-- Quotio fork：`git@github.com:0xTract0r/CLIProxyAPIPlus.git`
-- 当前维护基线：`upstream/main` + 最小本地补丁
+- 当前 fork remote：`git@github.com:0xTract0r/CLIProxyAPIPlus.git`
+- 当前主线 upstream：`git@github.com:router-for-me/CLIProxyAPI.git`
+- 已关闭历史 Plus 仓库：`git@github.com:router-for-me/CLIProxyAPIPlus.git`
+- 当前维护基线：以 `0xTract0r/CLIProxyAPIPlus` 已公开提交链承载 Plus/社区补丁，以 `router-for-me/CLIProxyAPI` 作为主线演进参考
 
 ### 不建议继续放在 `/tmp` 的原因
 
@@ -269,9 +270,10 @@
 ### 当前已经补齐的管理面
 
 - 固定路径：`third_party/CLIProxyAPIPlus`
-- 官方上游：`router-for-me/CLIProxyAPIPlus`
-- 远端 fork：`0xTract0r/CLIProxyAPIPlus`
-- 当前对齐策略：`upstream/main` 优先，仅重放仍未被官方吸收的本地补丁
+- 当前 fork remote：`0xTract0r/CLIProxyAPIPlus`
+- 当前主线 upstream：`router-for-me/CLIProxyAPI`
+- 已关闭历史 Plus 仓库：`router-for-me/CLIProxyAPIPlus`
+- 当前对齐策略：Plus/社区补丁维护在 fork；主线通用能力参考 `CLIProxyAPI`，按需审计后重放到 Plus fork
 - 重建命令：`./scripts/manage-cliproxy-plus.sh build`
 - 联调脚本：`scripts/watch-claude-mitm-session.sh`
 

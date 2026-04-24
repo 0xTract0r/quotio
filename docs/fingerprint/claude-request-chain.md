@@ -1,10 +1,10 @@
 # Claude 请求链路与指纹边界
 
-最后核对时间：2026-03-20 18:25
+最后核对时间：2026-04-24 00:49
 
 ## 已确认的运行时快照
 
-- Quotio 下载和升级的代理仓库是 `router-for-me/CLIProxyAPIPlus`，本地落地二进制文件名仍为 `CLIProxyAPI`
+- Quotio 当前通过项目内 `third_party/CLIProxyAPIPlus` 子模块维护代理 core；fork remote 是 `0xTract0r/CLIProxyAPIPlus`，主线 upstream 应按 `router-for-me/CLIProxyAPI` 理解；已关闭的 `router-for-me/CLIProxyAPIPlus` 不再作为当前 upstream；本地落地二进制文件名仍为 `CLIProxyAPI`
 - 当前运行中的代理二进制版本为 `6.8.52-1-plus`
 - Claude Code 本地入口配置为 `ANTHROPIC_BASE_URL=http://127.0.0.1:18317`
 - CLIProxyAPIPlus 当前实际监听在 `127.0.0.1:28317`

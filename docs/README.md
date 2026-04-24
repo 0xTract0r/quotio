@@ -43,6 +43,11 @@
 - [`cliproxy-plus-submodule.md`](./submodules/cliproxy-plus-submodule.md): `CLIProxyAPIPlus` 子模块维护说明
 - [`management-center-submodule.md`](./submodules/management-center-submodule.md): `Cli-Proxy-API-Management-Center` 子模块维护说明
 
+说明：
+- `CLIProxyAPIPlus` 当前 fork remote 是 `0xTract0r/CLIProxyAPIPlus`
+- `CLIProxyAPIPlus` 的主线 upstream 应按 `router-for-me/CLIProxyAPI` 理解
+- `router-for-me/CLIProxyAPIPlus` 只保留为已关闭的历史 Plus 仓库名
+
 ## `project/`
 
 Quotio 自身项目概览、运行边界与代码入口。
