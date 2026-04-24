@@ -6,9 +6,17 @@
 
 1. [`project/AI_ONBOARDING.md`](./project/AI_ONBOARDING.md)
 2. [`project/current-fork-delta.md`](./project/current-fork-delta.md)
-3. [`project/project-overview-prd.md`](./project/project-overview-prd.md)
+3. [`repo-knowledge-map.md`](./repo-knowledge-map.md)
+4. [`repo-memory-ledger.md`](./repo-memory-ledger.md)
+5. [`project/project-overview-prd.md`](./project/project-overview-prd.md)
 
 不要先把仓库理解成“原生 Quotio 未改造版”。
+
+## 仓库级知识入口
+
+- [`repo-knowledge-map.md`](./repo-knowledge-map.md): 回答“按任务类型先看哪里”
+- [`repo-memory-ledger.md`](./repo-memory-ledger.md): 回答“哪些长期事实、边界和教训必须记住”
+- [`.agentlens/INDEX.md`](../.agentlens/INDEX.md): 代码地图和模块导航，不替代上面两份人工文档
 
 ## `fingerprint/`
 
@@ -44,4 +52,4 @@ Quotio 自身项目概览、运行边界与代码入口。
 
 说明：
 - 旧的 `codebase-summary.md` 与 `codebase-structure-architecture-code-standards.md` 已并入当前 `project-overview-prd.md`
-- 更细的开发规则以仓库根目录 `AGENTS.md` 与 `.agentlens/INDEX.md` 为准
+- 更细的开发规则以仓库根目录 `AGENTS.md`、`repo-memory-ledger.md` 与 `.agentlens/INDEX.md` 为准

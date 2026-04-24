@@ -4,6 +4,11 @@
 
 如果你是第一次进入仓库的 AI，先读更短的首屏入口：[`AI_ONBOARDING.md`](./AI_ONBOARDING.md)。
 
+如果你接下来想按任务找资料入口或先看长期边界，再补读：
+
+- [`../repo-knowledge-map.md`](../repo-knowledge-map.md)
+- [`../repo-memory-ledger.md`](../repo-memory-ledger.md)
+
 ## 先看这个的原因
 
 如果你是新进入仓库的 AI，不要把这个项目理解成“原生上游 Quotio”。

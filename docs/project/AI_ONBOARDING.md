@@ -14,8 +14,14 @@
 ## 先读哪些
 
 - 所有新 AI：[`../../AGENTS.md`](../../AGENTS.md) 和 [`current-fork-delta.md`](./current-fork-delta.md)
+- 想看仓库级任务路由和长期记忆：[`../repo-knowledge-map.md`](../repo-knowledge-map.md) 和 [`../repo-memory-ledger.md`](../repo-memory-ledger.md)
 - 想看文档导航：[`../README.md`](../README.md)
 - 想按代码模块找入口：[`../../.agentlens/INDEX.md`](../../.agentlens/INDEX.md)
+
+这两份仓库级文档分工不同：
+
+- `repo-knowledge-map.md` 负责回答“先看哪里”
+- `repo-memory-ledger.md` 负责回答“哪些长期边界要记住”
 
 ## 按任务类型路由
 
