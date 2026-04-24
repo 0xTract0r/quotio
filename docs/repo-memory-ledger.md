@@ -84,6 +84,16 @@ proxy/core 相关实验默认先走 dev runtime 或独立 worktree。
 
 不要把 `.agentlens` 当成 fork 运行边界的唯一真源，也不要把整套全局提示词原样复制进仓库文档。
 
+### 10. 远端模式要把本机入口和远端真源分开理解
+
+当前远端模式不是单一语义：
+
+- `remote-core`：Quotio 直接连接远端 core，CLI 客户端也可以直接写远端 endpoint
+- `remote-relay`：Quotio 仍连接远端 core 的 management API，但本机只保留 `127.0.0.1:<port>` relay 给 Claude / Codex / Quo 等客户端；这个 relay 只负责把请求转发到远端 core
+- 这两种远端模式下，Providers、API Keys、Logs、quota / usage、远端 routing / retry / 上游代理配置都以远端 core 为真源，不应回退成“本地宿主数据”
+- `remote-core` / `remote-relay` / `monitor` 启动时不应再预备本地 core runtime 或写 `local-management-key`
+- 远端模式当前不暴露本地专属 `Identity Packages`，避免把宿主侧 phase-1 能力误当成远端 runtime 真源
+
 ## 收敛补充规则
 
 ### 什么时候补 `repo-knowledge-map.md`

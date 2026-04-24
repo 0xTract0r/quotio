@@ -81,7 +81,22 @@
 - [`operations/remote-core-maintenance.md`](./operations/remote-core-maintenance.md)
 - [`operations/linux-cliproxyapi-plus-deploy.md`](./operations/linux-cliproxyapi-plus-deploy.md)
 
-### 7. 做指纹、OAuth、上游请求验证或 Identity Package 相关判断
+### 7. 做 `remote-core` / `remote-relay`、localhost relay 或远端数据真源判断
+
+先看：
+
+- [`project/current-fork-delta.md`](./project/current-fork-delta.md)
+- [`operations/remote-relay-ui-checklist.md`](./operations/remote-relay-ui-checklist.md)
+- [`operations/remote-core-maintenance.md`](./operations/remote-core-maintenance.md)
+- [`repo-memory-ledger.md`](./repo-memory-ledger.md)
+
+记住：
+
+- `remote-core` 是直连远端 core
+- `remote-relay` 只是把本机 localhost 入口保留下来，数据和日志真源仍在远端 core
+- 远端模式当前不暴露本地专属 `Identity Packages`
+
+### 8. 做指纹、OAuth、上游请求验证或 Identity Package 相关判断
 
 先看：
 
@@ -90,7 +105,7 @@
 - [`fingerprint/claude-request-chain.md`](./fingerprint/claude-request-chain.md)
 - [`fingerprint/oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md`](./fingerprint/oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md)
 
-### 8. 排查“模型列表不同步”或“前端 / core / CLI picker 不一致”
+### 9. 排查“模型列表不同步”或“前端 / core / CLI picker 不一致”
 
 先看：
 
@@ -106,7 +121,7 @@
 
 这三层不是同一个东西。
 
-### 9. 收敛文档、补仓库级知识、判断项目地图是否要更新
+### 10. 收敛文档、补仓库级知识、判断项目地图是否要更新
 
 先看：
 
