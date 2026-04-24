@@ -19,7 +19,7 @@
 
 ## 🟢 Low Priority
 
-### `NOTE` (Quotio/Models/ConnectionMode.swift:234)
+### `NOTE` (Quotio/Models/ConnectionMode.swift:259)
 
 > localhost is now allowed for users running their own CLIProxyAPI
 

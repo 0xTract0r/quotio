@@ -2,7 +2,7 @@
 
 [← Back to MODULE](MODULE.md) | [← Back to INDEX](../../INDEX.md)
 
-Symbol maps for 3 large files in this module.
+Symbol maps for 4 large files in this module.
 
 ## Quotio/Models/CustomProviderModels.swift (510 lines)
 
@@ -61,13 +61,66 @@ Symbol maps for 3 large files in this module.
 | 621 | fn | enforceMaxItems | (private) |
 | 628 | fn | clampedMenuBarMax | (private) |
 
-## Quotio/Models/Models.swift (640 lines)
+## Quotio/Models/Models.swift (1093 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
-| 336 | fn | hash | (internal) |
-| 527 | method | init | (internal) |
-| 544 | mod | extension Int | (internal) |
-| 590 | fn | validate | (internal) |
-| 630 | fn | sanitize | (internal) |
+| 9 | enum | RuntimeProfile | (internal) |
+| 32 | fn | applicationSupportDirectory | (internal) |
+| 181 | fn | queueLabel | (internal) |
+| 209 | fn | stringValue | (private) |
+| 217 | fn | intValue | (private) |
+| 222 | fn | boolValue | (private) |
+| 238 | enum | AIProvider | (internal) |
+| 489 | struct | ProxyStatus | (internal) |
+| 500 | struct | AuthFile | (internal) |
+| 618 | fn | hash | (internal) |
+| 632 | struct | AuthFilesResponse | (internal) |
+| 636 | struct | OAuthReauthHistoryFileSummary | (internal) |
+| 656 | struct | OAuthReauthHistoryEvent | (internal) |
+| 680 | struct | OAuthReauthHistoryResponse | (internal) |
+| 693 | struct | APIKeysResponse | (internal) |
+| 703 | struct | UsageStats | (internal) |
+| 713 | struct | UsageData | (internal) |
+| 770 | struct | UsageDaySnapshot | (internal) |
+| 786 | struct | OAuthURLResponse | (internal) |
+| 793 | struct | OAuthStatusResponse | (internal) |
+| 814 | struct | OAuthCancelResponse | (internal) |
+| 824 | struct | OAuthCallbackResponse | (internal) |
+| 829 | struct | AuthFileStatusRefreshResponse | (internal) |
+| 849 | struct | AppConfig | (internal) |
+| 880 | struct | RoutingConfig | (internal) |
+| 884 | struct | QuotaExceededConfig | (internal) |
+| 894 | struct | RemoteManagementConfig | (internal) |
+| 910 | struct | LogEntry | (internal) |
+| 932 | enum | NavigationPage | (internal) |
+| 964 | mod | extension Color | (internal) |
+| 965 | method | init | (internal) |
+| 982 | mod | extension Int | (internal) |
+| 993 | mod | extension Double | (internal) |
+| 1010 | enum | ProxyURLValidationResult | (internal) |
+| 1041 | enum | ProxyURLValidator | (internal) |
+| 1043 | fn | validate | (internal) |
+| 1083 | fn | sanitize | (internal) |
+
+## Quotio/Models/RequestLog.swift (522 lines)
+
+| Line | Kind | Name | Visibility |
+| ---- | ---- | ---- | ---------- |
+| 13 | enum | FallbackAttemptOutcome | (internal) |
+| 19 | enum | FallbackTriggerReason | (internal) |
+| 39 | struct | FallbackAttempt | (internal) |
+| 44 | method | init | (internal) |
+| 51 | method | init | (internal) |
+| 57 | struct | RequestIdentityEvidence | (internal) |
+| 68 | struct | RequestLog | (internal) |
+| 199 | fn | withRouteObservation | (internal) |
+| 227 | struct | RequestRouteObservation | (internal) |
+| 237 | struct | RequestStats | (internal) |
+| 289 | struct | ProviderStats | (internal) |
+| 302 | struct | ModelStats | (internal) |
+| 318 | struct | RequestHistoryStore | (internal) |
+| 347 | fn | calculateStats | (internal) |
+| 440 | mod | extension RequestLog | (internal) |
+| 512 | mod | extension Int | (internal) |
 

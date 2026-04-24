@@ -2,7 +2,23 @@
 
 [← Back to MODULE](MODULE.md) | [← Back to INDEX](../../INDEX.md)
 
-Symbol maps for 1 large files in this module.
+Symbol maps for 2 large files in this module.
+
+## Quotio/Views/Components/AccountRow.swift (732 lines)
+
+| Line | Kind | Name | Visibility |
+| ---- | ---- | ---- | ---------- |
+| 12 | enum | AccountSource | (internal) |
+| 26 | enum | AccountLiveAlertLevel | (internal) |
+| 47 | fn | badgeCountText | (internal) |
+| 54 | struct | AccountRowData | (internal) |
+| 75 | method | init | (internal) |
+| 181 | fn | from | (internal) |
+| 211 | fn | from | (internal) |
+| 232 | fn | from | (internal) |
+| 250 | fn | hash | (internal) |
+| 278 | struct | AccountRow | (internal) |
+| 668 | fn | handleMenuBarToggle | (private) |
 
 ## Quotio/Views/Components/AgentConfigSheet.swift (989 lines)
 

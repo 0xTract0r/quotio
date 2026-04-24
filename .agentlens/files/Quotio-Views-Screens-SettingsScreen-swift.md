@@ -18,9 +18,9 @@
 | 176 | fn | handleModeSelection | (private) | `private func handleModeSelection(_ mode: Operat...` |
 | 195 | fn | switchToMode | (private) | `private func switchToMode(_ mode: OperatingMode)` |
 | 210 | struct | RemoteServerSection | (internal) | `struct RemoteServerSection` |
-| 330 | fn | saveRemoteConfig | (private) | `private func saveRemoteConfig(_ config: RemoteC...` |
-| 338 | fn | reconnect | (private) | `private func reconnect()` |
-| 353 | struct | UnifiedProxySettingsSection | (internal) | `struct UnifiedProxySettingsSection` |
+| 327 | fn | saveRemoteConfig | (private) | `private func saveRemoteConfig(_ config: RemoteC...` |
+| 335 | fn | reconnect | (private) | `private func reconnect()` |
+| 350 | struct | UnifiedProxySettingsSection | (internal) | `struct UnifiedProxySettingsSection` |
 | 573 | fn | loadConfig | (private) | `private func loadConfig() async` |
 | 620 | fn | saveProxyURL | (private) | `private func saveProxyURL() async` |
 | 638 | fn | saveRoutingStrategy | (private) | `private func saveRoutingStrategy(_ strategy: St...` |

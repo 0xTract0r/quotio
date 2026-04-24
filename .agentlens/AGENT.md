@@ -43,8 +43,8 @@ Follow this protocol to understand the codebase efficiently:
 
 ## Freshness Check
 
-**Generated:** 2026-02-22T05:13:12Z
-**Git HEAD:** `20248d4`
+**Generated:** 2026-04-24T08:02:35Z
+**Git HEAD:** `e632740`
 
 ### How to verify freshness
 
@@ -56,13 +56,64 @@ Follow this protocol to understand the codebase efficiently:
 
 | Module | Files | Type | Description |
 | ------ | ----- | ---- | ----------- |
-| `` | 36 | root | Module |
-| `Quotio/Models` | 15 | implicit | Data models |
+| `` | 271 | root | Module |
+| `Quotio/Models` | 16 | implicit | Data models |
 | `Quotio/Services/Antigravity` | 7 | implicit | Module |
 | `Quotio/Services/QuotaFetchers` | 9 | implicit | Module |
-| `Quotio/Views/Components` | 27 | implicit | UI components |
+| `Quotio/Views/Components` | 30 | implicit | UI components |
 | `Quotio/Views/Onboarding` | 6 | implicit | Module |
-| `Quotio/Views/Screens` | 8 | implicit | Module |
+| `Quotio/Views/Screens` | 9 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management` | 21 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/api/modules/amp` | 16 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/auth/claude` | 8 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/auth/codex` | 10 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/auth/copilot` | 5 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/auth/kiro` | 27 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/cmd` | 16 | implicit | Command-line interface |
+| `third_party/CLIProxyAPIPlus/internal/config` | 7 | implicit | Configuration |
+| `third_party/CLIProxyAPIPlus/internal/logging` | 7 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/misc` | 6 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/registry` | 8 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/runtime/executor` | 42 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/thinking` | 9 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude` | 5 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/gemini` | 5 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions` | 5 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/translator/kiro/claude` | 9 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/translator/kiro/openai` | 6 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/tui` | 13 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/util` | 14 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/watcher/diff` | 11 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/internal/watcher/synthesizer` | 8 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/sdk/api/handlers` | 9 | implicit | Request handlers |
+| `third_party/CLIProxyAPIPlus/sdk/api/handlers/openai` | 8 | implicit | Module |
+| `third_party/CLIProxyAPIPlus/sdk/auth` | 20 | implicit | Authentication logic |
+| `third_party/CLIProxyAPIPlus/sdk/translator` | 6 | implicit | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/common` | 6 | implicit | Utility functions |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/config` | 5 | implicit | Configuration |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/modelAlias` | 6 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers` | 6 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers/AmpcodeSection` | 2 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers/ClaudeSection` | 2 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers/CodexSection` | 2 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers/GeminiSection` | 2 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers/OpenAISection` | 2 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers/ProviderNav` | 2 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/providers/VertexSection` | 2 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/quota` | 6 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/ui` | 14 | implicit | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/usage` | 12 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/usage/hooks` | 4 | js/ts | React hooks |
+| `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components` | 9 | implicit | UI components |
+| `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/hooks` | 7 | implicit | React hooks |
+| `third_party/Cli-Proxy-API-Management-Center/src/hooks` | 11 | js/ts | React hooks |
+| `third_party/Cli-Proxy-API-Management-Center/src/i18n` | 1 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/pages/hooks` | 5 | implicit | React hooks |
+| `third_party/Cli-Proxy-API-Management-Center/src/services/api` | 16 | js/ts | API endpoints |
+| `third_party/Cli-Proxy-API-Management-Center/src/stores` | 11 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/types` | 15 | js/ts | Type definitions |
+| `third_party/Cli-Proxy-API-Management-Center/src/utils/quota` | 7 | js/ts | Module |
+| `third_party/Cli-Proxy-API-Management-Center/src/utils/usage` | 3 | js/ts | Module |
 
 ## When Docs Seem Stale
 
@@ -70,31 +121,31 @@ If documentation seems outdated or inconsistent with the code:
 
 1. **Regenerate docs:**
    ```bash
-   agentlens
+   bunx @agentlens/cli
    ```
 
 2. **Regenerate with diff mode** (faster, only changed files):
    ```bash
-   agentlens --diff main
+   bunx @agentlens/cli --diff master
    ```
 
 3. **Check freshness status:**
    ```bash
-   agentlens --check
+   bunx @agentlens/cli --check
    ```
 
 4. **Force full regeneration** (ignore cache):
    ```bash
-   agentlens --force
+   bunx @agentlens/cli --force
    ```
 
 ## Quick Reference
 
 | Metric | Value |
 | ------ | ----- |
-| Total files | 108 |
-| Modules | 7 |
-| Warnings | 3 |
+| Total files | 807 |
+| Modules | 58 |
+| Warnings | 9 |
 
 ---
 

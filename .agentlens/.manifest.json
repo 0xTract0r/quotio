@@ -1,41 +1,296 @@
 {
   "version": "0.5.0",
-  "generated_at": 1771737192,
+  "generated_at": 1777017755,
   "modules": {
-    "Quotio-Views-Components": {
-      "latest_mtime": 1771737187,
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers-OpenAISection": {
+      "latest_mtime": 1777009923,
+      "file_count": 2,
+      "files_hash": 6870158827765522816
+    },
+    "third_party-CLIProxyAPIPlus-internal-watcher-synthesizer": {
+      "latest_mtime": 1777009922,
+      "file_count": 8,
+      "files_hash": 2616861125212302262
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers-GeminiSection": {
+      "latest_mtime": 1777009923,
+      "file_count": 2,
+      "files_hash": 17837373431527799019
+    },
+    "third_party-CLIProxyAPIPlus-internal-api-handlers-management": {
+      "latest_mtime": 1777009922,
+      "file_count": 21,
+      "files_hash": 323779326426829413
+    },
+    "third_party-CLIProxyAPIPlus-internal-util": {
+      "latest_mtime": 1777009922,
+      "file_count": 14,
+      "files_hash": 7515647372725598232
+    },
+    "third_party-CLIProxyAPIPlus-sdk-api-handlers-openai": {
+      "latest_mtime": 1777009922,
+      "file_count": 8,
+      "files_hash": 12317627170260445002
+    },
+    "third_party-CLIProxyAPIPlus-internal-tui": {
+      "latest_mtime": 1777009922,
+      "file_count": 13,
+      "files_hash": 14513858578078790691
+    },
+    "third_party-CLIProxyAPIPlus-internal-auth-kiro": {
+      "latest_mtime": 1777009922,
       "file_count": 27,
-      "files_hash": 1651636987959044473
+      "files_hash": 4067353721141517342
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-stores": {
+      "latest_mtime": 1777009923,
+      "file_count": 11,
+      "files_hash": 5791735848573831921
+    },
+    "Quotio-Services-Antigravity": {
+      "latest_mtime": 1777009790,
+      "file_count": 7,
+      "files_hash": 5642888560805812290
+    },
+    "third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions": {
+      "latest_mtime": 1777009922,
+      "file_count": 5,
+      "files_hash": 14525344455427142604
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-ui": {
+      "latest_mtime": 1777009923,
+      "file_count": 14,
+      "files_hash": 10506060029125872269
+    },
+    "third_party-CLIProxyAPIPlus-internal-auth-claude": {
+      "latest_mtime": 1777009922,
+      "file_count": 8,
+      "files_hash": 10633383076269577628
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-hooks": {
+      "latest_mtime": 1777009923,
+      "file_count": 11,
+      "files_hash": 17331051746758246230
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-usage": {
+      "latest_mtime": 1777009923,
+      "file_count": 12,
+      "files_hash": 5800995646192862975
     },
     "Quotio-Views-Onboarding": {
-      "latest_mtime": 1771737187,
+      "latest_mtime": 1777009790,
       "file_count": 6,
       "files_hash": 4951050505872654154
     },
-    "Quotio-Models": {
-      "latest_mtime": 1771737187,
-      "file_count": 15,
-      "files_hash": 4757899445576674768
+    "third_party-CLIProxyAPIPlus-internal-misc": {
+      "latest_mtime": 1777009922,
+      "file_count": 6,
+      "files_hash": 3827878476824468600
     },
-    "root": {
-      "latest_mtime": 1771737187,
-      "file_count": 36,
-      "files_hash": 6614669084960066436
+    "third_party-CLIProxyAPIPlus-internal-translator-kiro-claude": {
+      "latest_mtime": 1777009922,
+      "file_count": 9,
+      "files_hash": 8078247392558371815
     },
     "Quotio-Services-QuotaFetchers": {
-      "latest_mtime": 1771737187,
+      "latest_mtime": 1777009790,
       "file_count": 9,
       "files_hash": 4271604733563799435
     },
-    "Quotio-Views-Screens": {
-      "latest_mtime": 1771737187,
-      "file_count": 8,
-      "files_hash": 15844722462868968527
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers-ClaudeSection": {
+      "latest_mtime": 1777009923,
+      "file_count": 2,
+      "files_hash": 2335775033381466564
     },
-    "Quotio-Services-Antigravity": {
-      "latest_mtime": 1771737187,
+    "third_party-Cli-Proxy-API-Management-Center-src-components-common": {
+      "latest_mtime": 1777009923,
+      "file_count": 6,
+      "files_hash": 18034201021345900268
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-types": {
+      "latest_mtime": 1777009923,
+      "file_count": 15,
+      "files_hash": 4323998977569783741
+    },
+    "third_party-CLIProxyAPIPlus-sdk-auth": {
+      "latest_mtime": 1777009922,
+      "file_count": 20,
+      "files_hash": 10079054873116484091
+    },
+    "third_party-CLIProxyAPIPlus-internal-watcher-diff": {
+      "latest_mtime": 1777009922,
+      "file_count": 11,
+      "files_hash": 9047538418986544412
+    },
+    "Quotio-Views-Screens": {
+      "latest_mtime": 1777009790,
+      "file_count": 9,
+      "files_hash": 15428803060144515506
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-features-authFiles-hooks": {
+      "latest_mtime": 1777009923,
       "file_count": 7,
-      "files_hash": 5642888560805812290
+      "files_hash": 236412492190287862
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-utils-quota": {
+      "latest_mtime": 1777009923,
+      "file_count": 7,
+      "files_hash": 12410145479231908515
+    },
+    "third_party-CLIProxyAPIPlus-internal-cmd": {
+      "latest_mtime": 1777009922,
+      "file_count": 16,
+      "files_hash": 6702377818118300478
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-i18n": {
+      "latest_mtime": 1777009923,
+      "file_count": 1,
+      "files_hash": 14865541068469862845
+    },
+    "third_party-CLIProxyAPIPlus-internal-api-modules-amp": {
+      "latest_mtime": 1777009922,
+      "file_count": 16,
+      "files_hash": 18178016654989908598
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-utils-usage": {
+      "latest_mtime": 1777009923,
+      "file_count": 3,
+      "files_hash": 10050541206762843856
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-config": {
+      "latest_mtime": 1777009923,
+      "file_count": 5,
+      "files_hash": 12686288953996884665
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers-CodexSection": {
+      "latest_mtime": 1777009923,
+      "file_count": 2,
+      "files_hash": 5515502767344859108
+    },
+    "Quotio-Models": {
+      "latest_mtime": 1777010926,
+      "file_count": 16,
+      "files_hash": 14185113559660500996
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-usage-hooks": {
+      "latest_mtime": 1777009923,
+      "file_count": 4,
+      "files_hash": 12552902731621633155
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers-AmpcodeSection": {
+      "latest_mtime": 1777009923,
+      "file_count": 2,
+      "files_hash": 6355299089362757237
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers": {
+      "latest_mtime": 1777009923,
+      "file_count": 6,
+      "files_hash": 9970784210460750095
+    },
+    "Quotio-Views-Components": {
+      "latest_mtime": 1777009790,
+      "file_count": 30,
+      "files_hash": 3072628414135052621
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-services-api": {
+      "latest_mtime": 1777009923,
+      "file_count": 16,
+      "files_hash": 10131360686631926914
+    },
+    "third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude": {
+      "latest_mtime": 1777009922,
+      "file_count": 5,
+      "files_hash": 12871684714634486425
+    },
+    "third_party-CLIProxyAPIPlus-internal-translator-kiro-openai": {
+      "latest_mtime": 1777009922,
+      "file_count": 6,
+      "files_hash": 11523239253711383779
+    },
+    "third_party-CLIProxyAPIPlus-internal-registry": {
+      "latest_mtime": 1777010495,
+      "file_count": 8,
+      "files_hash": 13332044316912249743
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-features-authFiles-components": {
+      "latest_mtime": 1777009923,
+      "file_count": 9,
+      "files_hash": 16228228554300399611
+    },
+    "third_party-CLIProxyAPIPlus-internal-translator-antigravity-gemini": {
+      "latest_mtime": 1777009922,
+      "file_count": 5,
+      "files_hash": 15261296647598998071
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-pages-hooks": {
+      "latest_mtime": 1777009923,
+      "file_count": 5,
+      "files_hash": 1079984647216578054
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers-VertexSection": {
+      "latest_mtime": 1777009923,
+      "file_count": 2,
+      "files_hash": 12449754399462005015
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-providers-ProviderNav": {
+      "latest_mtime": 1777009923,
+      "file_count": 2,
+      "files_hash": 9638624122559909818
+    },
+    "third_party-CLIProxyAPIPlus-internal-thinking": {
+      "latest_mtime": 1777009922,
+      "file_count": 9,
+      "files_hash": 16414926827577121715
+    },
+    "root": {
+      "latest_mtime": 1777010943,
+      "file_count": 271,
+      "files_hash": 1508798841130123989
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-quota": {
+      "latest_mtime": 1777009923,
+      "file_count": 6,
+      "files_hash": 13713433158647718244
+    },
+    "third_party-CLIProxyAPIPlus-internal-auth-codex": {
+      "latest_mtime": 1777009922,
+      "file_count": 10,
+      "files_hash": 4730154131361857958
+    },
+    "third_party-CLIProxyAPIPlus-internal-config": {
+      "latest_mtime": 1777009922,
+      "file_count": 7,
+      "files_hash": 17992376750002197229
+    },
+    "third_party-CLIProxyAPIPlus-internal-runtime-executor": {
+      "latest_mtime": 1777009922,
+      "file_count": 42,
+      "files_hash": 16554068234642181831
+    },
+    "third_party-Cli-Proxy-API-Management-Center-src-components-modelAlias": {
+      "latest_mtime": 1777009923,
+      "file_count": 6,
+      "files_hash": 9883333934112571632
+    },
+    "third_party-CLIProxyAPIPlus-internal-auth-copilot": {
+      "latest_mtime": 1777009922,
+      "file_count": 5,
+      "files_hash": 7576723114161811475
+    },
+    "third_party-CLIProxyAPIPlus-internal-logging": {
+      "latest_mtime": 1777009922,
+      "file_count": 7,
+      "files_hash": 7834628263870989402
+    },
+    "third_party-CLIProxyAPIPlus-sdk-translator": {
+      "latest_mtime": 1777009922,
+      "file_count": 6,
+      "files_hash": 10347603580003093987
+    },
+    "third_party-CLIProxyAPIPlus-sdk-api-handlers": {
+      "latest_mtime": 1777009922,
+      "file_count": 9,
+      "files_hash": 10664544101311420474
     }
   }
 }

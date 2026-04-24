@@ -9,11 +9,11 @@
 | File | Lines | Large |
 | ---- | ----- | ----- |
 | `Quotio/Services/Antigravity/AntigravityAccountSwitcher.swift` | 318 |  |
-| `Quotio/Services/Antigravity/AntigravityDatabaseService.swift` | 466 |  |
+| `Quotio/Services/Antigravity/AntigravityDatabaseService.swift` | 461 |  |
 | `Quotio/Services/Antigravity/AntigravityDeviceManager.swift` | 137 |  |
 | `Quotio/Services/Antigravity/AntigravityProcessManager.swift` | 208 |  |
 | `Quotio/Services/Antigravity/AntigravityProtobufHandler.swift` | 412 |  |
-| `Quotio/Services/Antigravity/AntigravityQuotaFetcher.swift` | 909 | 📊 |
+| `Quotio/Services/Antigravity/AntigravityQuotaFetcher.swift` | 921 | 📊 |
 | `Quotio/Services/Antigravity/AntigravityVersionDetector.swift` | 141 |  |
 
 ## Documentation
