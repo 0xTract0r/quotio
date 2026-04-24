@@ -11,6 +11,7 @@ Quotio 现在通过 Git submodule 引用维护中的 `CLIProxyAPIPlus`：
 - 当前主线 upstream：`git@github.com:router-for-me/CLIProxyAPI.git`
 - 已关闭的历史 Plus 仓库：`git@github.com:router-for-me/CLIProxyAPIPlus.git`
 - 当前 gitlink 可抓取基线：以 `0xTract0r/CLIProxyAPIPlus` 已公开提交链为准
+- 当前对齐方式：`0xTract0r/CLIProxyAPIPlus` 作为可发布 fork，按独立同步任务审计并吸收 `upstream/main`
 
 截至 `2026-04-24`：
 
@@ -56,6 +57,9 @@ Quotio 现在通过 Git submodule 引用维护中的 `CLIProxyAPIPlus`：
 - 唯一推荐构建入口：`./scripts/manage-cliproxy-plus.sh build`
 - 任何实现 worktree 都必须先初始化子模块，再开始编码
 - 父仓库记录的 submodule commit 必须能从 `.gitmodules` 里配置的 fork URL 直接抓到；不要把仅存在于本地对象库、临时 branch 或只存在于主线 `router-for-me/CLIProxyAPI` 而未同步到 `0xTract0r/CLIProxyAPIPlus` 的 commit 直接写进 gitlink
+- 默认 remote 语义：
+  - `origin = 0xTract0r/CLIProxyAPIPlus`
+  - `upstream = router-for-me/CLIProxyAPI`
 
 以下路径都不能再被当成开发真源：
 
