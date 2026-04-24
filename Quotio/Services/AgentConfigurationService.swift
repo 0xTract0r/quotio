@@ -936,7 +936,7 @@ actor AgentConfigurationService {
         let configDir = "\(home)/.claude"
         let configPath = "\(configDir)/settings.json"
 
-        let opusModel = config.modelSlots[.opus] ?? "gemini-claude-opus-4-5-thinking"
+        let opusModel = config.modelSlots[.opus] ?? "claude-opus-4-7"
         let sonnetModel = config.modelSlots[.sonnet] ?? "gemini-claude-sonnet-4-5"
         let haikuModel = config.modelSlots[.haiku] ?? "gemini-3-flash-preview"
         let baseURL = config.proxyURL.replacingOccurrences(of: "/v1", with: "")
@@ -1272,7 +1272,7 @@ actor AgentConfigurationService {
 
         // Convert available models to OpenCode format dynamically
         var quotioModels: [String: [String: Any]] = [:]
-        let modelsToUse = availableModels.isEmpty ? AvailableModel.allModels : availableModels
+        let modelsToUse = availableModels.isEmpty ? AvailableModel.fallbackModels() : availableModels
 
         for model in modelsToUse {
             quotioModels[model.name] = buildOpenCodeModelConfig(for: model.name)
@@ -1415,7 +1415,7 @@ actor AgentConfigurationService {
         let openaiBaseURL = "\(config.proxyURL.replacingOccurrences(of: "/v1", with: ""))/v1"
 
         // Convert available models to Factory Droid format dynamically
-        let modelsToUse = availableModels.isEmpty ? AvailableModel.allModels : availableModels
+        let modelsToUse = availableModels.isEmpty ? AvailableModel.fallbackModels() : availableModels
         let customModels: [[String: Any]] = modelsToUse.map { model in
             [
                 "model": model.name,

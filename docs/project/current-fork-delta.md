@@ -1,6 +1,6 @@
 # 当前 Fork 改动总览
 
-最后更新：2026-04-21
+最后更新：2026-04-24
 
 如果你是第一次进入仓库的 AI，先读更短的首屏入口：[`AI_ONBOARDING.md`](./AI_ONBOARDING.md)。
 
@@ -82,6 +82,9 @@
 - 管理后台与 Quotio 的原位重认证现在都支持“复制链接 / 取消 / localhost callback URL 回填”；管理后台为降低多账号误触风险，不再提供直接打开认证页按钮，需要在真实登录环境里打开授权链接时先复制链接，再把 `http://localhost:1455/...` 回填到发起端完成闭环
 - 重认证历史不再只能靠 auth 文件 `modified time` 猜测；core 会把事件落到 `<authDir>/.oauth-history/reauth.jsonl`，并通过只读 management API `/v0/management/oauth-reauth-history?auth_name=<name>&limit=<n>` 提供给 management 页面和 Quotio 展示
 - Codex `plus` 账号的可用模型轮询必须排除 `gpt-5.3-codex-spark`，不要把它当成可正常访问的可选模型
+- core 的 `/v1/models` 当前不是只看 embedded `models.json`；启动后和每 3 小时会拉远端 models catalog，并在远端 payload 缺 provider section 时用 embedded catalog 补齐缺失段，避免某一类模型整段消失
+- Quotio 宿主侧的 Agents 模型列表与配置生成现在优先读取“最近一次成功拉取后的缓存模型”；静态 `AvailableModel.allModels` 只保留给冷启动最后兜底，不再作为远端拉取失败后的首选真源
+- Codex CLI TUI 里的 `/model` 菜单不是 Quotio/core `/v1/models` 的镜像；它是 Codex CLI 自己内置的 picker。即使 core 已经暴露 `gpt-5.5`，TUI `/model` 里暂时看不到 `gpt-5.5`，也不代表 runtime 不可用；实际运行模型仍以 `~/.codex/config.toml` 或 `codex -m <model>` 为准
 - Codex OAuth auth 在本地正式 / 本地 dev / 远端 core 默认是独立副本；同一账号若多运行面并行 refresh，旧副本后续会出现 `invalid_grant` / `refresh_token_reused`。当前运维约束是：默认不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
 - 本地 `Quotio` / `Quotio Dev` 的 runtime 管理页真源是运行目录下的 `static/management.html`；本地替换脚本现在会把 `Cli-Proxy-API-Management-Center/dist/index.html` 一并 stage/replace，不能只看 app/core 是否更新
 - 本地 runtime 若要保留这套 fork 里的管理页改动，`config.yaml` 的 `remote-management.disable-auto-update-panel` 必须为 `true`；否则 core 启动后会从官方 `router-for-me/Cli-Proxy-API-Management-Center` release 重新拉取 `management.html`，把本地刚替换进去的页面覆盖回旧版

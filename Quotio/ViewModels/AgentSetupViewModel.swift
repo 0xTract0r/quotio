@@ -374,7 +374,10 @@ final class AgentSetupViewModel {
             let fetchedModels = try await configurationService.fetchAvailableModels(config: config)
             let processedModels = processModels(fetchedModels)
             self.availableModels = processedModels
-            loadedFromRemote = true
+            if !fetchedModels.isEmpty {
+                AvailableModel.persistCachedModels(processedModels)
+                loadedFromRemote = true
+            }
 
             // Log model list
             let modelList = processedModels.map { "\($0.id) (provider: \($0.provider))" }.joined(separator: ", ")
@@ -383,8 +386,9 @@ final class AgentSetupViewModel {
             // On error, use default models if list is empty
             logger.error("[AgentSetupViewModel] Failed to load models: \(error.localizedDescription)")
             if availableModels.isEmpty {
-                self.availableModels = AvailableModel.allModels
-                logger.debug("[AgentSetupViewModel] Using \(AvailableModel.allModels.count) default models")
+                let fallbackModels = AvailableModel.fallbackModels()
+                self.availableModels = fallbackModels
+                logger.debug("[AgentSetupViewModel] Using \(fallbackModels.count) cached/default models")
             }
         }
 
@@ -412,7 +416,7 @@ final class AgentSetupViewModel {
             return fetchedModels.sorted { $0.displayName < $1.displayName }
         }
 
-        return AvailableModel.allModels.sorted { $0.displayName < $1.displayName }
+        return AvailableModel.fallbackModels().sorted { $0.displayName < $1.displayName }
     }
 
     /// Refresh virtual models - removes old ones and adds current ones

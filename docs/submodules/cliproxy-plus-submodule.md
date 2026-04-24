@@ -1,6 +1,6 @@
 # CLIProxyAPIPlus 子模块维护说明
 
-最后更新：2026-04-21
+最后更新：2026-04-24
 
 ## 当前方案
 
@@ -26,6 +26,12 @@ Quotio 现在通过 Git submodule 引用维护中的 `CLIProxyAPIPlus`：
 - `fix(management): back off release checks on rate limits`
 
 `QUOTIO_TEST_CA_FILE` 属于历史定制能力；如果后续仍需要继续维护，必须先重新确认官方主线是否已具备等价能力，再决定是否重放。
+
+当前还需要记住一条和模型同步相关的运行边界：
+
+- core 启动后和每 3 小时会尝试刷新远端 models catalog，不再只依赖 embedded `internal/registry/models/models.json`
+- 这轮补丁后，models refresh 会沿用当前 `proxy_url` 的 transport；如果远端返回的是“缺 section 的不完整 catalog”，core 会把缺失 section 用 embedded catalog 补齐，而不是把本地已有 provider 整段清空
+- Quotio 宿主侧不会在远端拉取失败后立刻退回纯静态全集，而是优先使用“最近一次成功拉取”的缓存模型列表；这能避免前端/配置生成回退到过时模型
 
 ## 真源规则
 

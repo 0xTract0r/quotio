@@ -217,6 +217,8 @@ enum ModelSlot: String, CaseIterable, Identifiable, Codable, Sendable {
 // MARK: - Available Models for Routing
 
 struct AvailableModel: Identifiable, Codable, Hashable, Sendable {
+    private static let cachedModelsDefaultsKey = "agentSetup.cachedAvailableModels"
+
     let id: String
     let name: String
     let provider: String
@@ -229,7 +231,7 @@ struct AvailableModel: Identifiable, Codable, Hashable, Sendable {
     }
 
     static let defaultModels: [ModelSlot: AvailableModel] = [
-        .opus: AvailableModel(id: "opus", name: "gemini-claude-opus-4-6-thinking", provider: "openai", isDefault: true),
+        .opus: AvailableModel(id: "opus", name: "claude-opus-4-7", provider: "anthropic", isDefault: true),
         .sonnet: AvailableModel(id: "sonnet", name: "gemini-claude-sonnet-4-5", provider: "openai", isDefault: true),
         .haiku: AvailableModel(id: "haiku", name: "gemini-3-flash-preview", provider: "openai", isDefault: true)
     ]
@@ -237,6 +239,7 @@ struct AvailableModel: Identifiable, Codable, Hashable, Sendable {
     static let allModels: [AvailableModel] = [
         // Claude models
         AvailableModel(id: "claude-opus-4-7", name: "claude-opus-4-7", provider: "anthropic", isDefault: false),
+        AvailableModel(id: "claude-opus-4-6", name: "claude-opus-4-6", provider: "anthropic", isDefault: false),
         AvailableModel(id: "gemini-claude-opus-4-6-thinking", name: "gemini-claude-opus-4-6-thinking", provider: "anthropic", isDefault: false),
         AvailableModel(id: "gemini-claude-opus-4-5-thinking", name: "gemini-claude-opus-4-5-thinking", provider: "anthropic", isDefault: false),
         AvailableModel(id: "gemini-claude-sonnet-4-5", name: "gemini-claude-sonnet-4-5", provider: "anthropic", isDefault: false),
@@ -249,6 +252,9 @@ struct AvailableModel: Identifiable, Codable, Hashable, Sendable {
         AvailableModel(id: "gemini-2.5-flash-lite", name: "gemini-2.5-flash-lite", provider: "google", isDefault: false),
         AvailableModel(id: "gemini-2.5-computer-use-preview-10-2025", name: "gemini-2.5-computer-use-preview-10-2025", provider: "google", isDefault: false),
         // GPT models
+        AvailableModel(id: "gpt-5.5", name: "gpt-5.5", provider: "openai", isDefault: false),
+        AvailableModel(id: "gpt-5.4", name: "gpt-5.4", provider: "openai", isDefault: false),
+        AvailableModel(id: "gpt-5.4-mini", name: "gpt-5.4-mini", provider: "openai", isDefault: false),
         AvailableModel(id: "gpt-5.3-codex", name: "gpt-5.3-codex", provider: "openai", isDefault: false),
         AvailableModel(id: "gpt-5.2", name: "gpt-5.2", provider: "openai", isDefault: false),
         AvailableModel(id: "gpt-5.2-codex", name: "gpt-5.2-codex", provider: "openai", isDefault: false),
@@ -261,6 +267,31 @@ struct AvailableModel: Identifiable, Codable, Hashable, Sendable {
         AvailableModel(id: "gpt-5-codex-mini", name: "gpt-5-codex-mini", provider: "openai", isDefault: false),
         AvailableModel(id: "gpt-oss-120b-medium", name: "gpt-oss-120b-medium", provider: "openai", isDefault: false),
     ]
+
+    static func persistCachedModels(_ models: [AvailableModel], in defaults: UserDefaults = .standard) {
+        let modelsToPersist = models.filter { $0.provider.caseInsensitiveCompare("fallback") != .orderedSame }
+        guard !modelsToPersist.isEmpty,
+              let data = try? JSONEncoder().encode(modelsToPersist) else {
+            return
+        }
+
+        defaults.set(data, forKey: cachedModelsDefaultsKey)
+    }
+
+    static func loadCachedModels(in defaults: UserDefaults = .standard) -> [AvailableModel] {
+        guard let data = defaults.data(forKey: cachedModelsDefaultsKey),
+              let models = try? JSONDecoder().decode([AvailableModel].self, from: data),
+              !models.isEmpty else {
+            return []
+        }
+
+        return models
+    }
+
+    static func fallbackModels(in defaults: UserDefaults = .standard) -> [AvailableModel] {
+        let cachedModels = loadCachedModels(in: defaults)
+        return cachedModels.isEmpty ? allModels : cachedModels
+    }
 }
 
 // MARK: - Agent Status
