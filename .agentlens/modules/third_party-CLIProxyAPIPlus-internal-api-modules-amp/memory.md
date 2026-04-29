@@ -5,7 +5,7 @@
 ## Summary
 
 | High 🔴 | Medium 🟡 | Low 🟢 |
-| 2 | 0 | 4 |
+| 1 | 0 | 5 |
 
 ## 🔴 High Priority
 
@@ -13,13 +13,9 @@
 
 > Use New with options instead.
 
-### `SAFETY` (third_party/CLIProxyAPIPlus/internal/api/modules/amp/response_rewriter.go:89)
-
-> cap: avoid unbounded buffering on large responses.
-
 ## 🟢 Low Priority
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/modules/amp/model_mapping.go:107)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/modules/amp/model_mapping.go:109)
 
 > Detailed routing log is handled by logAmpRouting in fallback_handlers.go
 
@@ -27,9 +23,13 @@
 
 > We do NOT filter Anthropic-Beta headers in the proxy path
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/modules/amp/proxy.go:236)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/modules/amp/proxy.go:242)
 
 > We only treat text/event-stream as streaming. Chunked transfer encoding
+
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/modules/amp/response_rewriter.go:274)
+
+> streaming mode does NOT suppress thinking blocks - they are
 
 ### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/modules/amp/routes.go:327)
 

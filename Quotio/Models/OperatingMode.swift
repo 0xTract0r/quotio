@@ -236,9 +236,13 @@ final class OperatingModeManager {
     /// Whether remote config is valid
     var hasValidRemoteConfig: Bool { remoteConfig?.isValid == true }
     
-    /// Management key for remote config (from Keychain)
+    /// Management key for remote config.
     var remoteManagementKey: String? {
         if let override = RuntimeProfile.remoteManagementKeyOverride {
+            if cachedRemoteManagementKey != override, let config = remoteConfig {
+                KeychainHelper.seedFileBackedRemoteManagementKeyIfNeeded(override, for: config.id)
+                cachedRemoteManagementKey = override
+            }
             return override
         }
 
@@ -367,6 +371,9 @@ final class OperatingModeManager {
         if let overrideConfig = RuntimeProfile.remoteConnectionConfigOverride {
             remoteConfig = overrideConfig
             cachedRemoteManagementKey = RuntimeProfile.remoteManagementKeyOverride
+            if let overrideKey = RuntimeProfile.remoteManagementKeyOverride {
+                KeychainHelper.seedFileBackedRemoteManagementKeyIfNeeded(overrideKey, for: overrideConfig.id)
+            }
             return
         }
 

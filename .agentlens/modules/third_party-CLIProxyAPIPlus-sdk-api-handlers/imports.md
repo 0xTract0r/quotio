@@ -25,7 +25,6 @@ graph TD
     third_party_CLIProxyAPIPlus_sdk_api_handlers[third_party-CLIProxyAPIPlus-sdk-api-handlers] --> thinking[thinking]
     third_party_CLIProxyAPIPlus_sdk_api_handlers[third_party-CLIProxyAPIPlus-sdk-api-handlers] --> time[time]
     third_party_CLIProxyAPIPlus_sdk_api_handlers[third_party-CLIProxyAPIPlus-sdk-api-handlers] --> util[util]
-    third_party_CLIProxyAPIPlus_sdk_api_handlers[third_party-CLIProxyAPIPlus-sdk-api-handlers] --> uuid[uuid]
 ```
 
 ## External Dependencies
@@ -51,5 +50,4 @@ Dependencies from other modules:
 - `thinking`
 - `time`
 - `util`
-- `uuid`
 

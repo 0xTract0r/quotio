@@ -2,7 +2,7 @@
 
 [← Back to MODULE](MODULE.md) | [← Back to INDEX](../../INDEX.md)
 
-Symbol maps for 1 large files in this module.
+Symbol maps for 2 large files in this module.
 
 ## third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_request_test.go (635 lines)
 
@@ -17,4 +17,14 @@ Symbol maps for 1 large files in this module.
 | 485 | fn | TestEmptyStringContent | pub |
 | 535 | fn | TestCallIDsMatchBetweenCallAndOutput | pub |
 | 599 | fn | TestToolsDefinitionTranslated | pub |
+
+## third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_response.go (534 lines)
+
+| Line | Kind | Name | Visibility |
+| ---- | ---- | ---- | ---------- |
+| 24 | struct | ConvertCliToOpenAIParams | pub |
+| 48 | fn | ConvertCodexResponseToOpenAI | pub |
+| 316 | fn | ConvertCodexResponseToOpenAINonStream | pub |
+| 486 | fn | buildReverseMapFromOriginalOpenAI | (private) |
+| 515 | fn | mimeTypeFromCodexOutputFormat | (private) |
 

@@ -4,9 +4,9 @@
 
 ## Overview
 
-- **Lines:** 3405
+- **Lines:** 3486
 - **Language:** Swift
-- **Symbols:** 154
+- **Symbols:** 157
 - **Public symbols:** 0
 
 ## Symbol Table
@@ -14,187 +14,190 @@
 | Line | Kind | Name | Visibility | Signature |
 | ---- | ---- | ---- | ---------- | --------- |
 | 11 | class | QuotaViewModel | (internal) | `class QuotaViewModel` |
-| 162 | fn | loadDisabledAuthFiles | (private) | `private func loadDisabledAuthFiles() -> Set<Str...` |
-| 168 | fn | saveDisabledAuthFiles | (private) | `private func saveDisabledAuthFiles(_ names: Set...` |
-| 173 | fn | syncDisabledStatesToBackend | (private) | `private func syncDisabledStatesToBackend() async` |
-| 192 | fn | notifyQuotaDataChanged | (private) | `private func notifyQuotaDataChanged()` |
-| 195 | method | init | (internal) | `init()` |
-| 234 | fn | setupProxyURLObserver | (private) | `private func setupProxyURLObserver()` |
-| 250 | fn | setupAccountRemarksObserver | (private) | `private func setupAccountRemarksObserver()` |
-| 278 | fn | normalizedProxyURL | (private) | `private func normalizedProxyURL(_ rawValue: Str...` |
-| 298 | fn | updateProxyConfiguration | (internal) | `func updateProxyConfiguration() async` |
-| 311 | fn | setupRefreshCadenceCallback | (private) | `private func setupRefreshCadenceCallback()` |
-| 319 | fn | setupAppActivationObserver | (private) | `private func setupAppActivationObserver()` |
-| 331 | fn | refreshOnAppResumeIfNeeded | (private) | `private func refreshOnAppResumeIfNeeded() async` |
-| 350 | fn | setupWarmupCallback | (private) | `private func setupWarmupCallback()` |
-| 368 | fn | restartAutoRefresh | (private) | `private func restartAutoRefresh()` |
-| 382 | fn | initialize | (internal) | `func initialize() async` |
-| 392 | fn | initializeFullMode | (private) | `private func initializeFullMode() async` |
-| 413 | fn | checkForProxyUpgrade | (private) | `private func checkForProxyUpgrade() async` |
-| 418 | fn | initializeQuotaOnlyMode | (private) | `private func initializeQuotaOnlyMode() async` |
-| 428 | fn | initializeRemoteMode | (private) | `private func initializeRemoteMode() async` |
-| 456 | fn | setupRemoteAPIClient | (private) | `private func setupRemoteAPIClient(config: Remot...` |
-| 464 | fn | reconnectRemote | (internal) | `func reconnectRemote() async` |
-| 473 | fn | loadDirectAuthFiles | (internal) | `func loadDirectAuthFiles() async` |
-| 476 | fn | createIdentityPackage | (internal) | `func createIdentityPackage(name: String? = nil)` |
-| 481 | fn | createIdentityPackages | (internal) | `func createIdentityPackages(count: Int, namePre...` |
-| 486 | fn | identityPackage | (internal) | `func identityPackage(for authFile: AuthFile) ->...` |
-| 490 | fn | identityBinding | (internal) | `func identityBinding(for authFile: AuthFile) ->...` |
-| 494 | fn | availableIdentityPackages | (internal) | `func availableIdentityPackages(for authFile: Au...` |
-| 498 | fn | bindIdentityPackage | (internal) | `func bindIdentityPackage(packageId: UUID, to au...` |
-| 503 | fn | unbindIdentityPackage | (internal) | `func unbindIdentityPackage(from authFile: AuthF...` |
-| 508 | fn | updateIdentityPackage | (internal) | `func updateIdentityPackage(_ package: RuntimeId...` |
-| 513 | fn | updateIdentityPackage | (internal) | `func updateIdentityPackage(_ package: RuntimeId...` |
-| 518 | fn | markIdentityPackageVerificationFailure | (internal) | `func markIdentityPackageVerificationFailure(id:...` |
-| 523 | fn | markIdentityPackageBlocked | (internal) | `func markIdentityPackageBlocked(id: UUID, reaso...` |
-| 528 | fn | clearIdentityPackageOperationalStatus | (internal) | `func clearIdentityPackageOperationalStatus(id: ...` |
-| 533 | fn | identityPackageProxyPassword | (internal) | `func identityPackageProxyPassword(for packageId...` |
-| 537 | fn | importIdentityPackages | (internal) | `func importIdentityPackages(from rawText: Strin...` |
-| 543 | fn | deleteIdentityPackage | (internal) | `@discardableResult   func deleteIdentityPackage...` |
-| 552 | fn | migrateLegacyIdentityPackages | (internal) | `func migrateLegacyIdentityPackages(force: Bool ...` |
-| 559 | fn | refreshQuotasDirectly | (internal) | `func refreshQuotasDirectly() async` |
-| 587 | fn | autoSelectMenuBarItems | (private) | `private func autoSelectMenuBarItems()` |
-| 621 | fn | syncMenuBarSelection | (internal) | `func syncMenuBarSelection()` |
-| 628 | fn | refreshClaudeCodeQuotasInternal | (private) | `private func refreshClaudeCodeQuotasInternal() ...` |
-| 649 | fn | refreshCursorQuotasInternal | (private) | `private func refreshCursorQuotasInternal() async` |
-| 660 | fn | refreshCodexCLIQuotasInternal | (private) | `private func refreshCodexCLIQuotasInternal() async` |
-| 676 | fn | refreshGeminiCLIQuotasInternal | (private) | `private func refreshGeminiCLIQuotasInternal() a...` |
-| 694 | fn | refreshGlmQuotasInternal | (private) | `private func refreshGlmQuotasInternal() async` |
-| 704 | fn | refreshWarpQuotasInternal | (private) | `private func refreshWarpQuotasInternal() async` |
-| 728 | fn | refreshTraeQuotasInternal | (private) | `private func refreshTraeQuotasInternal() async` |
-| 738 | fn | refreshKiroQuotasInternal | (private) | `private func refreshKiroQuotasInternal() async` |
-| 744 | fn | cleanName | (internal) | `func cleanName(_ name: String) -> String` |
-| 794 | fn | startQuotaOnlyAutoRefresh | (private) | `private func startQuotaOnlyAutoRefresh()` |
-| 813 | fn | startQuotaAutoRefreshWithoutProxy | (private) | `private func startQuotaAutoRefreshWithoutProxy()` |
-| 833 | fn | isWarmupEnabled | (internal) | `func isWarmupEnabled(for provider: AIProvider, ...` |
-| 837 | fn | warmupStatus | (internal) | `func warmupStatus(provider: AIProvider, account...` |
-| 842 | fn | warmupNextRunDate | (internal) | `func warmupNextRunDate(provider: AIProvider, ac...` |
-| 847 | fn | toggleWarmup | (internal) | `func toggleWarmup(for provider: AIProvider, acc...` |
-| 856 | fn | setWarmupEnabled | (internal) | `func setWarmupEnabled(_ enabled: Bool, provider...` |
-| 868 | fn | nextDailyRunDate | (private) | `private func nextDailyRunDate(minutes: Int, now...` |
-| 879 | fn | restartWarmupScheduler | (private) | `private func restartWarmupScheduler()` |
-| 912 | fn | runWarmupCycle | (private) | `private func runWarmupCycle() async` |
-| 975 | fn | warmupAccount | (private) | `private func warmupAccount(provider: AIProvider...` |
-| 1021 | fn | warmupAccount | (private) | `private func warmupAccount(     provider: AIPro...` |
-| 1084 | fn | fetchWarmupModels | (private) | `private func fetchWarmupModels(     provider: A...` |
-| 1108 | fn | warmupAvailableModels | (internal) | `func warmupAvailableModels(provider: AIProvider...` |
-| 1121 | fn | warmupAuthInfo | (private) | `private func warmupAuthInfo(provider: AIProvide...` |
-| 1143 | fn | warmupTargets | (private) | `private func warmupTargets() -> [WarmupAccountKey]` |
-| 1157 | fn | updateWarmupStatus | (private) | `private func updateWarmupStatus(for key: Warmup...` |
-| 1186 | fn | startProxy | (internal) | `func startProxy() async` |
-| 1236 | fn | stopProxy | (internal) | `func stopProxy()` |
-| 1265 | fn | toggleProxy | (internal) | `func toggleProxy() async` |
-| 1273 | fn | setupAPIClient | (private) | `private func setupAPIClient()` |
-| 1280 | fn | startAutoRefresh | (private) | `private func startAutoRefresh()` |
-| 1318 | fn | attemptProxyRecovery | (private) | `private func attemptProxyRecovery() async` |
-| 1366 | fn | refreshData | (internal) | `func refreshData() async` |
-| 1425 | fn | loadProvidersScreenData | (internal) | `func loadProvidersScreenData() async` |
-| 1435 | fn | manualRefresh | (internal) | `func manualRefresh() async` |
-| 1452 | fn | refreshAllQuotas | (internal) | `func refreshAllQuotas() async` |
-| 1488 | fn | refreshQuotasUnified | (internal) | `func refreshQuotasUnified() async` |
-| 1522 | fn | refreshAntigravityQuotasInternal | (private) | `private func refreshAntigravityQuotasInternal()...` |
-| 1542 | fn | refreshAntigravityQuotasWithoutDetect | (private) | `private func refreshAntigravityQuotasWithoutDet...` |
-| 1559 | fn | isAntigravityAccountActive | (internal) | `func isAntigravityAccountActive(email: String) ...` |
-| 1564 | fn | switchAntigravityAccount | (internal) | `func switchAntigravityAccount(email: String) async` |
-| 1574 | fn | beginAntigravitySwitch | (internal) | `func beginAntigravitySwitch(accountId: String, ...` |
-| 1579 | fn | cancelAntigravitySwitch | (internal) | `func cancelAntigravitySwitch()` |
-| 1584 | fn | dismissAntigravitySwitchResult | (internal) | `func dismissAntigravitySwitchResult()` |
-| 1587 | fn | refreshOpenAIQuotasInternal | (private) | `private func refreshOpenAIQuotasInternal() async` |
-| 1592 | fn | refreshCopilotQuotasInternal | (private) | `private func refreshCopilotQuotasInternal() async` |
-| 1597 | fn | refreshQuotaForProvider | (internal) | `func refreshQuotaForProvider(_ provider: AIProv...` |
-| 1632 | fn | refreshAutoDetectedProviders | (internal) | `func refreshAutoDetectedProviders() async` |
-| 1639 | fn | preparePendingAccountSetup | (private) | `private func preparePendingAccountSetup(for pro...` |
-| 1665 | fn | clearPendingAccountSetup | (private) | `private func clearPendingAccountSetup(for provi...` |
-| 1672 | fn | applyPendingAccountSetupIfNeeded | (private) | `private func applyPendingAccountSetupIfNeeded(f...` |
-| 1702 | fn | resolvePendingAccountTarget | (private) | `private func resolvePendingAccountTarget(from p...` |
-| 1719 | fn | authFileTimestamp | (private) | `private func authFileTimestamp(for file: AuthFi...` |
-| 1741 | fn | startOAuth | (internal) | `func startOAuth(     for provider: AIProvider, ...` |
-| 1800 | fn | startCopilotAuth | (private) | `private func startCopilotAuth() async` |
-| 1818 | fn | startKiroAuth | (private) | `private func startKiroAuth(method: AuthCommand)...` |
-| 1854 | fn | pollCopilotAuthCompletion | (private) | `private func pollCopilotAuthCompletion() async` |
-| 1873 | fn | pollKiroAuthCompletion | (private) | `private func pollKiroAuthCompletion() async` |
-| 1893 | fn | pollOAuthStatus | (private) | `private func pollOAuthStatus(state: String, pro...` |
-| 1954 | fn | cancelOAuth | (internal) | `@discardableResult   func cancelOAuth() async -...` |
-| 1998 | fn | applyOAuthCancellationFailure | (private) | `private func applyOAuthCancellationFailure(_ me...` |
-| 2008 | fn | submitOAuthCallback | (internal) | `func submitOAuthCallback(for provider: AIProvid...` |
-| 2028 | fn | fetchOAuthReauthHistory | (internal) | `func fetchOAuthReauthHistory(authName: String, ...` |
-| 2035 | fn | deleteAuthFile | (internal) | `func deleteAuthFile(_ file: AuthFile) async` |
-| 2071 | fn | toggleAuthFileDisabled | (internal) | `func toggleAuthFileDisabled(_ file: AuthFile) a...` |
-| 2102 | fn | toggleDirectAuthFileDisabled | (internal) | `func toggleDirectAuthFileDisabled(_ file: Direc...` |
-| 2111 | fn | refreshAuthFileStatus | (internal) | `func refreshAuthFileStatus(_ file: AuthFile, tr...` |
-| 2122 | fn | silentlyRefreshProblemAuthFilesIfNeeded | (private) | `private func silentlyRefreshProblemAuthFilesIfN...` |
-| 2153 | fn | authFileNeedsSilentStatusRefresh | (private) | `private func authFileNeedsSilentStatusRefresh(_...` |
-| 2178 | fn | normalizedProblemStatusMessage | (private) | `private func normalizedProblemStatusMessage(for...` |
-| 2182 | fn | mergeAuthFile | (private) | `private func mergeAuthFile(_ refreshedFile: Aut...` |
-| 2190 | fn | reloadAuthFilesSnapshot | (private) | `private func reloadAuthFilesSnapshot() async` |
-| 2210 | fn | pruneSilentAuthStatusRefreshCache | (private) | `private func pruneSilentAuthStatusRefreshCache(...` |
-| 2215 | fn | loadAuthFileProxyURL | (internal) | `func loadAuthFileProxyURL(_ file: AuthFile) asy...` |
-| 2229 | fn | updateAuthFileNote | (internal) | `func updateAuthFileNote(     _ note: String?,  ...` |
-| 2276 | fn | updateAuthFileProxyURL | (internal) | `func updateAuthFileProxyURL(_ proxyURL: String?...` |
-| 2301 | fn | loadAuthFileUserAgent | (internal) | `func loadAuthFileUserAgent(_ file: AuthFile) as...` |
-| 2318 | fn | loadAuthFileRecoveredFingerprintProfile | (internal) | `func loadAuthFileRecoveredFingerprintProfile(  ...` |
-| 2340 | fn | loadDirectAuthFileRecoveredFingerprintProfile | (internal) | `func loadDirectAuthFileRecoveredFingerprintProf...` |
-| 2351 | fn | updateAuthFileUserAgent | (internal) | `func updateAuthFileUserAgent(_ userAgent: Strin...` |
-| 2419 | fn | updateAuthFileManagedHeaders | (internal) | `func updateAuthFileManagedHeaders(     _ header...` |
-| 2488 | fn | updateDirectAuthFileUserAgent | (internal) | `func updateDirectAuthFileUserAgent(_ userAgent:...` |
-| 2504 | fn | updateDirectAuthFileManagedHeaders | (internal) | `func updateDirectAuthFileManagedHeaders(     _ ...` |
-| 2526 | fn | updateDirectAuthFileProxyURL | (internal) | `func updateDirectAuthFileProxyURL(_ proxyURL: S...` |
-| 2531 | fn | updateDirectAuthFileNote | (internal) | `func updateDirectAuthFileNote(_ note: String?, ...` |
-| 2536 | fn | deleteDirectAuthFile | (internal) | `func deleteDirectAuthFile(_ file: DirectAuthFil...` |
-| 2545 | fn | parseProxyURL | (private) | `private static func parseProxyURL(from data: Da...` |
-| 2555 | fn | parseNote | (private) | `private static func parseNote(from data: Data) ...` |
-| 2873 | fn | desiredRemarkNote | (private) | `private func desiredRemarkNote(for authFile: Au...` |
-| 2879 | fn | syncLocalRemarksToAuthFileNotesIfNeeded | (private) | `@discardableResult   private func syncLocalRema...` |
-| 2923 | fn | directAuthFileForProxyFallback | (private) | `private func directAuthFileForProxyFallback(nam...` |
-| 2934 | fn | pruneMenuBarItems | (private) | `private func pruneMenuBarItems()` |
-| 2970 | fn | syncIdentityPackageState | (private) | `private func syncIdentityPackageState(reconcili...` |
-| 2979 | fn | autoMigrateLegacyIdentityPackagesIfNeeded | (private) | `private func autoMigrateLegacyIdentityPackagesI...` |
-| 2985 | fn | migrateLegacyIdentityPackages | (private) | `private func migrateLegacyIdentityPackages(    ...` |
-| 3002 | fn | buildLegacyIdentityPackageSeeds | (private) | `private func buildLegacyIdentityPackageSeeds(fr...` |
-| 3053 | fn | accountMetadataKey | (private) | `private func accountMetadataKey(for authFile: A...` |
-| 3060 | fn | legacyMetadataFallbackUserDefaults | (private) | `private func legacyMetadataFallbackUserDefaults...` |
-| 3065 | fn | importVertexServiceAccount | (internal) | `func importVertexServiceAccount(url: URL) async` |
-| 3089 | fn | fetchAPIKeys | (internal) | `func fetchAPIKeys() async` |
-| 3099 | fn | addAPIKey | (internal) | `func addAPIKey(_ key: String) async` |
-| 3111 | fn | updateAPIKey | (internal) | `func updateAPIKey(old: String, new: String) async` |
-| 3123 | fn | deleteAPIKey | (internal) | `func deleteAPIKey(_ key: String) async` |
-| 3136 | fn | checkAccountStatusChanges | (private) | `private func checkAccountStatusChanges()` |
-| 3157 | fn | checkQuotaNotifications | (internal) | `func checkQuotaNotifications()` |
-| 3189 | fn | scanIDEsWithConsent | (internal) | `func scanIDEsWithConsent(options: IDEScanOption...` |
-| 3259 | fn | savePersistedIDEQuotas | (private) | `private func savePersistedIDEQuotas()` |
-| 3282 | fn | loadPersistedIDEQuotas | (private) | `private func loadPersistedIDEQuotas()` |
-| 3344 | fn | shortenAccountKey | (private) | `private func shortenAccountKey(_ key: String) -...` |
-| 3356 | struct | OAuthState | (internal) | `struct OAuthState` |
-| 3363 | method | init | (internal) | `init(     provider: AIProvider,     status: OAu...` |
-| 3385 | enum | OAuthCancellationResult | (internal) | `enum OAuthCancellationResult` |
+| 165 | fn | loadDisabledAuthFiles | (private) | `private func loadDisabledAuthFiles() -> Set<Str...` |
+| 171 | fn | saveDisabledAuthFiles | (private) | `private func saveDisabledAuthFiles(_ names: Set...` |
+| 176 | fn | syncDisabledStatesToBackend | (private) | `private func syncDisabledStatesToBackend() async` |
+| 195 | fn | notifyQuotaDataChanged | (private) | `private func notifyQuotaDataChanged()` |
+| 198 | method | init | (internal) | `init()` |
+| 237 | fn | setupProxyURLObserver | (private) | `private func setupProxyURLObserver()` |
+| 253 | fn | setupAccountRemarksObserver | (private) | `private func setupAccountRemarksObserver()` |
+| 281 | fn | normalizedProxyURL | (private) | `private func normalizedProxyURL(_ rawValue: Str...` |
+| 301 | fn | updateProxyConfiguration | (internal) | `func updateProxyConfiguration() async` |
+| 314 | fn | setupRefreshCadenceCallback | (private) | `private func setupRefreshCadenceCallback()` |
+| 322 | fn | setupAppActivationObserver | (private) | `private func setupAppActivationObserver()` |
+| 334 | fn | refreshOnAppResumeIfNeeded | (private) | `private func refreshOnAppResumeIfNeeded() async` |
+| 353 | fn | setupWarmupCallback | (private) | `private func setupWarmupCallback()` |
+| 371 | fn | restartAutoRefresh | (private) | `private func restartAutoRefresh()` |
+| 385 | fn | initialize | (internal) | `func initialize() async` |
+| 395 | fn | initializeFullMode | (private) | `private func initializeFullMode() async` |
+| 416 | fn | checkForProxyUpgrade | (private) | `private func checkForProxyUpgrade() async` |
+| 421 | fn | initializeQuotaOnlyMode | (private) | `private func initializeQuotaOnlyMode() async` |
+| 431 | fn | initializeRemoteMode | (private) | `private func initializeRemoteMode() async` |
+| 468 | fn | startRemoteRelay | (private) | `private func startRemoteRelay(config: RemoteCon...` |
+| 480 | fn | setupRemoteAPIClient | (private) | `private func setupRemoteAPIClient(config: Remot...` |
+| 488 | fn | reconnectRemote | (internal) | `func reconnectRemote() async` |
+| 497 | fn | loadDirectAuthFiles | (internal) | `func loadDirectAuthFiles() async` |
+| 500 | fn | createIdentityPackage | (internal) | `func createIdentityPackage(name: String? = nil)` |
+| 505 | fn | createIdentityPackages | (internal) | `func createIdentityPackages(count: Int, namePre...` |
+| 510 | fn | identityPackage | (internal) | `func identityPackage(for authFile: AuthFile) ->...` |
+| 514 | fn | identityBinding | (internal) | `func identityBinding(for authFile: AuthFile) ->...` |
+| 518 | fn | availableIdentityPackages | (internal) | `func availableIdentityPackages(for authFile: Au...` |
+| 522 | fn | bindIdentityPackage | (internal) | `func bindIdentityPackage(packageId: UUID, to au...` |
+| 527 | fn | unbindIdentityPackage | (internal) | `func unbindIdentityPackage(from authFile: AuthF...` |
+| 532 | fn | updateIdentityPackage | (internal) | `func updateIdentityPackage(_ package: RuntimeId...` |
+| 537 | fn | updateIdentityPackage | (internal) | `func updateIdentityPackage(_ package: RuntimeId...` |
+| 542 | fn | markIdentityPackageVerificationFailure | (internal) | `func markIdentityPackageVerificationFailure(id:...` |
+| 547 | fn | markIdentityPackageBlocked | (internal) | `func markIdentityPackageBlocked(id: UUID, reaso...` |
+| 552 | fn | clearIdentityPackageOperationalStatus | (internal) | `func clearIdentityPackageOperationalStatus(id: ...` |
+| 557 | fn | identityPackageProxyPassword | (internal) | `func identityPackageProxyPassword(for packageId...` |
+| 561 | fn | importIdentityPackages | (internal) | `func importIdentityPackages(from rawText: Strin...` |
+| 567 | fn | deleteIdentityPackage | (internal) | `@discardableResult   func deleteIdentityPackage...` |
+| 576 | fn | migrateLegacyIdentityPackages | (internal) | `func migrateLegacyIdentityPackages(force: Bool ...` |
+| 583 | fn | refreshQuotasDirectly | (internal) | `func refreshQuotasDirectly() async` |
+| 611 | fn | autoSelectMenuBarItems | (private) | `private func autoSelectMenuBarItems()` |
+| 645 | fn | syncMenuBarSelection | (internal) | `func syncMenuBarSelection()` |
+| 652 | fn | refreshClaudeCodeQuotasInternal | (private) | `private func refreshClaudeCodeQuotasInternal() ...` |
+| 673 | fn | refreshCursorQuotasInternal | (private) | `private func refreshCursorQuotasInternal() async` |
+| 684 | fn | refreshCodexCLIQuotasInternal | (private) | `private func refreshCodexCLIQuotasInternal() async` |
+| 700 | fn | refreshGeminiCLIQuotasInternal | (private) | `private func refreshGeminiCLIQuotasInternal() a...` |
+| 718 | fn | refreshGlmQuotasInternal | (private) | `private func refreshGlmQuotasInternal() async` |
+| 728 | fn | refreshWarpQuotasInternal | (private) | `private func refreshWarpQuotasInternal() async` |
+| 752 | fn | refreshTraeQuotasInternal | (private) | `private func refreshTraeQuotasInternal() async` |
+| 762 | fn | refreshKiroQuotasInternal | (private) | `private func refreshKiroQuotasInternal() async` |
+| 768 | fn | cleanName | (internal) | `func cleanName(_ name: String) -> String` |
+| 818 | fn | startQuotaOnlyAutoRefresh | (private) | `private func startQuotaOnlyAutoRefresh()` |
+| 837 | fn | startQuotaAutoRefreshWithoutProxy | (private) | `private func startQuotaAutoRefreshWithoutProxy()` |
+| 857 | fn | isWarmupEnabled | (internal) | `func isWarmupEnabled(for provider: AIProvider, ...` |
+| 861 | fn | warmupStatus | (internal) | `func warmupStatus(provider: AIProvider, account...` |
+| 866 | fn | warmupNextRunDate | (internal) | `func warmupNextRunDate(provider: AIProvider, ac...` |
+| 871 | fn | toggleWarmup | (internal) | `func toggleWarmup(for provider: AIProvider, acc...` |
+| 880 | fn | setWarmupEnabled | (internal) | `func setWarmupEnabled(_ enabled: Bool, provider...` |
+| 892 | fn | nextDailyRunDate | (private) | `private func nextDailyRunDate(minutes: Int, now...` |
+| 903 | fn | restartWarmupScheduler | (private) | `private func restartWarmupScheduler()` |
+| 936 | fn | runWarmupCycle | (private) | `private func runWarmupCycle() async` |
+| 999 | fn | warmupAccount | (private) | `private func warmupAccount(provider: AIProvider...` |
+| 1045 | fn | warmupAccount | (private) | `private func warmupAccount(     provider: AIPro...` |
+| 1108 | fn | fetchWarmupModels | (private) | `private func fetchWarmupModels(     provider: A...` |
+| 1132 | fn | warmupAvailableModels | (internal) | `func warmupAvailableModels(provider: AIProvider...` |
+| 1145 | fn | warmupAuthInfo | (private) | `private func warmupAuthInfo(provider: AIProvide...` |
+| 1167 | fn | warmupTargets | (private) | `private func warmupTargets() -> [WarmupAccountKey]` |
+| 1181 | fn | updateWarmupStatus | (private) | `private func updateWarmupStatus(for key: Warmup...` |
+| 1210 | fn | startProxy | (internal) | `func startProxy() async` |
+| 1260 | fn | stopProxy | (internal) | `func stopProxy()` |
+| 1289 | fn | toggleProxy | (internal) | `func toggleProxy() async` |
+| 1306 | fn | stopRemoteRelayEntrypoint | (private) | `private func stopRemoteRelayEntrypoint()` |
+| 1314 | fn | setupAPIClient | (private) | `private func setupAPIClient()` |
+| 1321 | fn | startAutoRefresh | (private) | `private func startAutoRefresh()` |
+| 1359 | fn | attemptProxyRecovery | (private) | `private func attemptProxyRecovery() async` |
+| 1419 | fn | refreshData | (internal) | `func refreshData() async` |
+| 1478 | fn | loadProvidersScreenData | (internal) | `func loadProvidersScreenData() async` |
+| 1488 | fn | manualRefresh | (internal) | `func manualRefresh() async` |
+| 1505 | fn | refreshAllQuotas | (internal) | `func refreshAllQuotas() async` |
+| 1541 | fn | refreshQuotasUnified | (internal) | `func refreshQuotasUnified() async` |
+| 1575 | fn | refreshAntigravityQuotasInternal | (private) | `private func refreshAntigravityQuotasInternal()...` |
+| 1595 | fn | refreshAntigravityQuotasWithoutDetect | (private) | `private func refreshAntigravityQuotasWithoutDet...` |
+| 1612 | fn | isAntigravityAccountActive | (internal) | `func isAntigravityAccountActive(email: String) ...` |
+| 1617 | fn | switchAntigravityAccount | (internal) | `func switchAntigravityAccount(email: String) async` |
+| 1627 | fn | beginAntigravitySwitch | (internal) | `func beginAntigravitySwitch(accountId: String, ...` |
+| 1632 | fn | cancelAntigravitySwitch | (internal) | `func cancelAntigravitySwitch()` |
+| 1637 | fn | dismissAntigravitySwitchResult | (internal) | `func dismissAntigravitySwitchResult()` |
+| 1640 | fn | refreshOpenAIQuotasInternal | (private) | `private func refreshOpenAIQuotasInternal() async` |
+| 1645 | fn | refreshCopilotQuotasInternal | (private) | `private func refreshCopilotQuotasInternal() async` |
+| 1650 | fn | refreshQuotaForProvider | (internal) | `func refreshQuotaForProvider(_ provider: AIProv...` |
+| 1685 | fn | refreshAutoDetectedProviders | (internal) | `func refreshAutoDetectedProviders() async` |
+| 1692 | fn | preparePendingAccountSetup | (private) | `private func preparePendingAccountSetup(for pro...` |
+| 1723 | fn | clearPendingAccountSetup | (private) | `private func clearPendingAccountSetup(for provi...` |
+| 1730 | fn | applyPendingAccountSetupIfNeeded | (private) | `private func applyPendingAccountSetupIfNeeded(f...` |
+| 1765 | fn | resolvePendingAccountTarget | (private) | `private func resolvePendingAccountTarget(from p...` |
+| 1782 | fn | authFileTimestamp | (private) | `private func authFileTimestamp(for file: AuthFi...` |
+| 1804 | fn | startOAuth | (internal) | `func startOAuth(     for provider: AIProvider, ...` |
+| 1863 | fn | startCopilotAuth | (private) | `private func startCopilotAuth() async` |
+| 1881 | fn | startKiroAuth | (private) | `private func startKiroAuth(method: AuthCommand)...` |
+| 1917 | fn | pollCopilotAuthCompletion | (private) | `private func pollCopilotAuthCompletion() async` |
+| 1936 | fn | pollKiroAuthCompletion | (private) | `private func pollKiroAuthCompletion() async` |
+| 1956 | fn | pollOAuthStatus | (private) | `private func pollOAuthStatus(state: String, pro...` |
+| 2017 | fn | cancelOAuth | (internal) | `@discardableResult   func cancelOAuth() async -...` |
+| 2061 | fn | applyOAuthCancellationFailure | (private) | `private func applyOAuthCancellationFailure(_ me...` |
+| 2071 | fn | submitOAuthCallback | (internal) | `func submitOAuthCallback(for provider: AIProvid...` |
+| 2091 | fn | fetchOAuthReauthHistory | (internal) | `func fetchOAuthReauthHistory(authName: String, ...` |
+| 2098 | fn | deleteAuthFile | (internal) | `func deleteAuthFile(_ file: AuthFile) async` |
+| 2134 | fn | toggleAuthFileDisabled | (internal) | `func toggleAuthFileDisabled(_ file: AuthFile) a...` |
+| 2165 | fn | toggleDirectAuthFileDisabled | (internal) | `func toggleDirectAuthFileDisabled(_ file: Direc...` |
+| 2174 | fn | refreshAuthFileStatus | (internal) | `func refreshAuthFileStatus(_ file: AuthFile, tr...` |
+| 2185 | fn | silentlyRefreshProblemAuthFilesIfNeeded | (private) | `private func silentlyRefreshProblemAuthFilesIfN...` |
+| 2216 | fn | authFileNeedsSilentStatusRefresh | (private) | `private func authFileNeedsSilentStatusRefresh(_...` |
+| 2241 | fn | normalizedProblemStatusMessage | (private) | `private func normalizedProblemStatusMessage(for...` |
+| 2245 | fn | mergeAuthFile | (private) | `private func mergeAuthFile(_ refreshedFile: Aut...` |
+| 2253 | fn | reloadAuthFilesSnapshot | (private) | `private func reloadAuthFilesSnapshot() async` |
+| 2273 | fn | pruneSilentAuthStatusRefreshCache | (private) | `private func pruneSilentAuthStatusRefreshCache(...` |
+| 2278 | fn | loadAuthFileProxyURL | (internal) | `func loadAuthFileProxyURL(_ file: AuthFile) asy...` |
+| 2292 | fn | loadAuthFileAccountSettings | (internal) | `func loadAuthFileAccountSettings(_ file: AuthFi...` |
+| 2309 | fn | updateAuthFileNote | (internal) | `func updateAuthFileNote(     _ note: String?,  ...` |
+| 2356 | fn | updateAuthFileProxyURL | (internal) | `func updateAuthFileProxyURL(_ proxyURL: String?...` |
+| 2381 | fn | loadAuthFileUserAgent | (internal) | `func loadAuthFileUserAgent(_ file: AuthFile) as...` |
+| 2398 | fn | loadAuthFileRecoveredFingerprintProfile | (internal) | `func loadAuthFileRecoveredFingerprintProfile(  ...` |
+| 2420 | fn | loadDirectAuthFileRecoveredFingerprintProfile | (internal) | `func loadDirectAuthFileRecoveredFingerprintProf...` |
+| 2431 | fn | updateAuthFileUserAgent | (internal) | `func updateAuthFileUserAgent(_ userAgent: Strin...` |
+| 2499 | fn | updateAuthFileManagedHeaders | (internal) | `func updateAuthFileManagedHeaders(     _ header...` |
+| 2568 | fn | updateDirectAuthFileUserAgent | (internal) | `func updateDirectAuthFileUserAgent(_ userAgent:...` |
+| 2584 | fn | updateDirectAuthFileManagedHeaders | (internal) | `func updateDirectAuthFileManagedHeaders(     _ ...` |
+| 2606 | fn | updateDirectAuthFileProxyURL | (internal) | `func updateDirectAuthFileProxyURL(_ proxyURL: S...` |
+| 2611 | fn | updateDirectAuthFileNote | (internal) | `func updateDirectAuthFileNote(_ note: String?, ...` |
+| 2616 | fn | deleteDirectAuthFile | (internal) | `func deleteDirectAuthFile(_ file: DirectAuthFil...` |
+| 2625 | fn | parseProxyURL | (private) | `private static func parseProxyURL(from data: Da...` |
+| 2635 | fn | parseNote | (private) | `private static func parseNote(from data: Data) ...` |
+| 2953 | fn | desiredRemarkNote | (private) | `private func desiredRemarkNote(for authFile: Au...` |
+| 2959 | fn | syncLocalRemarksToAuthFileNotesIfNeeded | (private) | `@discardableResult   private func syncLocalRema...` |
+| 3004 | fn | directAuthFileForProxyFallback | (private) | `private func directAuthFileForProxyFallback(nam...` |
+| 3015 | fn | pruneMenuBarItems | (private) | `private func pruneMenuBarItems()` |
+| 3051 | fn | syncIdentityPackageState | (private) | `private func syncIdentityPackageState(reconcili...` |
+| 3060 | fn | autoMigrateLegacyIdentityPackagesIfNeeded | (private) | `private func autoMigrateLegacyIdentityPackagesI...` |
+| 3066 | fn | migrateLegacyIdentityPackages | (private) | `private func migrateLegacyIdentityPackages(    ...` |
+| 3083 | fn | buildLegacyIdentityPackageSeeds | (private) | `private func buildLegacyIdentityPackageSeeds(fr...` |
+| 3134 | fn | accountMetadataKey | (private) | `private func accountMetadataKey(for authFile: A...` |
+| 3141 | fn | legacyMetadataFallbackUserDefaults | (private) | `private func legacyMetadataFallbackUserDefaults...` |
+| 3146 | fn | importVertexServiceAccount | (internal) | `func importVertexServiceAccount(url: URL) async` |
+| 3170 | fn | fetchAPIKeys | (internal) | `func fetchAPIKeys() async` |
+| 3180 | fn | addAPIKey | (internal) | `func addAPIKey(_ key: String) async` |
+| 3192 | fn | updateAPIKey | (internal) | `func updateAPIKey(old: String, new: String) async` |
+| 3204 | fn | deleteAPIKey | (internal) | `func deleteAPIKey(_ key: String) async` |
+| 3217 | fn | checkAccountStatusChanges | (private) | `private func checkAccountStatusChanges()` |
+| 3238 | fn | checkQuotaNotifications | (internal) | `func checkQuotaNotifications()` |
+| 3270 | fn | scanIDEsWithConsent | (internal) | `func scanIDEsWithConsent(options: IDEScanOption...` |
+| 3340 | fn | savePersistedIDEQuotas | (private) | `private func savePersistedIDEQuotas()` |
+| 3363 | fn | loadPersistedIDEQuotas | (private) | `private func loadPersistedIDEQuotas()` |
+| 3425 | fn | shortenAccountKey | (private) | `private func shortenAccountKey(_ key: String) -...` |
+| 3437 | struct | OAuthState | (internal) | `struct OAuthState` |
+| 3444 | method | init | (internal) | `init(     provider: AIProvider,     status: OAu...` |
+| 3466 | enum | OAuthCancellationResult | (internal) | `enum OAuthCancellationResult` |
 
 ## Memory Markers
 
-### 🟢 `NOTE` (line 405)
+### 🟢 `NOTE` (line 408)
 
 > checkForProxyUpgrade() is now called inside startProxy()
 
-### 🟢 `NOTE` (line 558)
+### 🟢 `NOTE` (line 582)
 
 > Cursor and Trae are NOT auto-refreshed - user must use "Scan for IDEs" (issue #29)
 
-### 🟢 `NOTE` (line 566)
+### 🟢 `NOTE` (line 590)
 
 > Cursor and Trae removed from auto-refresh to address privacy concerns (issue #29)
 
-### 🟢 `NOTE` (line 1462)
+### 🟢 `NOTE` (line 1515)
 
 > Cursor and Trae removed from auto-refresh (issue #29)
 
-### 🟢 `NOTE` (line 1487)
+### 🟢 `NOTE` (line 1540)
 
 > Cursor and Trae require explicit user scan (issue #29)
 
-### 🟢 `NOTE` (line 1497)
+### 🟢 `NOTE` (line 1550)
 
 > Cursor and Trae removed - require explicit scan (issue #29)
 
-### 🟢 `NOTE` (line 1552)
+### 🟢 `NOTE` (line 1605)
 
 > Don't call detectActiveAccount() here - already set by switch operation
 

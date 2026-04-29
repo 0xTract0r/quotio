@@ -14,8 +14,8 @@
 | `third_party/CLIProxyAPIPlus/internal/auth/codex/jwt_parser.go` | 102 |  |
 | `third_party/CLIProxyAPIPlus/internal/auth/codex/oauth_server.go` | 328 |  |
 | `third_party/CLIProxyAPIPlus/internal/auth/codex/openai.go` | 39 |  |
-| `third_party/CLIProxyAPIPlus/internal/auth/codex/openai_auth.go` | 309 |  |
-| `third_party/CLIProxyAPIPlus/internal/auth/codex/openai_auth_test.go` | 44 |  |
+| `third_party/CLIProxyAPIPlus/internal/auth/codex/openai_auth.go` | 324 |  |
+| `third_party/CLIProxyAPIPlus/internal/auth/codex/openai_auth_test.go` | 80 |  |
 | `third_party/CLIProxyAPIPlus/internal/auth/codex/pkce.go` | 56 |  |
 | `third_party/CLIProxyAPIPlus/internal/auth/codex/token.go` | 82 |  |
 

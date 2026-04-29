@@ -12640,6 +12640,23 @@
         }
       }
     },
+    "providers.enabled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enabled"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已启用"
+          }
+        }
+      }
+    },
     "providers.noAccountsYet" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -12965,7 +12982,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Set a local remark for this account. If you also fill an upstream proxy here, it overrides the global proxy for this account only."
+            "value" : "These edits are local to the current Quotio / CLIProxyAPI runtime. A local remark stays in Quotio, and an account proxy override only affects this local runtime."
           }
         },
         "fr" : {
@@ -12983,7 +13000,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "可以为这个账号设置本地备注；如果同时填写上游代理，它会只对这个账号覆盖全局代理。"
+            "value" : "这些编辑仅对当前 Quotio / CLIProxyAPI 本地运行时有效。本地备注只保存在 Quotio 中；账号代理覆盖也只影响当前本地运行时。"
           }
         }
       }
@@ -13158,6 +13175,261 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "账号设置"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.openWebConfig" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Web Config"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去网页端配置"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.openWebConfigUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This remote connection does not expose a Management Center URL."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前远端连接没有可用的 Management Center 地址。"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteActivation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "激活状态"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remote mode uses the core account configuration as the source of truth. Quotio shows a read-only summary here; detailed edits should be done in Management Center."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远端模式以 core 侧账号配置为真源。Quotio 在这里只读展示摘要；详细编辑请前往 Management Center。"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteDisabled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account Status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账号状态"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteExtraHeaders" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extra Headers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "额外请求头"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteManagedHeaders" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed Headers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "托管请求头"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteNote" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core Note"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核心备注"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteOAuthNotice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remote mode no longer edits local remark / proxy defaults during OAuth. Configure remote account settings later in Management Center."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远端模式下不会在 OAuth 流程里编辑本地 remark / proxy 默认值。远端账号设置请稍后到 Management Center 配置。"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteProxy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account Proxy URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账号代理 URL"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteReservedNotice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transport / TLS profile fields are displayed as core summaries here. They may still be reserved on the runtime side and should be interpreted by the Management Center wording."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这里仅展示 core 返回的 transport / TLS profile 摘要。运行时侧可能仍处于预留阶段，具体以 Management Center 文案为准。"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteTLSProfile" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TLS Profile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TLS Profile"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteTransportProfile" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transport Profile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传输 Profile"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteValueUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not provided by core"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核心未提供"
+          }
+        }
+      }
+    },
+    "providers.accountSettings.remoteWarnings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warnings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "警告"
           }
         }
       }

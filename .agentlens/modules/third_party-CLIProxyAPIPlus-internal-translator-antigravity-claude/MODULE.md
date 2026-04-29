@@ -2,17 +2,18 @@
 
 [← Back to INDEX](../../INDEX.md)
 
-**Type:** implicit | **Files:** 5
+**Type:** implicit | **Files:** 6
 
 ## Files
 
 | File | Lines | Large |
 | ---- | ----- | ----- |
-| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_request.go` | 522 | 📊 |
-| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_request_test.go` | 1412 | 📊 |
-| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_response.go` | 524 | 📊 |
-| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_response_test.go` | 246 |  |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_request.go` | 567 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_request_test.go` | 2438 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_response.go` | 552 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/antigravity_claude_response_test.go` | 349 |  |
 | `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/init.go` | 20 |  |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/claude/signature_validation.go` | 448 |  |
 
 ## Documentation
 

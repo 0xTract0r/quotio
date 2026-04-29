@@ -8,7 +8,7 @@
 
 | File | Lines | Large |
 | ---- | ----- | ----- |
-| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/gemini/antigravity_gemini_request.go` | 325 |  |
+| `third_party/CLIProxyAPIPlus/internal/translator/antigravity/gemini/antigravity_gemini_request.go` | 326 |  |
 | `third_party/CLIProxyAPIPlus/internal/translator/antigravity/gemini/antigravity_gemini_request_test.go` | 427 |  |
 | `third_party/CLIProxyAPIPlus/internal/translator/antigravity/gemini/antigravity_gemini_response.go` | 100 |  |
 | `third_party/CLIProxyAPIPlus/internal/translator/antigravity/gemini/antigravity_gemini_response_test.go` | 95 |  |

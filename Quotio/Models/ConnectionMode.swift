@@ -197,6 +197,17 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
         return Self.normalizedManagementBaseURL(raw)
     }
 
+    /// Management Center auth files page served by the remote runtime.
+    nonisolated var managementAuthFilesURL: URL? {
+        guard let baseURL = Self.managementPageBaseURL(
+            managementBaseURL: managementBaseURL,
+            fallbackClientBaseURL: clientBaseURL
+        ) else {
+            return nil
+        }
+        return URL(string: baseURL.absoluteString + "#/auth-files")
+    }
+
     private static func normalizedBaseURL(_ rawURL: String) -> String {
         var url = RemoteURLValidator.sanitize(rawURL)
 
@@ -218,6 +229,26 @@ struct RemoteConnectionConfig: Codable, Equatable, Sendable {
         var url = normalizedBaseURL(rawURL)
         url += "/v0/management"
         return url
+    }
+
+    private static func managementPageBaseURL(
+        managementBaseURL: String,
+        fallbackClientBaseURL: String
+    ) -> URL? {
+        let managementSuffix = "/v0/management"
+        let preferredBase = managementBaseURL.hasSuffix(managementSuffix)
+            ? String(managementBaseURL.dropLast(managementSuffix.count))
+            : fallbackClientBaseURL
+
+        guard var components = URLComponents(string: preferredBase) else {
+            return nil
+        }
+
+        let normalizedPath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = normalizedPath.isEmpty ? "/management.html" : "/" + normalizedPath + "/management.html"
+        components.query = nil
+        components.fragment = nil
+        return components.url
     }
 }
 

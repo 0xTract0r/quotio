@@ -156,12 +156,39 @@ enum RuntimeProfile {
         boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_REAUTH") ?? false
     }
 
+    static var providersRemoteAccountSettingsSmokeEnabled: Bool {
+        boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_REMOTE_ACCOUNT_SETTINGS") ?? false
+    }
+
     static var providersIdentityBindingSmokeEnabled: Bool {
         boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_IDENTITY_BINDING") ?? false
     }
 
     static var remoteManagementKeyOverride: String? {
         stringValue(for: "QUOTIO_REMOTE_MANAGEMENT_KEY")
+    }
+
+    static var usesFileBackedRemoteManagementKeyStore: Bool {
+        guard let raw = stringValue(for: "QUOTIO_REMOTE_MANAGEMENT_KEY_STORE")?.lowercased() else {
+            return false
+        }
+        return raw == "file" || raw == "json"
+    }
+
+    static var remoteManagementKeyFileURL: URL? {
+        guard usesFileBackedRemoteManagementKeyStore else {
+            return nil
+        }
+
+        if let override = stringValue(for: "QUOTIO_REMOTE_MANAGEMENT_KEY_FILE") {
+            if (override as NSString).isAbsolutePath {
+                return URL(fileURLWithPath: override, isDirectory: false)
+            }
+            return quotioAppSupportDirectory.appendingPathComponent(override, isDirectory: false)
+        }
+
+        let filename = remoteManagementKeyFilename
+        return quotioAppSupportDirectory.appendingPathComponent(filename, isDirectory: false)
     }
 
     static var remoteConnectionConfigOverride: RemoteConnectionConfig? {
@@ -192,6 +219,15 @@ enum RuntimeProfile {
         return value
     }
 
+    private static var remoteManagementKeyFilename: String {
+        let base = "remote-management-keys"
+        guard let namespace = keychainNamespace?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !namespace.isEmpty else {
+            return base + ".json"
+        }
+        return base + "." + sanitizedStorageComponent(namespace) + ".json"
+    }
+
     private static var namespaceSuffix: String {
         let rawSuffix: String
         if bundleIdentifier.hasPrefix(productionBundleIdentifier + ".") {
@@ -206,6 +242,15 @@ enum RuntimeProfile {
             options: .regularExpression
         )
         return sanitized.isEmpty ? "test" : sanitized
+    }
+
+    private static func sanitizedStorageComponent(_ value: String) -> String {
+        let sanitized = value.replacingOccurrences(
+            of: #"[^A-Za-z0-9._-]+"#,
+            with: "-",
+            options: .regularExpression
+        )
+        return sanitized.isEmpty ? "default" : sanitized
     }
 
     private static func stringValue(for key: String) -> String? {
@@ -498,6 +543,214 @@ struct ProxyStatus: Codable {
 
 // MARK: - Auth File (from Management API)
 
+private func trimmedAccountSettingsString(_ value: String?) -> String? {
+    guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !value.isEmpty else {
+        return nil
+    }
+    return value
+}
+
+struct AuthFileAccountSettingsProfile: Codable, Hashable, Sendable {
+    let summary: String
+    let identifier: String?
+    let label: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case identifier
+        case label
+        case summary
+        case id
+        case name
+        case mode
+        case value
+        case status
+    }
+
+    init(from decoder: Decoder) throws {
+        if let singleValue = try? decoder.singleValueContainer(),
+           let rawValue = try? singleValue.decode(String.self),
+           let summary = trimmedAccountSettingsString(rawValue) {
+            self.summary = summary
+            self.identifier = nil
+            self.label = nil
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let identifier = trimmedAccountSettingsString(try container.decodeIfPresent(String.self, forKey: .id))
+        let labelValue = try container.decodeIfPresent(String.self, forKey: .label)
+        let nameValue = try container.decodeIfPresent(String.self, forKey: .name)
+        let summaryValue = try container.decodeIfPresent(String.self, forKey: .summary)
+        let modeValue = try container.decodeIfPresent(String.self, forKey: .mode)
+        let valueValue = try container.decodeIfPresent(String.self, forKey: .value)
+        let statusValue = try container.decodeIfPresent(String.self, forKey: .status)
+        let label = trimmedAccountSettingsString(labelValue)
+            ?? trimmedAccountSettingsString(nameValue)
+        let summary = trimmedAccountSettingsString(summaryValue)
+            ?? trimmedAccountSettingsString(labelValue)
+            ?? trimmedAccountSettingsString(nameValue)
+            ?? trimmedAccountSettingsString(modeValue)
+            ?? trimmedAccountSettingsString(valueValue)
+            ?? trimmedAccountSettingsString(statusValue)
+            ?? identifier
+            ?? "—"
+
+        self.summary = summary
+        self.identifier = identifier
+        self.label = label
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: OutputCodingKeys.self)
+        try container.encode(summary, forKey: .summary)
+        try container.encodeIfPresent(identifier, forKey: .identifier)
+        try container.encodeIfPresent(label, forKey: .label)
+    }
+
+    private enum OutputCodingKeys: String, CodingKey {
+        case summary
+        case identifier
+        case label
+    }
+}
+
+struct AuthFileAccountSettingsActivation: Codable, Hashable, Sendable {
+    let summary: String
+    let state: String?
+    let source: String?
+    let effective: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case summary
+        case state
+        case source
+        case effective
+        case status
+        case mode
+        case message
+        case value
+        case enabled
+    }
+
+    init(from decoder: Decoder) throws {
+        if let singleValue = try? decoder.singleValueContainer() {
+            if let boolValue = try? singleValue.decode(Bool.self) {
+                self.summary = boolValue ? "enabled" : "disabled"
+                self.state = nil
+                self.source = nil
+                self.effective = boolValue
+                return
+            }
+            if let stringValue = try? singleValue.decode(String.self),
+               let summary = trimmedAccountSettingsString(stringValue) {
+                self.summary = summary
+                self.state = nil
+                self.source = nil
+                self.effective = nil
+                return
+            }
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let stateValue = try container.decodeIfPresent(String.self, forKey: .state)
+        let statusValue = try container.decodeIfPresent(String.self, forKey: .status)
+        let sourceValue = try container.decodeIfPresent(String.self, forKey: .source)
+        let modeValue = try container.decodeIfPresent(String.self, forKey: .mode)
+        let summaryValue = try container.decodeIfPresent(String.self, forKey: .summary)
+        let messageValue = try container.decodeIfPresent(String.self, forKey: .message)
+        let valueValue = try container.decodeIfPresent(String.self, forKey: .value)
+        let state = trimmedAccountSettingsString(stateValue)
+            ?? trimmedAccountSettingsString(statusValue)
+        let source = trimmedAccountSettingsString(sourceValue)
+            ?? trimmedAccountSettingsString(modeValue)
+        let effective = try container.decodeIfPresent(Bool.self, forKey: .effective)
+            ?? (try container.decodeIfPresent(Bool.self, forKey: .enabled))
+        let summary = trimmedAccountSettingsString(summaryValue)
+            ?? trimmedAccountSettingsString(messageValue)
+            ?? trimmedAccountSettingsString(valueValue)
+            ?? state
+            ?? source
+            ?? "—"
+
+        self.summary = summary
+        self.state = state
+        self.source = source
+        self.effective = effective
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: OutputCodingKeys.self)
+        try container.encode(summary, forKey: .summary)
+        try container.encodeIfPresent(state, forKey: .state)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(effective, forKey: .effective)
+    }
+
+    private enum OutputCodingKeys: String, CodingKey {
+        case summary
+        case state
+        case source
+        case effective
+    }
+}
+
+struct AuthFileAccountSettings: Codable, Hashable, Sendable {
+    let proxyURL: String?
+    let note: String?
+    let disabled: Bool?
+    let managedHeaders: [String: String]
+    let extraHeaders: [String: String]
+    let transportProfile: AuthFileAccountSettingsProfile?
+    let tlsProfile: AuthFileAccountSettingsProfile?
+    let activation: AuthFileAccountSettingsActivation?
+    let warnings: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case proxyURL = "proxy_url"
+        case note
+        case disabled
+        case managedHeaders = "managed_headers"
+        case extraHeaders = "extra_headers"
+        case transportProfile = "transport_profile"
+        case tlsProfile = "tls_profile"
+        case activation
+        case warnings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        proxyURL = trimmedAccountSettingsString(try container.decodeIfPresent(String.self, forKey: .proxyURL))
+        note = trimmedAccountSettingsString(try container.decodeIfPresent(String.self, forKey: .note))
+        disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled)
+        managedHeaders = try container.decodeIfPresent([String: String].self, forKey: .managedHeaders) ?? [:]
+        extraHeaders = try container.decodeIfPresent([String: String].self, forKey: .extraHeaders) ?? [:]
+        transportProfile = try container.decodeIfPresent(AuthFileAccountSettingsProfile.self, forKey: .transportProfile)
+        tlsProfile = try container.decodeIfPresent(AuthFileAccountSettingsProfile.self, forKey: .tlsProfile)
+        activation = try container.decodeIfPresent(AuthFileAccountSettingsActivation.self, forKey: .activation)
+        if let warnings = try container.decodeIfPresent([String].self, forKey: .warnings) {
+            self.warnings = warnings.compactMap(trimmedAccountSettingsString)
+        } else if let warning = try container.decodeIfPresent(String.self, forKey: .warnings),
+                  let trimmedWarning = trimmedAccountSettingsString(warning) {
+            self.warnings = [trimmedWarning]
+        } else {
+            self.warnings = []
+        }
+    }
+
+    var hasStructuredSummary: Bool {
+        proxyURL != nil
+            || note != nil
+            || disabled != nil
+            || !managedHeaders.isEmpty
+            || !extraHeaders.isEmpty
+            || transportProfile != nil
+            || tlsProfile != nil
+            || activation != nil
+            || !warnings.isEmpty
+    }
+}
+
 struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     private static let healthyStatusMessages: Set<String> = [
         "ok",
@@ -522,6 +775,7 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     let source: String?
     let path: String?
     let note: String?
+    var accountSettings: AuthFileAccountSettings? = nil
     let email: String?
     let accountType: String?
     let account: String?
@@ -532,6 +786,7 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     
     enum CodingKeys: String, CodingKey {
         case id, name, provider, label, status, disabled, unavailable, source, path, note, email, account
+        case accountSettings = "account_settings"
         case authIndex = "auth_index"
         case statusMessage = "status_message"
         case runtimeOnly = "runtime_only"
@@ -569,6 +824,14 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     var menuBarAccountKey: String {
         let key = quotaLookupKey
         return key.isEmpty ? name : key
+    }
+
+    var effectiveRemoteNote: String? {
+        accountSettings?.note ?? trimmedAccountSettingsString(note)
+    }
+
+    var effectiveRemoteProxyURL: String? {
+        accountSettings?.proxyURL
     }
     
     var isReady: Bool {

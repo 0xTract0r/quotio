@@ -9,7 +9,7 @@
 
 ## 🔴 High Priority
 
-### `RULE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/claude_executor.go:1421)
+### `RULE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/claude_executor.go:1762)
 
 > Anthropic's documentation, cache prefixes are created in order: tools -> system -> messages.
 
@@ -23,7 +23,7 @@
 
 > TranslateNonStream uses req.Model (original with suffix) to preserve
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kimi_executor.go:161)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kimi_executor.go:173)
 
 > TranslateNonStream uses req.Model (original with suffix) to preserve
 
@@ -83,27 +83,27 @@
 
 > Duplicate content filtering removed - it was causing legitimate repeated
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:2879)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:2874)
 
 > Duplicate content filtering was removed because it incorrectly
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3277)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3188)
 
 > We don't close the thinking block here - it will be closed when we see
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3566)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3457)
 
 > The effective input context is ~170k (200k - 30k reserved for output)
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3628)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3511)
 
 > Claude SSE event builders moved to internal/translator/kiro/claude/kiro_claude_stream.go
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3696)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:3579)
 
 > This check has a design limitation - it reads from the auth object passed in,
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:4345)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go:4228)
 
 > We skip the "model decides to search" step because Claude Code already
 

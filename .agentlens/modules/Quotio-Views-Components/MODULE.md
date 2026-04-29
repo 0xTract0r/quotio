@@ -14,7 +14,7 @@
 | `Quotio/Views/Components/AgentCard.swift` | 147 |  |
 | `Quotio/Views/Components/AgentConfigSheet.swift` | 989 | 📊 |
 | `Quotio/Views/Components/BindIdentityPackageSheet.swift` | 372 |  |
-| `Quotio/Views/Components/CurrentModeBadge.swift` | 122 |  |
+| `Quotio/Views/Components/CurrentModeBadge.swift` | 130 |  |
 | `Quotio/Views/Components/CustomProviderSheet.swift` | 500 |  |
 | `Quotio/Views/Components/ExperimentalBadge.swift` | 40 |  |
 | `Quotio/Views/Components/FallbackSheets.swift` | 362 |  |

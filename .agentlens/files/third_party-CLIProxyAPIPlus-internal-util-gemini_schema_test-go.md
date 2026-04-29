@@ -4,10 +4,10 @@
 
 ## Overview
 
-- **Lines:** 1048
+- **Lines:** 1072
 - **Language:** Go
-- **Symbols:** 34
-- **Public symbols:** 33
+- **Symbols:** 35
+- **Public symbols:** 34
 
 ## Symbol Table
 
@@ -47,6 +47,7 @@
 | 852 | fn | TestCleanJSONSchemaForAntigravity_BooleanEnumToString | pub | `func TestCleanJSONSchemaForAntigravity_BooleanE...` |
 | 873 | fn | TestCleanJSONSchemaForGemini_RemovesGeminiUnsupportedMetadataFields | pub | `func TestCleanJSONSchemaForGemini_RemovesGemini...` |
 | 924 | fn | TestRemoveExtensionFields | pub | `func TestRemoveExtensionFields(t *testing.T) {` |
+| 1051 | fn | TestCleanJSONSchemaForAntigravity_UniqueItemsStripped | pub | `func TestCleanJSONSchemaForAntigravity_UniqueIt...` |
 
 ## Public API
 
@@ -313,4 +314,12 @@ func TestRemoveExtensionFields(t *testing.T) {
 ```
 
 **Line:** 924 | **Kind:** fn
+
+### `TestCleanJSONSchemaForAntigravity_UniqueItemsStripped`
+
+```
+func TestCleanJSONSchemaForAntigravity_UniqueItemsStripped(t *testing.T) {
+```
+
+**Line:** 1051 | **Kind:** fn
 

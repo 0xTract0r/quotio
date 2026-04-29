@@ -33,12 +33,14 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> logging[logging]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> math[math]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> misc[misc]
+    third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> multipart[multipart]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> net[net]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> oauth2[oauth2]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> os[os]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> proxyutil[proxyutil]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> qwen[qwen]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> rand[rand]
+    third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> reflect[reflect]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> registry[registry]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> runtime[runtime]
     third_party_CLIProxyAPIPlus_internal_api_handlers_management[third_party-CLIProxyAPIPlus-internal-api-handlers-management] --> sha256[sha256]
@@ -96,12 +98,14 @@ Dependencies from other modules:
 - `logging`
 - `math`
 - `misc`
+- `multipart`
 - `net`
 - `oauth2`
 - `os`
 - `proxyutil`
 - `qwen`
 - `rand`
+- `reflect`
 - `registry`
 - `runtime`
 - `sha256`

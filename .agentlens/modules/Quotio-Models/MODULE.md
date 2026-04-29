@@ -11,15 +11,15 @@
 | `Quotio/Models/AgentModels.swift` | 485 |  |
 | `Quotio/Models/AntigravityActiveAccount.swift` | 44 |  |
 | `Quotio/Models/AppMode.swift` | 149 |  |
-| `Quotio/Models/ConnectionMode.swift` | 314 |  |
+| `Quotio/Models/ConnectionMode.swift` | 388 |  |
 | `Quotio/Models/Constants.swift` | 28 |  |
 | `Quotio/Models/CustomProviderModels.swift` | 510 | 📊 |
 | `Quotio/Models/FallbackModels.swift` | 164 |  |
 | `Quotio/Models/IDEScanSettings.swift` | 168 |  |
 | `Quotio/Models/IdentityPackageModels.swift` | 192 |  |
 | `Quotio/Models/MenuBarSettings.swift` | 632 | 📊 |
-| `Quotio/Models/Models.swift` | 1093 | 📊 |
-| `Quotio/Models/OperatingMode.swift` | 423 |  |
+| `Quotio/Models/Models.swift` | 1357 | 📊 |
+| `Quotio/Models/OperatingMode.swift` | 462 |  |
 | `Quotio/Models/ProxyVersionModels.swift` | 201 |  |
 | `Quotio/Models/RequestLog.swift` | 522 | 📊 |
 | `Quotio/Models/TunnelModels.swift` | 78 |  |

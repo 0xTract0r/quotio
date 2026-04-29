@@ -13,7 +13,7 @@
 | `third_party/Cli-Proxy-API-Management-Center/src/services/api/ampcode.ts` | 59 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/services/api/apiCall.ts` | 97 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/services/api/apiKeys.ts` | 19 |  |
-| `third_party/Cli-Proxy-API-Management-Center/src/services/api/authFiles.ts` | 584 | 📊 |
+| `third_party/Cli-Proxy-API-Management-Center/src/services/api/authFiles.ts` | 604 | 📊 |
 | `third_party/Cli-Proxy-API-Management-Center/src/services/api/client.ts` | 245 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/services/api/config.ts` | 118 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/services/api/configFile.ts` | 27 |  |

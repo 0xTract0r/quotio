@@ -10,8 +10,8 @@
 | ---- | ----- | ----- |
 | `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_request.go` | 438 |  |
 | `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_request_test.go` | 635 | 📊 |
-| `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_response.go` | 407 |  |
-| `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_response_test.go` | 47 |  |
+| `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_response.go` | 534 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/codex_openai_response_test.go` | 151 |  |
 | `third_party/CLIProxyAPIPlus/internal/translator/codex/openai/chat-completions/init.go` | 19 |  |
 
 ## Documentation

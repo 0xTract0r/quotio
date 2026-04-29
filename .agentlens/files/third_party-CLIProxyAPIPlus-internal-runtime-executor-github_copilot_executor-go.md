@@ -1,10 +1,10 @@
 # third_party/CLIProxyAPIPlus/internal/runtime/executor/github_copilot_executor.go
 
-[← Back to Module](../modules/third_party-CLIProxyAPIPlus-internal-runtime-executor/MODULE.md) | [← Back to INDEX](../INDEX.md)
+[← Back to Module](../modules/root/MODULE.md) | [← Back to INDEX](../INDEX.md)
 
 ## Overview
 
-- **Lines:** 1387
+- **Lines:** 1391
 - **Language:** Go
 - **Symbols:** 29
 - **Public symbols:** 10
@@ -21,27 +21,27 @@
 | 90 | fn | HttpRequest | pub | `func (e *GitHubCopilotExecutor) HttpRequest(ctx...` |
 | 106 | fn | Execute | pub | `func (e *GitHubCopilotExecutor) Execute(ctx con...` |
 | 236 | fn | ExecuteStream | pub | `func (e *GitHubCopilotExecutor) ExecuteStream(c...` |
-| 404 | fn | CountTokens | pub | `func (e *GitHubCopilotExecutor) CountTokens(_ c...` |
-| 410 | fn | Refresh | pub | `func (e *GitHubCopilotExecutor) Refresh(ctx con...` |
-| 432 | fn | ensureAPIToken | (private) | `func (e *GitHubCopilotExecutor) ensureAPIToken(...` |
-| 481 | fn | applyHeaders | (private) | `func (e *GitHubCopilotExecutor) applyHeaders(r ...` |
-| 500 | fn | detectLastConversationRole | (private) | `func detectLastConversationRole(body []byte) st...` |
-| 538 | fn | detectVisionContent | (private) | `func detectVisionContent(body []byte) bool {` |
-| 567 | fn | normalizeModel | (private) | `func (e *GitHubCopilotExecutor) normalizeModel(...` |
-| 575 | fn | useGitHubCopilotResponsesEndpoint | (private) | `func useGitHubCopilotResponsesEndpoint(sourceFo...` |
-| 586 | fn | flattenAssistantContent | (private) | `func flattenAssistantContent(body []byte) []byte {` |
-| 626 | fn | normalizeGitHubCopilotChatTools | (private) | `func normalizeGitHubCopilotChatTools(body []byt...` |
-| 655 | fn | normalizeGitHubCopilotResponsesInput | (private) | `func normalizeGitHubCopilotResponsesInput(body ...` |
-| 829 | fn | stripGitHubCopilotResponsesUnsupportedFields | (private) | `func stripGitHubCopilotResponsesUnsupportedFiel...` |
-| 835 | fn | normalizeGitHubCopilotResponsesTools | (private) | `func normalizeGitHubCopilotResponsesTools(body ...` |
-| 914 | fn | isGitHubCopilotResponsesBuiltinTool | (private) | `func isGitHubCopilotResponsesBuiltinTool(toolTy...` |
-| 923 | fn | collectTextFromNode | (private) | `func collectTextFromNode(node gjson.Result) str...` |
-| 961 | struct | githubCopilotResponsesStreamToolState | (private) | - |
-| 967 | struct | githubCopilotResponsesStreamState | (private) | - |
-| 980 | fn | translateGitHubCopilotResponsesNonStreamToClaude | (private) | `func translateGitHubCopilotResponsesNonStreamTo...` |
-| 1073 | fn | translateGitHubCopilotResponsesStreamToClaude | (private) | `func translateGitHubCopilotResponsesStreamToCla...` |
-| 1289 | fn | isHTTPSuccess | (private) | `func isHTTPSuccess(statusCode int) bool {` |
-| 1303 | fn | FetchGitHubCopilotModels | pub | `func FetchGitHubCopilotModels(ctx context.Conte...` |
+| 408 | fn | CountTokens | pub | `func (e *GitHubCopilotExecutor) CountTokens(_ c...` |
+| 414 | fn | Refresh | pub | `func (e *GitHubCopilotExecutor) Refresh(ctx con...` |
+| 436 | fn | ensureAPIToken | (private) | `func (e *GitHubCopilotExecutor) ensureAPIToken(...` |
+| 485 | fn | applyHeaders | (private) | `func (e *GitHubCopilotExecutor) applyHeaders(r ...` |
+| 504 | fn | detectLastConversationRole | (private) | `func detectLastConversationRole(body []byte) st...` |
+| 542 | fn | detectVisionContent | (private) | `func detectVisionContent(body []byte) bool {` |
+| 571 | fn | normalizeModel | (private) | `func (e *GitHubCopilotExecutor) normalizeModel(...` |
+| 579 | fn | useGitHubCopilotResponsesEndpoint | (private) | `func useGitHubCopilotResponsesEndpoint(sourceFo...` |
+| 590 | fn | flattenAssistantContent | (private) | `func flattenAssistantContent(body []byte) []byte {` |
+| 630 | fn | normalizeGitHubCopilotChatTools | (private) | `func normalizeGitHubCopilotChatTools(body []byt...` |
+| 659 | fn | normalizeGitHubCopilotResponsesInput | (private) | `func normalizeGitHubCopilotResponsesInput(body ...` |
+| 833 | fn | stripGitHubCopilotResponsesUnsupportedFields | (private) | `func stripGitHubCopilotResponsesUnsupportedFiel...` |
+| 839 | fn | normalizeGitHubCopilotResponsesTools | (private) | `func normalizeGitHubCopilotResponsesTools(body ...` |
+| 918 | fn | isGitHubCopilotResponsesBuiltinTool | (private) | `func isGitHubCopilotResponsesBuiltinTool(toolTy...` |
+| 927 | fn | collectTextFromNode | (private) | `func collectTextFromNode(node gjson.Result) str...` |
+| 965 | struct | githubCopilotResponsesStreamToolState | (private) | - |
+| 971 | struct | githubCopilotResponsesStreamState | (private) | - |
+| 984 | fn | translateGitHubCopilotResponsesNonStreamToClaude | (private) | `func translateGitHubCopilotResponsesNonStreamTo...` |
+| 1077 | fn | translateGitHubCopilotResponsesStreamToClaude | (private) | `func translateGitHubCopilotResponsesStreamToCla...` |
+| 1293 | fn | isHTTPSuccess | (private) | `func isHTTPSuccess(statusCode int) bool {` |
+| 1307 | fn | FetchGitHubCopilotModels | pub | `func FetchGitHubCopilotModels(ctx context.Conte...` |
 
 ## Public API
 
@@ -99,7 +99,7 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 func (e *GitHubCopilotExecutor) CountTokens(_ context.Context, _ *cliproxyauth.Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
 ```
 
-**Line:** 404 | **Kind:** fn
+**Line:** 408 | **Kind:** fn
 
 ### `Refresh`
 
@@ -107,7 +107,7 @@ func (e *GitHubCopilotExecutor) CountTokens(_ context.Context, _ *cliproxyauth.A
 func (e *GitHubCopilotExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Auth) (*cliproxyauth.Auth, error) {
 ```
 
-**Line:** 410 | **Kind:** fn
+**Line:** 414 | **Kind:** fn
 
 ### `FetchGitHubCopilotModels`
 
@@ -115,5 +115,5 @@ func (e *GitHubCopilotExecutor) Refresh(ctx context.Context, auth *cliproxyauth.
 func FetchGitHubCopilotModels(ctx context.Context, auth *cliproxyauth.Auth, cfg *config.Config) []*registry.ModelInfo {
 ```
 
-**Line:** 1303 | **Kind:** fn
+**Line:** 1307 | **Kind:** fn
 

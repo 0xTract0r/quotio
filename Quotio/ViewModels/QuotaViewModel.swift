@@ -1691,6 +1691,11 @@ final class QuotaViewModel {
     }
 
     private func preparePendingAccountSetup(for provider: AIProvider, remark: String?, proxyURL: String?) {
+        guard !modeManager.isRemoteProxyMode else {
+            pendingAccountSetup = nil
+            return
+        }
+
         let normalizedRemark = remark?.trimmingCharacters(in: .whitespacesAndNewlines)
         let sanitizedProxyURL = ProxyURLValidator.validate(proxyURL ?? "").isValid
             ? (proxyURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? ProxyURLValidator.sanitize(proxyURL ?? "") : nil)
@@ -1724,6 +1729,11 @@ final class QuotaViewModel {
     }
 
     private func applyPendingAccountSetupIfNeeded(for provider: AIProvider) async {
+        guard !modeManager.isRemoteProxyMode else {
+            pendingAccountSetup = nil
+            return
+        }
+
         guard let pending = pendingAccountSetup, pending.provider == provider else {
             return
         }
@@ -2278,6 +2288,23 @@ final class QuotaViewModel {
             return nil
         }
         return await directAuthFileForProxyFallback(named: file.name)?.proxyURL
+    }
+
+    func loadAuthFileAccountSettings(_ file: AuthFile) async throws -> AuthFileAccountSettings? {
+        let summary = file.accountSettings?.hasStructuredSummary == true ? file.accountSettings : nil
+
+        do {
+            return try await withManagementClient(operationName: "loadAuthFileAccountSettings") { client in
+                try await client.fetchAuthFileAccountSettings(name: file.name)
+            }
+        } catch let APIError.httpError(statusCode) where statusCode == 400 || statusCode == 404 {
+            return summary
+        } catch {
+            if let summary {
+                return summary
+            }
+            throw error
+        }
     }
 
     func updateAuthFileNote(
@@ -2937,6 +2964,7 @@ final class QuotaViewModel {
         refreshSnapshotAfterWrite: Bool,
         operationName: String
     ) async -> [AuthFile] {
+        guard !modeManager.isRemoteProxyMode else { return files }
         guard !files.isEmpty else { return files }
 
         var didWrite = false

@@ -7,6 +7,7 @@
 ```mermaid
 graph TD
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> atomic[atomic]
+    third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> base64[base64]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> bytes[bytes]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> cache[cache]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> common[common]
@@ -14,11 +15,13 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> fmt[fmt]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> gjson[gjson]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> interfaces[interfaces]
+    third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> protowire[protowire]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> sjson[sjson]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> strings[strings]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> testing[testing]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> thinking[thinking]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> time[time]
+    third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> utf8[utf8]
     third_party_CLIProxyAPIPlus_internal_translator_antigravity_claude[third_party-CLIProxyAPIPlus-internal-translator-antigravity-claude] --> util[util]
 ```
 
@@ -33,6 +36,7 @@ Dependencies within this module:
 Dependencies from other modules:
 
 - `atomic`
+- `base64`
 - `bytes`
 - `cache`
 - `common`
@@ -40,10 +44,12 @@ Dependencies from other modules:
 - `fmt`
 - `gjson`
 - `interfaces`
+- `protowire`
 - `sjson`
 - `strings`
 - `testing`
 - `thinking`
 - `time`
+- `utf8`
 - `util`
 

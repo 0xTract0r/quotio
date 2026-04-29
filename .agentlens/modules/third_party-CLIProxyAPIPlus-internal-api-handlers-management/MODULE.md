@@ -2,22 +2,29 @@
 
 [← Back to INDEX](../../INDEX.md)
 
-**Type:** implicit | **Files:** 21
+**Type:** implicit | **Files:** 28
 
 ## Files
 
 | File | Lines | Large |
 | ---- | ----- | ----- |
-| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/api_tools.go` | 1150 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/api_tools.go` | 1273 | 📊 |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/api_tools_cbor_test.go` | 149 |  |
-| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/api_tools_test.go` | 113 |  |
-| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files.go` | 3826 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/api_tools_test.go` | 212 |  |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files.go` | 4817 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files_account_settings_test.go` | 756 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files_batch_test.go` | 197 |  |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files_delete_test.go` | 129 |  |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files_download_test.go` | 62 |  |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files_download_windows_test.go` | 51 |  |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files_gitlab_test.go` | 164 |  |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files_patch_fields_test.go` | 164 |  |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_status_history.go` | 303 |  |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/config_auth_index.go` | 241 |  |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/config_basic.go` | 368 |  |
-| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/config_lists.go` | 1377 | 📊 |
-| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/handler.go` | 323 |  |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/config_lists.go` | 1514 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/config_lists_delete_keys_test.go` | 172 |  |
+| `third_party/CLIProxyAPIPlus/internal/api/handlers/management/handler.go` | 343 |  |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/logs.go` | 583 | 📊 |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/model_definitions.go` | 33 |  |
 | `third_party/CLIProxyAPIPlus/internal/api/handlers/management/oauth_callback.go` | 100 |  |
@@ -42,6 +49,6 @@
 
 ## 🟢 Low Priority
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/handlers/management/api_tools.go:87)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/api/handlers/management/api_tools.go:88)
 
 > if you need to override the HTTP Host header, set header["Host"].

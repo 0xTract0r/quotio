@@ -61,47 +61,57 @@ Symbol maps for 4 large files in this module.
 | 621 | fn | enforceMaxItems | (private) |
 | 628 | fn | clampedMenuBarMax | (private) |
 
-## Quotio/Models/Models.swift (1093 lines)
+## Quotio/Models/Models.swift (1357 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
 | 9 | enum | RuntimeProfile | (internal) |
 | 32 | fn | applicationSupportDirectory | (internal) |
-| 181 | fn | queueLabel | (internal) |
-| 209 | fn | stringValue | (private) |
-| 217 | fn | intValue | (private) |
-| 222 | fn | boolValue | (private) |
-| 238 | enum | AIProvider | (internal) |
-| 489 | struct | ProxyStatus | (internal) |
-| 500 | struct | AuthFile | (internal) |
-| 618 | fn | hash | (internal) |
-| 632 | struct | AuthFilesResponse | (internal) |
-| 636 | struct | OAuthReauthHistoryFileSummary | (internal) |
-| 656 | struct | OAuthReauthHistoryEvent | (internal) |
-| 680 | struct | OAuthReauthHistoryResponse | (internal) |
-| 693 | struct | APIKeysResponse | (internal) |
-| 703 | struct | UsageStats | (internal) |
-| 713 | struct | UsageData | (internal) |
-| 770 | struct | UsageDaySnapshot | (internal) |
-| 786 | struct | OAuthURLResponse | (internal) |
-| 793 | struct | OAuthStatusResponse | (internal) |
-| 814 | struct | OAuthCancelResponse | (internal) |
-| 824 | struct | OAuthCallbackResponse | (internal) |
-| 829 | struct | AuthFileStatusRefreshResponse | (internal) |
-| 849 | struct | AppConfig | (internal) |
-| 880 | struct | RoutingConfig | (internal) |
-| 884 | struct | QuotaExceededConfig | (internal) |
-| 894 | struct | RemoteManagementConfig | (internal) |
-| 910 | struct | LogEntry | (internal) |
-| 932 | enum | NavigationPage | (internal) |
-| 964 | mod | extension Color | (internal) |
-| 965 | method | init | (internal) |
-| 982 | mod | extension Int | (internal) |
-| 993 | mod | extension Double | (internal) |
-| 1010 | enum | ProxyURLValidationResult | (internal) |
-| 1041 | enum | ProxyURLValidator | (internal) |
-| 1043 | fn | validate | (internal) |
-| 1083 | fn | sanitize | (internal) |
+| 209 | fn | queueLabel | (internal) |
+| 246 | fn | sanitizedStorageComponent | (private) |
+| 255 | fn | stringValue | (private) |
+| 263 | fn | intValue | (private) |
+| 268 | fn | boolValue | (private) |
+| 284 | enum | AIProvider | (internal) |
+| 535 | struct | ProxyStatus | (internal) |
+| 545 | fn | trimmedAccountSettingsString | (private) |
+| 554 | struct | AuthFileAccountSettingsProfile | (internal) |
+| 569 | method | init | (internal) |
+| 603 | fn | encode | (internal) |
+| 618 | struct | AuthFileAccountSettingsActivation | (internal) |
+| 635 | method | init | (internal) |
+| 681 | fn | encode | (internal) |
+| 698 | struct | AuthFileAccountSettings | (internal) |
+| 720 | method | init | (internal) |
+| 754 | struct | AuthFile | (internal) |
+| 882 | fn | hash | (internal) |
+| 896 | struct | AuthFilesResponse | (internal) |
+| 900 | struct | OAuthReauthHistoryFileSummary | (internal) |
+| 920 | struct | OAuthReauthHistoryEvent | (internal) |
+| 944 | struct | OAuthReauthHistoryResponse | (internal) |
+| 957 | struct | APIKeysResponse | (internal) |
+| 967 | struct | UsageStats | (internal) |
+| 977 | struct | UsageData | (internal) |
+| 1034 | struct | UsageDaySnapshot | (internal) |
+| 1050 | struct | OAuthURLResponse | (internal) |
+| 1057 | struct | OAuthStatusResponse | (internal) |
+| 1078 | struct | OAuthCancelResponse | (internal) |
+| 1088 | struct | OAuthCallbackResponse | (internal) |
+| 1093 | struct | AuthFileStatusRefreshResponse | (internal) |
+| 1113 | struct | AppConfig | (internal) |
+| 1144 | struct | RoutingConfig | (internal) |
+| 1148 | struct | QuotaExceededConfig | (internal) |
+| 1158 | struct | RemoteManagementConfig | (internal) |
+| 1174 | struct | LogEntry | (internal) |
+| 1196 | enum | NavigationPage | (internal) |
+| 1228 | mod | extension Color | (internal) |
+| 1229 | method | init | (internal) |
+| 1246 | mod | extension Int | (internal) |
+| 1257 | mod | extension Double | (internal) |
+| 1274 | enum | ProxyURLValidationResult | (internal) |
+| 1305 | enum | ProxyURLValidator | (internal) |
+| 1307 | fn | validate | (internal) |
+| 1347 | fn | sanitize | (internal) |
 
 ## Quotio/Models/RequestLog.swift (522 lines)
 

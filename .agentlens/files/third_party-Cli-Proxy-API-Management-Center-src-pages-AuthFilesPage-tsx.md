@@ -1,6 +1,6 @@
 # third_party/Cli-Proxy-API-Management-Center/src/pages/AuthFilesPage.tsx
 
-[← Back to Module](../modules/root/MODULE.md) | [← Back to INDEX](../INDEX.md)
+[← Back to Module](../modules/third_party-Cli-Proxy-API-Management-Center-src-pages/MODULE.md) | [← Back to INDEX](../INDEX.md)
 
 ## Overview
 

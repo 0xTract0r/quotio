@@ -1,6 +1,6 @@
 # 账户级独立 ClientHello / 传输画像 PRD
 
-最后更新：2026-03-22
+最后更新：2026-04-29
 
 ## 1. 背景
 
@@ -99,6 +99,48 @@
   - 已支持把 `headers` 写入 auth metadata
 - `internal/watcher/synthesizer/file.go` 与 `helpers.go`
   - 已支持 metadata `headers -> auth.Attributes["header:*"]`
+
+### 6.3 Claude / Anthropic 参考基线（2026-04-29）
+
+Claude runtime transport 的基线必须同时看官方 contract 和高信号 transport 项目，不能把 OAuth uTLS 或某个浏览器 TLS profile 直接当成完成态。
+
+官方资料负责定义不能偏离的协议边界：
+
+- Anthropic API 基址与 Messages 入口：`https://platform.claude.com/docs/en/api/overview`
+- Messages / Streaming：`https://platform.claude.com/docs/en/build-with-claude/working-with-messages`、`https://platform.claude.com/docs/en/api/messages-streaming`
+- Claude Code 代理与证书边界：`https://code.claude.com/docs/en/corporate-proxy`
+- Claude Code native binary 说明：`https://code.claude.com/docs/en/getting-started`
+
+开源项目只作为工程参考：
+
+- `refraction-networking/utls`：适合借鉴 ClientHello preset / custom spec / low-level handshake 控制；但 parrot 重点覆盖 ClientHello，不等于完整 transport 画像
+- `lwthiker/curl-impersonate`：适合借鉴“TLS + HTTP/2 + headers/flags 作为一个 profile 束”的方法论
+- `bogdanfinn/tls-client`：适合借鉴 profile 对象化和 TLS / HTTP2 / HTTP3 一起建模的抽象；但它本质是浏览器画像库，不能原样套到 Claude API runtime
+
+当前结论：
+
+- Claude OAuth 和 Claude runtime 必须分开验收。OAuth 目标是登录 / refresh 到认证 host；runtime 目标是 `CLIProxyAPIPlus -> api.anthropic.com/v1/messages`。
+- OAuth 里的 `HelloChrome_Auto` 可以作为构建能力来源，但不能宣称为“真实 Claude 官方 runtime 指纹”。
+- 不能把浏览器 profile 原样搬进 Claude runtime，否则容易形成“浏览器 TLS + API 客户端头”的混搭画像。
+- 不能只做 JA3 / ClientHello；HTTP/2 SETTINGS、ALPN、header bundle 和连接复用同样属于 provider-facing 画像。
+- cache key 至少应升级为 `provider + authID + baseURLHost + proxyURL + transportProfileID`；如果 profile 支持热切换，再加入 `profileVersion`。
+
+建议后续 `transport_profile` 最低表达这些字段：
+
+```json
+{
+  "provider": "claude",
+  "profile_id": "claude_utls_chrome_like_v1",
+  "family": "utls",
+  "client_hello_preset": "chrome_like",
+  "alpn": ["h2"],
+  "http2_profile": "default",
+  "header_bundle_id": "claude_cli",
+  "version": 1
+}
+```
+
+命名必须保持中性，例如 `claude_utls_chrome_like_v1`。不要命名成 `real_claude_native` 或 `official_claude_fingerprint`，因为 Anthropic 官方没有提供 JA3 / JA4 / ALPN / HTTP2 SETTINGS 的官方指纹基线。
 
 ## 7. 方案总览
 

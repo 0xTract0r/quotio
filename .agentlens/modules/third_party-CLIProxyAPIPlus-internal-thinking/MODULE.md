@@ -8,11 +8,11 @@
 
 | File | Lines | Large |
 | ---- | ----- | ----- |
-| `third_party/CLIProxyAPIPlus/internal/thinking/apply.go` | 527 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/thinking/apply.go` | 522 | 📊 |
 | `third_party/CLIProxyAPIPlus/internal/thinking/apply_user_defined_test.go` | 55 |  |
 | `third_party/CLIProxyAPIPlus/internal/thinking/convert.go` | 183 |  |
 | `third_party/CLIProxyAPIPlus/internal/thinking/errors.go` | 82 |  |
-| `third_party/CLIProxyAPIPlus/internal/thinking/strip.go` | 70 |  |
+| `third_party/CLIProxyAPIPlus/internal/thinking/strip.go` | 63 |  |
 | `third_party/CLIProxyAPIPlus/internal/thinking/suffix.go` | 148 |  |
 | `third_party/CLIProxyAPIPlus/internal/thinking/text.go` | 41 |  |
 | `third_party/CLIProxyAPIPlus/internal/thinking/types.go` | 119 |  |
@@ -30,7 +30,7 @@
 
 ## 🟢 Low Priority
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/thinking/apply.go:78)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/thinking/apply.go:77)
 
 > Unknown models (modelInfo is nil) are treated as user-defined models: we skip
 

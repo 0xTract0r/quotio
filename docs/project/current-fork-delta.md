@@ -86,7 +86,11 @@
 - `remote-core` / `remote-relay` / `monitor` 启动时不应再预备本地 core runtime 或写 `local-management-key`；Keychain 读写默认非交互，legacy keychain migration 只有显式设置 `QUOTIO_ENABLE_LEGACY_KEYCHAIN_MIGRATION=1` 才启用
 - 旧 `remote` 语义只保留给历史配置迁移；维护时不要再把它当成新的产品能力入口
 - `remote-core` / `remote-relay` 当前目标保留的能力包括：Providers、API Keys、Agents、Logs、quota / usage；本地专属能力如本地 core 控制、fallback、identity packages 不再在远端模式暴露，避免把本地宿主状态误当成远端真源
+- 远端账号的运行配置真源现在进一步收敛到 core 账号设置：management center 是主配置入口，Quotio 远端模式主要展示只读摘要、状态、日志、用量与快速操作，不再把本地 `Identity Package` 当成远端账号真源
 - 隔离 smoke 或临时调试可用 `QUOTIO_REMOTE_ENDPOINT`、`QUOTIO_REMOTE_MANAGEMENT_KEY`、`QUOTIO_REMOTE_VERIFY_SSL` 注入远端连接；需要强制本机入口时再加 `QUOTIO_REMOTE_EXPOSE_LOCAL_RELAY=1` 并把 `QUOTIO_OPERATING_MODE` 设为 `remote-relay`
+- 若当前虚拟/开发态不想反复触发 Keychain 授权，可显式启用 `QUOTIO_REMOTE_MANAGEMENT_KEY_STORE=file`；此时远端 management key 会写入 `QUOTIO_APP_SUPPORT_DIR` 下的本地 JSON（默认文件名 `remote-management-keys[.<namespace>].json`，可用 `QUOTIO_REMOTE_MANAGEMENT_KEY_FILE` 覆盖路径）
+- 这条 file store 只作用于“远端连接 key”，不影响本地 core 的 `local-management-key`、`config.yaml remote-management.secret-key` 或远端 runtime 的 management key 存储；默认关闭，只有显式开关才启用
+- 开启 file store 后，首次仍可用 `QUOTIO_REMOTE_MANAGEMENT_KEY` 做一次性种子；后续重启 `remote-core` / `remote-relay` 时，可直接从本地 JSON 读回，不再依赖远端 key 的 Keychain 条目
 
 ### 4. 多身份指纹不是停留在想法
 
@@ -118,6 +122,20 @@
 - 本地 usage / token 历史不在 `~/.cli-proxy-api*/logs`；清理请求/响应日志时，默认要保留 `~/Library/Application Support/Quotio*/.usage-statistics.json` 和 `~/Library/Application Support/Quotio*/request-history.json`
 - usage 统计现在开始带官方价格估算的 `total_cost_usd` / `cost_by_day`，并区分 `cache_read_input_tokens` 与 `cache_write_input_tokens`；`gpt-5.3-codex-spark` 这类官方价格未最终确定的模型会标成 `pricing_status=unfinalized`，不能静默按 0 美元当成“免费”
 - management center 的 `/usage` 页面现在优先使用 core 返回的 request-level `cost_usd` / `pricing_status`，不再把浏览器 localStorage 里的模型价格当成唯一真源；页面下方的价格表只保留给旧快照或未内置定价模型做 fallback
+- core 现在把账号运行配置结构化暴露为 `account_settings`：最小已生效字段是 `proxy_url`、`note`、`disabled`、`managed_headers`、`extra_headers`，其中 runtime 真实复用了成熟链路 `auth.ProxyURL` 与 `auth headers`
+- `managed_headers` 与 `extra_headers` 现在明确分层：Claude / Codex 这类版本敏感头由 core 策略自动生成并只读返回；用户只编辑 `extra_headers`，与 managed / protocol-reserved 头冲突时 API 会拒绝
+- 但当前 `managed_headers` 的对外字段仍只是最小摘要，不应把它当成目标形态已经完成；对 Claude / Codex 这类版本敏感 provider，真正要求是 core policy 跟随 provider/runtime 新版本自动更新，而不是长期停在某个旧版本头/UA 快照
+- 截至 `2026-04-25` 的最新调研，较稳方向不是“整包 managed headers 重写”，而是按字段分层管理：自动更新默认只碰 version markers，runtime/environment 与 stable identity 字段保持保真；如需留历史，优先记录 append-only policy patch，而不是只存一份最新快照
+- 这条策略现在已有最小代码落点：
+  - `account_settings.managed_header_state` 会记录当前 managed header projection 与 append-only history
+  - Claude 继续走 stabilized device profile
+  - Codex 新增 profile resolver / cache；首次可采信的第一方 profile 可成为稳定基线，后续更高版本默认只 bump `User-Agent` / `Version` 等 version markers，不自动改平台/终端尾巴
+- `transport_profile` / `tls_profile` 不再是同一状态：
+  - `tls_profile` 仍只完成 schema / API / UI 预留，不能解释成“已做完 runtime enforcement”
+  - `transport_profile` 现在至少已有两类真实运行态：
+    - Claude 预设继续走 uTLS runtime transport
+    - Codex `provider-default` / managed 预设会做账号级 transport 隔离（HTTP transport cache 与 websocket session 不跨账号复用）
+  - 但当前 Codex `transport_profile` 只收口到“账号级 transport isolation + provider-managed defaults”，**不是**“真实 Codex Desktop rustls TLS 指纹完全仿真”；management API / UI 会返回明确 warning 说明这一点
 
 这部分当前真源：
 
@@ -139,6 +157,7 @@
 
 - 普通请求已按账号强制选择 identity package
 - TLS / ClientHello 已经真实按账号生效
+- 远端模式下它也不再承担账号运行身份真源；远端账号配置的主入口在 core management center，Quotio 只展示核心侧摘要或跳转入口
 
 配套入口：
 

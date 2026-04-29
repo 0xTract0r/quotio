@@ -9,8 +9,8 @@
 | File | Lines | Large |
 | ---- | ----- | ----- |
 | `third_party/CLIProxyAPIPlus/internal/watcher/diff/auth_diff.go` | 44 |  |
-| `third_party/CLIProxyAPIPlus/internal/watcher/diff/config_diff.go` | 416 |  |
-| `third_party/CLIProxyAPIPlus/internal/watcher/diff/config_diff_test.go` | 541 | 📊 |
+| `third_party/CLIProxyAPIPlus/internal/watcher/diff/config_diff.go` | 419 |  |
+| `third_party/CLIProxyAPIPlus/internal/watcher/diff/config_diff_test.go` | 548 | 📊 |
 | `third_party/CLIProxyAPIPlus/internal/watcher/diff/model_hash.go` | 132 |  |
 | `third_party/CLIProxyAPIPlus/internal/watcher/diff/model_hash_test.go` | 194 |  |
 | `third_party/CLIProxyAPIPlus/internal/watcher/diff/models_summary.go` | 121 |  |

@@ -1,6 +1,6 @@
 # third_party/CLIProxyAPIPlus/internal/runtime/executor/gitlab_executor.go
 
-[← Back to Module](../modules/third_party-CLIProxyAPIPlus-internal-runtime-executor/MODULE.md) | [← Back to INDEX](../INDEX.md)
+[← Back to Module](../modules/root/MODULE.md) | [← Back to INDEX](../INDEX.md)
 
 ## Overview
 

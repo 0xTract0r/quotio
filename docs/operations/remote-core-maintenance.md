@@ -147,6 +147,7 @@ management key 文件和取值逻辑不变；启用 HTTPS 后，变化的是：
 - 本机只监听 `127.0.0.1:<localPort>`，不监听 `0.0.0.0`
 - `GET http://127.0.0.1:<localPort>/healthz` 能经 relay 返回远端 core 的健康结果
 - 经本机 relay 调 `/v0/management/auth-files`、`/v0/management/usage`、`/v0/management/logs` 能读到远端数据；不要把本地 request history 当成 remote-relay 日志真源
+- 若这轮改动涉及账号中心化 / 账号设置，还要经 relay 复验 `/v0/management/auth-files/account-settings` 的详情读回；若声称写回链路正常，至少对专用 smoke 账号完成一次“修改备注 / 停用 / 恢复”闭环，并同时核对 relay 与远端直连结果
 - 隔离 smoke 日志中不应出现 `local-management-key` Keychain 读写弹框或系统交互；Keychain legacy migration 默认关闭
 
 说明：
@@ -155,6 +156,8 @@ management key 文件和取值逻辑不变；启用 HTTPS 后，变化的是：
   - 默认稳定基线：`https://10.1.1.201:18317`
   - 若显式关闭 TLS：`http://10.1.1.201:18317`
 - 自签名证书 smoke 可以对 `curl` 加 `-k`，但这不是长期接入方案
+- 当前仓库已提供 `./scripts/smoke-test-remote-relay.sh`，会默认 build 当前 worktree 的隔离 Debug app，并完成 `stage1(env seed) -> stage2(file-only)` 两阶段 relay smoke；默认还会对专用 smoke 账号复验 `/v0/management/auth-files/account-settings` 详情，并执行“修改备注 / 停用 / 恢复原字段”的写回闭环。实际变更覆盖 `note/disabled`，`proxy_url`、`extra_headers`、`transport_profile`、`tls_profile` 覆盖“不被污染、随恢复 payload 保持原值”；结果汇总在 `build/remote-relay-smoke-script/summary.json`
+- 这条脚本不替代 management center 浏览器 smoke；若要验证远端 `management.html`，自签 TLS 仍需显式信任证书或在 Playwright/manual browser smoke 中使用 `ignoreHTTPSErrors`
 - 不要用 `HEAD /management.html` 当成失败判据；当前部署已知会返回 `404`，但 `GET` 正常
 - 第 4 项不能只看本地 UI 或本机日志，必须以远端 management `api-call`、远端核心日志、或等价的 provider-facing 证据为准
 

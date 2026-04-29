@@ -19,12 +19,13 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> flate[flate]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> fmt[fmt]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> geminicli[geminicli]
+    third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> gin[gin]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> gjson[gjson]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> google[google]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> gzip[gzip]
+    third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> helps[helps]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> hex[hex]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> hmac[hmac]
-    third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> html[html]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> http[http]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> httptest[httptest]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> json[json]
@@ -32,6 +33,7 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> net[net]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> oauth2[oauth2]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> os[os]
+    third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> proxy[proxy]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> proxyutil[proxyutil]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> rand[rand]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> regexp[regexp]
@@ -45,10 +47,11 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> syscall[syscall]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> testing[testing]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> textproto[textproto]
+    third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> thinking[thinking]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> tls[tls]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> tokenizer[tokenizer]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> url[url]
-    third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> utf8[utf8]
+    third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> util[util]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> uuid[uuid]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> wsrelay[wsrelay]
     third_party_CLIProxyAPIPlus_internal_runtime_executor[third_party-CLIProxyAPIPlus-internal-runtime-executor] --> zstd[zstd]
@@ -58,16 +61,12 @@ graph TD
 
 Dependencies within this module:
 
-- `gin`
+- `cache`
 - `gitlab`
 - `io`
-- `logging`
-- `proxy`
 - `runtime`
-- `thinking`
 - `time`
 - `usage`
-- `util`
 - `websocket`
 
 ## External Dependencies
@@ -87,12 +86,13 @@ Dependencies from other modules:
 - `flate`
 - `fmt`
 - `geminicli`
+- `gin`
 - `gjson`
 - `google`
 - `gzip`
+- `helps`
 - `hex`
 - `hmac`
-- `html`
 - `http`
 - `httptest`
 - `json`
@@ -100,6 +100,7 @@ Dependencies from other modules:
 - `net`
 - `oauth2`
 - `os`
+- `proxy`
 - `proxyutil`
 - `rand`
 - `regexp`
@@ -113,10 +114,11 @@ Dependencies from other modules:
 - `syscall`
 - `testing`
 - `textproto`
+- `thinking`
 - `tls`
 - `tokenizer`
 - `url`
-- `utf8`
+- `util`
 - `uuid`
 - `wsrelay`
 - `zstd`

@@ -59,7 +59,7 @@ struct ProvidersScreen: View {
                 let data = AccountRowData.from(
                     authFile: file,
                     metadataKey: metadataKey,
-                    remark: resolvedAccountRemark(for: metadataKey),
+                    remark: displayRemark(for: file, metadataKey: metadataKey),
                     hasConfiguredProxy: effectiveProxyURL(for: file) != nil,
                     identityPackage: modeManager.currentMode.supportsIdentityPackages ? viewModel.identityPackage(for: file) : nil,
                     supportsIdentityBinding: modeManager.currentMode.supportsIdentityPackages
@@ -485,7 +485,17 @@ struct ProvidersScreen: View {
             ?? providersMetadataFallbackUserDefaults().flatMap { AccountMetadataStore.remark(for: metadataKey, in: $0) }
     }
 
+    private func displayRemark(for authFile: AuthFile, metadataKey: String) -> String? {
+        if modeManager.isRemoteProxyMode {
+            return authFile.effectiveRemoteNote
+        }
+        return resolvedAccountRemark(for: metadataKey)
+    }
+
     private func effectiveProxyURL(for authFile: AuthFile) -> String? {
+        if let proxyURL = authFile.effectiveRemoteProxyURL {
+            return proxyURL
+        }
         guard let directAuthFile = viewModel.directAuthFiles.first(where: { $0.filename == authFile.name }) else {
             return nil
         }
@@ -704,6 +714,12 @@ struct ProvidersScreen: View {
 
         if let proxyAccount = matchingAccounts.first(where: { $0.source == .proxy }) {
             didApplyLaunchAutomation = true
+            if RuntimeProfile.providersRemoteAccountSettingsSmokeEnabled {
+                uiSmokeLog(
+                    "providers-remote-account-settings-auto-open auth=\(proxyAccount.id) " +
+                    "source=proxy title=\(proxyAccount.primaryDisplayTitle)"
+                )
+            }
             handleConfigureAccountSettings(proxyAccount)
             return
         }
@@ -714,7 +730,24 @@ struct ProvidersScreen: View {
         }
 
         didApplyLaunchAutomation = true
+        if RuntimeProfile.providersRemoteAccountSettingsSmokeEnabled {
+            uiSmokeLog(
+                "providers-remote-account-settings-auto-open auth=\(matchingAccounts[0].id) " +
+                "source=\(accountSourceSmokeName(matchingAccounts[0].source)) title=\(matchingAccounts[0].primaryDisplayTitle)"
+            )
+        }
         handleConfigureAccountSettings(matchingAccounts[0])
+    }
+
+    private func accountSourceSmokeName(_ source: AccountSource) -> String {
+        switch source {
+        case .proxy:
+            return "proxy"
+        case .direct:
+            return "direct"
+        case .autoDetected:
+            return "auto-detected"
+        }
     }
 
     private func matchingLaunchAutomationAccounts(
@@ -797,9 +830,11 @@ private struct AccountSettingsSheet: View {
     let context: AccountSettingsEditorContext
 
     @State private var accountMetadataStore = AccountMetadataStore.shared
+    @State private var modeManager = OperatingModeManager.shared
     @State private var remark = ""
     @State private var proxyURL = ""
     @State private var fingerprintProfile: AccountFingerprintProfile?
+    @State private var remoteAccountSettings: AuthFileAccountSettings?
     @State private var validation: ProxyURLValidationResult = .empty
     @State private var isLoading = true
     @State private var isSaving = false
@@ -818,11 +853,11 @@ private struct AccountSettingsSheet: View {
     @State private var didRunProvidersReauthSmoke = false
 
     private var headerTitle: String {
-        let remark = context.remark?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let remark, !remark.isEmpty else {
+        let currentTitle = (isRemoteReadOnlyMode ? remark : context.remark)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let currentTitle, !currentTitle.isEmpty else {
             return context.displayName
         }
-        return remark
+        return currentTitle
     }
 
     private var headerSubtitle: String? {
@@ -830,6 +865,22 @@ private struct AccountSettingsSheet: View {
             return nil
         }
         return context.displayName
+    }
+
+    private var isRemoteReadOnlyMode: Bool {
+        modeManager.isRemoteProxyMode && context.authFile != nil
+    }
+
+    private var currentRemoteSettings: AuthFileAccountSettings? {
+        remoteAccountSettings ?? context.authFile?.accountSettings
+    }
+
+    private var remoteSettingsWarnings: [String] {
+        currentRemoteSettings?.warnings ?? []
+    }
+
+    private var remoteManagementURL: URL? {
+        modeManager.remoteConfig?.managementAuthFilesURL
     }
 
     var body: some View {
@@ -863,52 +914,57 @@ private struct AccountSettingsSheet: View {
                         }
                     } else {
                         VStack(alignment: .leading, spacing: 14) {
-                            Text("providers.accountSettings.description".localized())
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("providers.accountSettings.remark".localized())
+                            if isRemoteReadOnlyMode {
+                                remoteAccountSettingsSection
+                            } else {
+                                Text("providers.accountSettings.description".localized())
                                     .font(.subheadline)
-                                    .fontWeight(.medium)
+                                    .foregroundStyle(.secondary)
 
-                                TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
-                                    .textFieldStyle(.roundedBorder)
-                                    .onChange(of: remark) { _, _ in
-                                        saveError = nil
-                                    }
-                            }
-
-                            if context.supportsProxy {
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text("providers.accountProxy.title".localized())
+                                    Text("providers.accountSettings.remark".localized())
                                         .font(.subheadline)
                                         .fontWeight(.medium)
 
-                                    TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
+                                    TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
                                         .textFieldStyle(.roundedBorder)
-                                        .onChange(of: proxyURL) { _, newValue in
-                                            validation = ProxyURLValidator.validate(newValue)
+                                        .onChange(of: remark) { _, _ in
                                             saveError = nil
                                         }
+                                }
 
-                                    if validation != .valid && validation != .empty {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .foregroundStyle(.orange)
-                                            Text((validation.localizationKey ?? "").localized())
+                                if context.supportsProxy {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("providers.accountProxy.title".localized())
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+
+                                        TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
+                                            .textFieldStyle(.roundedBorder)
+                                            .onChange(of: proxyURL) { _, newValue in
+                                                validation = ProxyURLValidator.validate(newValue)
+                                                saveError = nil
+                                            }
+
+                                        if validation != .valid && validation != .empty {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .foregroundStyle(.orange)
+                                                Text((validation.localizationKey ?? "").localized())
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        } else {
+                                            Text("providers.accountProxy.fallback".localized())
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
-                                    } else {
-                                        Text("providers.accountProxy.fallback".localized())
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
                                     }
                                 }
+
+                                fingerprintSection
                             }
 
-                            fingerprintSection
                             oauthReauthenticationSection
 
                             if let loadError {
@@ -931,7 +987,7 @@ private struct AccountSettingsSheet: View {
             Divider()
 
             HStack {
-                if context.supportsProxy {
+                if context.supportsProxy && !isRemoteReadOnlyMode {
                     Button("providers.accountProxy.clear".localized()) {
                         proxyURL = ""
                         validation = .empty
@@ -946,17 +1002,25 @@ private struct AccountSettingsSheet: View {
                     dismiss()
                 }
 
-                Button {
-                    Task { await save() }
-                } label: {
-                    if isSaving {
-                        SmallProgressView()
-                    } else {
-                        Text("action.save".localized())
+                if isRemoteReadOnlyMode {
+                    Button("providers.accountSettings.openWebConfig".localized()) {
+                        openRemoteManagementCenter()
                     }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isLoading || remoteManagementURL == nil)
+                } else {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        if isSaving {
+                            SmallProgressView()
+                        } else {
+                            Text("action.save".localized())
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isLoading || isSaving || !validation.isValid)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(isLoading || isSaving || !validation.isValid)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -996,6 +1060,105 @@ private struct AccountSettingsSheet: View {
     }
 
     @ViewBuilder
+    private var remoteAccountSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("providers.accountSettings.remoteDescription".localized())
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let remoteManagementURL {
+                Button {
+                    NSWorkspace.shared.open(remoteManagementURL)
+                } label: {
+                    Label("providers.accountSettings.openWebConfig".localized(), systemImage: "safari")
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Text("providers.accountSettings.openWebConfigUnavailable".localized())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    remoteSummaryRow(
+                        title: "providers.accountSettings.remoteNote".localized(),
+                        value: currentRemoteSettings?.note ?? context.authFile?.effectiveRemoteNote
+                    )
+                    remoteSummaryRow(
+                        title: "providers.accountSettings.remoteProxy".localized(),
+                        value: currentRemoteSettings?.proxyURL ?? context.authFile?.effectiveRemoteProxyURL
+                    )
+                    remoteSummaryRow(
+                        title: "providers.accountSettings.remoteDisabled".localized(),
+                        value: remoteDisabledSummary
+                    )
+                    remoteSummaryRow(
+                        title: "providers.accountSettings.remoteActivation".localized(),
+                        value: currentRemoteSettings?.activation?.summary
+                    )
+                    remoteSummaryRow(
+                        title: "providers.accountSettings.remoteTransportProfile".localized(),
+                        value: currentRemoteSettings?.transportProfile?.summary
+                    )
+                    remoteSummaryRow(
+                        title: "providers.accountSettings.remoteTLSProfile".localized(),
+                        value: currentRemoteSettings?.tlsProfile?.summary
+                    )
+
+                    if let currentRemoteSettings, !currentRemoteSettings.managedHeaders.isEmpty {
+                        detailHeaders(
+                            title: "providers.accountSettings.remoteManagedHeaders".localized(),
+                            headers: currentRemoteSettings.managedHeaders
+                        )
+                    }
+
+                    if let currentRemoteSettings, !currentRemoteSettings.extraHeaders.isEmpty {
+                        detailHeaders(
+                            title: "providers.accountSettings.remoteExtraHeaders".localized(),
+                            headers: currentRemoteSettings.extraHeaders
+                        )
+                    }
+
+                    if !remoteSettingsWarnings.isEmpty {
+                        detailList(
+                            title: "providers.accountSettings.remoteWarnings".localized(),
+                            values: remoteSettingsWarnings
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Text("providers.accountSettings.remoteReservedNotice".localized())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var remoteDisabledSummary: String? {
+        let isDisabled = currentRemoteSettings?.disabled ?? liveAuthFile?.disabled
+        guard let isDisabled else { return nil }
+        return isDisabled ? "providers.disabled".localized() : "providers.enabled".localized()
+    }
+
+    private func remoteSummaryRow(title: String, value: String?) -> some View {
+        let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayValue = (trimmedValue?.isEmpty == false)
+            ? (trimmedValue ?? "")
+            : "providers.accountSettings.remoteValueUnavailable".localized()
+        return LabeledContent(title) {
+            Text(displayValue)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
+    }
+
+    private func openRemoteManagementCenter() {
+        guard let remoteManagementURL else { return }
+        NSWorkspace.shared.open(remoteManagementURL)
+    }
+
     private var fingerprintSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -1152,15 +1315,15 @@ private struct AccountSettingsSheet: View {
     private var runtimeImpactDescription: String {
         switch context.provider {
         case .antigravity:
-            return "保存后会把 UA 写入 Antigravity auth 文件，后续通过 CLIProxyAPIPlus 发起的 Antigravity 请求会实际使用它。"
+            return "仅对当前本地 Quotio/CLIProxyAPI 运行时有效。保存后会把 UA 写入 Antigravity auth 文件，后续通过 CLIProxyAPIPlus 发起的 Antigravity 请求会实际使用它。"
         case .codex:
-            return "这里生成的是账户级上游 HTTP 头档案。保存后会写入 auth 记录的 `headers`，只有提供商真正能看到这些上游头；本地 CLI 入站头不属于验收目标。"
+            return "仅对当前本地 Quotio/CLIProxyAPI 运行时有效。这里生成的是账户级上游 HTTP 头档案。保存后会写入 auth 记录的 `headers`，只有提供商真正能看到这些上游头；本地 CLI 入站头不属于验收目标。"
         case .kiro:
-            return "Kiro 已有 CLIProxyAPIPlus 内建的账号级动态指纹。这里保存的是本地档案，不会覆写其全局指纹配置。"
+            return "仅对当前本地 Quotio 实例有效。Kiro 已有 CLIProxyAPIPlus 内建的账号级动态指纹。这里保存的是本地档案，不会覆写其全局指纹配置。"
         case .claude:
-            return "这里生成的是账户级上游 HTTP 头档案。保存后会写入 auth 记录的 `headers`，Anthropic 侧真正可见的是这些上游头与账号代理出口；TLS 仍不是按账号生效。"
+            return "仅对当前本地 Quotio/CLIProxyAPI 运行时有效。这里生成的是账户级上游 HTTP 头档案。保存后会写入 auth 记录的 `headers`，Anthropic 侧真正可见的是这些上游头与账号代理出口；TLS 仍不是按账号生效。"
         default:
-            return "当前 Quotio 会保存这份账户档案，但并非所有 provider 都有通用的每账户上游写入口。"
+            return "仅对当前本地 Quotio 实例有效。当前 Quotio 会保存这份账户档案，但并非所有 provider 都有通用的每账户上游写入口。"
         }
     }
 
@@ -1575,40 +1738,74 @@ private struct AccountSettingsSheet: View {
         authStatusRefreshFeedback = nil
         authStatusRefreshFeedbackTone = .success
         reauthHistoryError = nil
-        remark = providersResolvedRemark(for: context.metadataKey, store: accountMetadataStore) ?? ""
-        fingerprintProfile = providersResolvedFingerprintProfile(for: context.metadataKey, store: accountMetadataStore)
+        remoteAccountSettings = nil
 
-        if fingerprintProfile == nil {
+        if isRemoteReadOnlyMode {
+            remark = context.authFile?.effectiveRemoteNote ?? ""
+            proxyURL = context.authFile?.effectiveRemoteProxyURL ?? ""
+            fingerprintProfile = nil
+            validation = proxyURL.isEmpty ? .empty : ProxyURLValidator.validate(proxyURL)
+
             if let authFile = context.authFile {
-                fingerprintProfile = try? await viewModel.loadAuthFileRecoveredFingerprintProfile(
-                    authFile,
-                    metadataKey: context.metadataKey
-                )
-            } else if let directAuthFile = context.directAuthFile {
-                fingerprintProfile = await viewModel.loadDirectAuthFileRecoveredFingerprintProfile(
-                    directAuthFile,
-                    metadataKey: context.metadataKey
-                )
-            }
-        }
-
-        do {
-            if context.supportsProxy {
-                if let authFile = context.authFile {
-                    proxyURL = try await viewModel.loadAuthFileProxyURL(authFile) ?? ""
-                } else if let directAuthFile = context.directAuthFile {
-                    proxyURL = directAuthFile.proxyURL ?? ""
-                } else {
-                    loadError = "providers.accountProxy.missing".localized()
+                do {
+                    remoteAccountSettings = try await viewModel.loadAuthFileAccountSettings(authFile)
+                    remark = remoteAccountSettings?.note ?? authFile.effectiveRemoteNote ?? ""
+                    proxyURL = remoteAccountSettings?.proxyURL ?? authFile.effectiveRemoteProxyURL ?? ""
+                    validation = proxyURL.isEmpty ? .empty : ProxyURLValidator.validate(proxyURL)
+                    if RuntimeProfile.providersRemoteAccountSettingsSmokeEnabled {
+                        uiSmokeLog(
+                            "providers-remote-account-settings-loaded auth=\(authFile.name) " +
+                            "managed_headers=\(remoteAccountSettings?.managedHeaders.count ?? 0) " +
+                            "extra_headers=\(remoteAccountSettings?.extraHeaders.count ?? 0) " +
+                            "disabled=\(remoteAccountSettings?.disabled == true) " +
+                            "web_config=\(remoteManagementURL != nil)"
+                        )
+                    }
+                } catch {
+                    if authFile.accountSettings == nil {
+                        loadError = error.localizedDescription
+                    }
+                    if RuntimeProfile.providersRemoteAccountSettingsSmokeEnabled {
+                        uiSmokeLog("providers-remote-account-settings-load-error auth=\(authFile.name) error=\(error.localizedDescription)")
+                    }
                 }
-
-                validation = ProxyURLValidator.validate(proxyURL)
-            } else {
-                proxyURL = ""
-                validation = .empty
             }
-        } catch {
-            loadError = error.localizedDescription
+        } else {
+            remark = providersResolvedRemark(for: context.metadataKey, store: accountMetadataStore) ?? ""
+            fingerprintProfile = providersResolvedFingerprintProfile(for: context.metadataKey, store: accountMetadataStore)
+
+            if fingerprintProfile == nil {
+                if let authFile = context.authFile {
+                    fingerprintProfile = try? await viewModel.loadAuthFileRecoveredFingerprintProfile(
+                        authFile,
+                        metadataKey: context.metadataKey
+                    )
+                } else if let directAuthFile = context.directAuthFile {
+                    fingerprintProfile = await viewModel.loadDirectAuthFileRecoveredFingerprintProfile(
+                        directAuthFile,
+                        metadataKey: context.metadataKey
+                    )
+                }
+            }
+
+            do {
+                if context.supportsProxy {
+                    if let authFile = context.authFile {
+                        proxyURL = try await viewModel.loadAuthFileProxyURL(authFile) ?? ""
+                    } else if let directAuthFile = context.directAuthFile {
+                        proxyURL = directAuthFile.proxyURL ?? ""
+                    } else {
+                        loadError = "providers.accountProxy.missing".localized()
+                    }
+
+                    validation = ProxyURLValidator.validate(proxyURL)
+                } else {
+                    proxyURL = ""
+                    validation = .empty
+                }
+            } catch {
+                loadError = error.localizedDescription
+            }
         }
 
         await loadReauthHistory()
@@ -1804,6 +2001,11 @@ private struct AccountSettingsSheet: View {
     }
 
     private func save() async {
+        guard !isRemoteReadOnlyMode else {
+            openRemoteManagementCenter()
+            return
+        }
+
         guard validation.isValid else {
             saveError = (validation.localizationKey ?? "").localized()
             return
@@ -2152,6 +2354,7 @@ struct OAuthSheet: View {
     @Binding var projectId: String
     let onDismiss: () -> Void
     
+    @State private var modeManager = OperatingModeManager.shared
     @State private var hasStartedAuth = false
     @State private var selectedKiroMethod: AuthCommand = .kiroImport
     @State private var remark = ""
@@ -2181,6 +2384,10 @@ struct OAuthSheet: View {
 
     private var canStartAuthentication: Bool {
         !isPolling && proxyValidation.isValid
+    }
+
+    private var showsLocalSetupFields: Bool {
+        !modeManager.isRemoteProxyMode
     }
 
     private var shouldShowCallbackPasteSection: Bool {
@@ -2221,41 +2428,49 @@ struct OAuthSheet: View {
                 .frame(maxWidth: 320)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("providers.accountSettings.remark".localized())
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
-                        .textFieldStyle(.roundedBorder)
-                }
+            if showsLocalSetupFields {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("providers.accountSettings.remark".localized())
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        TextField("providers.accountSettings.remarkPlaceholder".localized(), text: $remark)
+                            .textFieldStyle(.roundedBorder)
+                    }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("providers.accountProxy.title".localized())
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: proxyURL) { _, newValue in
-                            proxyValidation = ProxyURLValidator.validate(newValue)
-                        }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("providers.accountProxy.title".localized())
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        TextField("settings.upstreamProxy.placeholder".localized(), text: $proxyURL)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: proxyURL) { _, newValue in
+                                proxyValidation = ProxyURLValidator.validate(newValue)
+                            }
 
-                    if proxyValidation != .valid && proxyValidation != .empty {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            Text((proxyValidation.localizationKey ?? "").localized())
+                        if proxyValidation != .valid && proxyValidation != .empty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text((proxyValidation.localizationKey ?? "").localized())
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("providers.accountProxy.fallback".localized())
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } else {
-                        Text("providers.accountProxy.fallback".localized())
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
+                .frame(maxWidth: 320)
+            } else {
+                Text("providers.accountSettings.remoteOAuthNotice".localized())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
             }
-            .frame(maxWidth: 320)
             
             if provider == .kiro {
                 VStack(alignment: .leading, spacing: 6) {

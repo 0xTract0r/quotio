@@ -11,7 +11,7 @@
 | `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/AuthFileCard.tsx` | 563 | 📊 |
 | `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/AuthFileModelsModal.tsx` | 91 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/AuthFileQuotaSection.tsx` | 136 |  |
-| `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/AuthFilesPrefixProxyEditorModal.tsx` | 196 |  |
+| `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/AuthFilesPrefixProxyEditorModal.tsx` | 394 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/AuthFilesReauthHistoryPanel.tsx` | 209 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/AuthFilesStatusHistoryPanel.tsx` | 241 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/features/authFiles/components/OAuthExcludedCard.tsx` | 65 |  |

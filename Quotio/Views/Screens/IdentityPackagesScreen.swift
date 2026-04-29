@@ -445,10 +445,10 @@ struct IdentityPackagesScreen: View {
                 .foregroundStyle(.orange)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Remote mode still uses local identity packages")
+                Text("远端模式不把本地 Identity Package 当作账号真源")
                     .font(.subheadline.weight(.semibold))
 
-                Text("Providers, logs, usage, and API keys come from the remote core. Identity packages and their saved proxy passwords still belong to this local Quotio instance.")
+                Text("远端账号配置摘要与编辑入口来自远端 core / management center。本页面里的 Identity Package 与代理密码仍只保存在当前 Quotio 本地实例里，仅本地有效。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
