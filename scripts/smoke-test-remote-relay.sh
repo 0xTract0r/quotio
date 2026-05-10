@@ -6,6 +6,8 @@ PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/config.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/dev-app-utils.sh"
 
 REMOTE_BASE_URL="${REMOTE_RELAY_SMOKE_BASE_URL:-https://10.1.1.201:18317}"
 REMOTE_HOST="${REMOTE_RELAY_SMOKE_REMOTE_HOST:-wisedata@10.1.1.201}"
@@ -22,11 +24,11 @@ APP_EXECUTABLE="${REMOTE_RELAY_SMOKE_APP_EXECUTABLE:-}"
 DERIVED_DATA_PATH="${REMOTE_RELAY_SMOKE_DERIVED_DATA_PATH:-${BUILD_DIR}/DerivedData-remote-relay-smoke}"
 KEYCHAIN_NAMESPACE="${REMOTE_RELAY_SMOKE_KEYCHAIN_NAMESPACE:-remote-relay-smoke}"
 ACCOUNT_SETTINGS_SMOKE="${REMOTE_RELAY_SMOKE_ACCOUNT_SETTINGS:-1}"
-ACCOUNT_SETTINGS_WRITEBACK="${REMOTE_RELAY_SMOKE_WRITEBACK:-1}"
-ACCOUNT_SETTINGS_ACCOUNT_NAME="${REMOTE_RELAY_SMOKE_ACCOUNT_NAME:-codex-quotio-dev-remote-smoke-20260422T191451@example.invalid-plus.json}"
-ACCOUNT_SETTINGS_ACCOUNT_MARKER="${REMOTE_RELAY_SMOKE_ACCOUNT_MARKER:-quotio-dev-remote-smoke}"
-ACCOUNT_SETTINGS_NOTE_MARKER="${REMOTE_RELAY_SMOKE_NOTE_MARKER:-QUOTIO-REMOTE-SMOKE}"
-ALLOW_NON_SMOKE_ACCOUNT="${REMOTE_RELAY_SMOKE_ALLOW_NON_SMOKE_ACCOUNT:-0}"
+ACCOUNT_SETTINGS_WRITEBACK="${REMOTE_RELAY_SMOKE_ACCOUNT_SETTINGS_WRITE:-${ACCOUNT_SETTINGS_WRITE:-${REMOTE_RELAY_SMOKE_WRITEBACK:-0}}}"
+ACCOUNT_SETTINGS_ACCOUNT_NAME="${REMOTE_RELAY_SMOKE_ACCOUNT_NAME:-}"
+ACCOUNT_SETTINGS_ACCOUNT_MARKER="${REMOTE_RELAY_SMOKE_ACCOUNT_MARKER:-}"
+ACCOUNT_SETTINGS_NOTE_MARKER="${REMOTE_RELAY_SMOKE_NOTE_MARKER:-}"
+ALLOW_NON_SMOKE_ACCOUNT="${REMOTE_RELAY_SMOKE_ALLOW_NON_SMOKE_ACCOUNT_WRITE:-${ALLOW_NON_SMOKE_ACCOUNT_WRITE:-${REMOTE_RELAY_SMOKE_ALLOW_NON_SMOKE_ACCOUNT:-0}}}"
 
 RUNTIME_HOME="${RUNTIME_DIR}/home"
 APP_SUPPORT_DIR="${RUNTIME_DIR}/app-support"
@@ -54,22 +56,30 @@ Environment overrides:
   REMOTE_RELAY_SMOKE_RUNTIME_DIR         隔离运行目录，默认 build/remote-relay-smoke-script
   REMOTE_RELAY_SMOKE_KEEP_RUNTIME        是否保留运行目录，默认 1
   REMOTE_RELAY_SMOKE_BUILD_APP           是否先 build 当前 Debug app，默认 1
-  REMOTE_RELAY_SMOKE_APP_BUNDLE          手工指定 Quotio.app 路径
-  REMOTE_RELAY_SMOKE_APP_EXECUTABLE      手工指定 Quotio 可执行文件路径
+  REMOTE_RELAY_SMOKE_APP_BUNDLE          手工指定隔离 Quotio Dev.app 路径
+  REMOTE_RELAY_SMOKE_APP_EXECUTABLE      手工指定隔离 Quotio Dev 可执行文件路径
   REMOTE_RELAY_SMOKE_DERIVED_DATA_PATH   build 时使用的 DerivedData 路径
   REMOTE_RELAY_SMOKE_KEYCHAIN_NAMESPACE  隔离 namespace，默认 remote-relay-smoke
-  REMOTE_RELAY_SMOKE_ACCOUNT_SETTINGS    是否检查 account-settings 详情，默认 1
-  REMOTE_RELAY_SMOKE_WRITEBACK           是否做 smoke 账号写回闭环，默认 1
-  REMOTE_RELAY_SMOKE_ACCOUNT_NAME        专用 smoke 账号文件名
-  REMOTE_RELAY_SMOKE_ACCOUNT_MARKER      专用 smoke 账号名必须包含的安全标记
-  REMOTE_RELAY_SMOKE_NOTE_MARKER         专用 smoke 账号备注必须包含的安全标记
+  REMOTE_RELAY_SMOKE_ACCOUNT_SETTINGS    是否启用 account-settings 详情检查，默认 1（只读）
+  REMOTE_RELAY_SMOKE_ACCOUNT_NAME        只读/写入 smoke 的账号文件名；默认空，跳过详情检查
+  REMOTE_RELAY_SMOKE_ACCOUNT_SETTINGS_WRITE
+                                        是否执行 account-settings PATCH 写入闭环，默认 0
+  ACCOUNT_SETTINGS_WRITE                 写入闭环短别名，默认 0
+  REMOTE_RELAY_SMOKE_WRITEBACK           旧写入闭环开关，仍兼容；默认 0
+  REMOTE_RELAY_SMOKE_ACCOUNT_MARKER      写入账号名额外安全标记；默认空，内置要求包含 smoke/test
+  REMOTE_RELAY_SMOKE_NOTE_MARKER         写入前账号备注必须包含的安全标记；默认空
+  REMOTE_RELAY_SMOKE_ALLOW_NON_SMOKE_ACCOUNT_WRITE
+                                        允许写入非 smoke/test 账号，默认 0；必须同时启用写入闭环
+  ALLOW_NON_SMOKE_ACCOUNT_WRITE          非 smoke/test 写入 override 短别名，默认 0
 
 行为：
   1. 直连远端检查 /healthz、/management.html、/v0/management/auth-files
   2. 第一阶段用 env key + file store 种子本地 JSON 并启动 remote-relay
   3. 第二阶段移除 env key，仅靠本地 JSON 再启动一次 remote-relay
   4. 通过本机 relay 检查 /healthz、/v0/management/auth-files、/usage、/logs
-  5. 默认通过 relay 对专用 smoke 账号做 account-settings 详情读回与写回恢复闭环
+  5. 默认不 PATCH 远端账号；如设置账号名，仅做 account-settings read-only 详情读回
+  6. 写入 smoke 必须显式设置 ACCOUNT_SETTINGS_WRITE=1 或 REMOTE_RELAY_SMOKE_ACCOUNT_SETTINGS_WRITE=1
+  7. 写入非 smoke/test 账号必须再显式设置 ALLOW_NON_SMOKE_ACCOUNT_WRITE=1
 EOF
 }
 
@@ -108,7 +118,7 @@ find_latest_debug_app_bundle() {
                 latest_mtime="${mtime}"
                 latest_path="${candidate}"
             fi
-        done < <(find "${root}" -path "*/Build/Products/Debug/Quotio.app" -type d -print0 2>/dev/null)
+        done < <(find "${root}" -path "*/Build/Products/Debug/${DEV_PRODUCT_NAME}.app" -type d -print0 2>/dev/null)
     done
 
     if [[ -n "${latest_path}" ]]; then
@@ -121,20 +131,26 @@ build_debug_app_if_needed() {
         return 0
     fi
 
-    log_step "构建当前 Debug app"
-    xcodebuild \
-        -project "${PROJECT_DIR}/Quotio.xcodeproj" \
-        -scheme "Quotio" \
-        -configuration "Debug" \
-        -derivedDataPath "${DERIVED_DATA_PATH}" \
-        build
+    log_step "构建隔离 Debug Dev app"
+    build_isolated_dev_app "${PROJECT_DIR}" "Quotio" "Debug" "${DERIVED_DATA_PATH}"
 
-    APP_BUNDLE="${DERIVED_DATA_PATH}/Build/Products/Debug/Quotio.app"
+    APP_BUNDLE="$(dev_app_path "${DERIVED_DATA_PATH}" "Debug")"
 }
 
 resolve_app_executable() {
     if [[ -n "${APP_EXECUTABLE}" ]]; then
         require_file "${APP_EXECUTABLE}" "找不到指定的 Quotio 可执行文件"
+        if [[ -z "${APP_BUNDLE}" ]]; then
+            APP_BUNDLE="$(cd "$(dirname "${APP_EXECUTABLE}")/../.." && pwd)"
+        fi
+        if ! validate_isolated_dev_app_bundle "${APP_BUNDLE}"; then
+            log_error "Refusing to launch a non-isolated Dev app"
+            exit 1
+        fi
+        if [[ "${APP_EXECUTABLE}" != "$(dev_app_executable_path "${APP_BUNDLE}")" ]]; then
+            log_error "Dev app executable path does not match validated bundle: ${APP_EXECUTABLE}"
+            exit 1
+        fi
         return 0
     fi
 
@@ -145,12 +161,17 @@ resolve_app_executable() {
     fi
 
     if [[ -z "${APP_BUNDLE}" ]]; then
-        log_error "未找到 Debug Quotio.app；可先运行 xcodebuild，或设置 REMOTE_RELAY_SMOKE_BUILD_APP=1"
+        log_error "未找到隔离 Debug ${DEV_PRODUCT_NAME}.app；可先运行 ./scripts/run-dev-app.sh，或设置 REMOTE_RELAY_SMOKE_BUILD_APP=1"
         exit 1
     fi
 
-    APP_EXECUTABLE="${APP_BUNDLE}/Contents/MacOS/Quotio"
-    require_file "${APP_EXECUTABLE}" "Quotio.app 内缺少可执行文件"
+    if ! validate_isolated_dev_app_bundle "${APP_BUNDLE}"; then
+        log_error "Refusing to launch a non-isolated Dev app"
+        exit 1
+    fi
+
+    APP_EXECUTABLE="$(dev_app_executable_path "${APP_BUNDLE}")"
+    require_file "${APP_EXECUTABLE}" "${DEV_PRODUCT_NAME}.app 内缺少可执行文件"
 }
 
 strip_wrapping_quotes() {
@@ -650,7 +671,31 @@ PY
         return 0
     fi
 
-    log_step "检查 account-settings 详情与写回闭环"
+    if [[ -z "${ACCOUNT_SETTINGS_ACCOUNT_NAME}" ]]; then
+        if [[ "${ACCOUNT_SETTINGS_WRITEBACK}" == "1" ]]; then
+            log_error "启用 account-settings 写入时必须显式设置 REMOTE_RELAY_SMOKE_ACCOUNT_NAME，且账号名应包含 smoke/test"
+            exit 1
+        fi
+        python3 - "${smoke_dir}/summary.json" <<'PY'
+import json
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[1]).write_text(json.dumps({
+    "skipped": True,
+    "mode": "read-only",
+    "reason": "REMOTE_RELAY_SMOKE_ACCOUNT_NAME is empty; relay read-only smoke already covered /auth-files, /usage, and /logs",
+}, ensure_ascii=False, indent=2))
+PY
+        log_info "account-settings read-only 详情检查已跳过：未指定 REMOTE_RELAY_SMOKE_ACCOUNT_NAME"
+        return 0
+    fi
+
+    if [[ "${ACCOUNT_SETTINGS_WRITEBACK}" == "1" ]]; then
+        log_step "检查 account-settings 写入闭环（explicit opt-in）"
+    else
+        log_step "检查 account-settings read-only 详情（不写远端账号）"
+    fi
     python3 - \
         "${REMOTE_BASE_URL}" \
         "${REMOTE_VERIFY_SSL}" \
@@ -664,6 +709,7 @@ PY
         "${smoke_dir}" <<'PY'
 import json
 import pathlib
+import re
 import ssl
 import sys
 import time
@@ -788,17 +834,35 @@ def compare(label, direct_response, relay_response, expected_note=None, expected
         "relay": artifact_fields(relay_fields),
     }
 
-if allow_non_smoke_account != "1" and account_marker and account_marker not in account_name:
-    raise SystemExit(f"refusing to write non-smoke account {account_name!r}; set REMOTE_RELAY_SMOKE_ALLOW_NON_SMOKE_ACCOUNT=1 to override")
+def has_smoke_identifier(value):
+    if not value:
+        return False
+    if account_marker and account_marker in value:
+        return True
+    return re.search(r"(smoke|test)", value, re.IGNORECASE) is not None
+
+writeback_requested = writeback_enabled == "1"
+allow_non_smoke_write = allow_non_smoke_account == "1"
+account_name_has_smoke_identifier = has_smoke_identifier(account_name)
+if writeback_requested and not account_name_has_smoke_identifier and not allow_non_smoke_write:
+    raise SystemExit(
+        f"refusing to write non-smoke/test account {account_name!r}; "
+        "use a dedicated smoke/test account or set both ACCOUNT_SETTINGS_WRITE=1 "
+        "and ALLOW_NON_SMOKE_ACCOUNT_WRITE=1"
+    )
 
 summary = {
     "target_name": account_name,
     "account_name": account_name,
-    "writeback_enabled": writeback_enabled == "1",
+    "mode": "write-smoke" if writeback_requested else "read-only",
+    "writeback_enabled": writeback_requested,
     "guards": {
         "account_marker": account_marker,
         "note_marker": note_marker,
-        "allow_non_smoke_account": allow_non_smoke_account == "1",
+        "account_name_has_smoke_identifier": account_name_has_smoke_identifier,
+        "allow_non_smoke_account_write": allow_non_smoke_write,
+        "write_requires_explicit_opt_in": True,
+        "non_smoke_write_requires_override": True,
     },
     "artifact_sensitivity": {
         "remote_management_key_file_is_redacted": True,
@@ -833,15 +897,16 @@ summary["detail_contract"] = {
     "warnings": original.get("warnings", []),
 }
 if allow_non_smoke_account != "1" and note_marker and note_marker.upper() not in original["note"].upper():
-    raise SystemExit(f"refusing to write account with non-smoke note {original['note']!r}")
+    if writeback_requested:
+        raise SystemExit(f"refusing to write account with non-smoke note {original['note']!r}")
 
 restore_attempted = False
 restore_error = None
 operation_error = None
 post_restore_error = None
 try:
-    if writeback_enabled != "1":
-        summary["skipped_writeback_reason"] = "REMOTE_RELAY_SMOKE_WRITEBACK != 1"
+    if not writeback_requested:
+        summary["skipped_writeback_reason"] = "account-settings write smoke not enabled; set ACCOUNT_SETTINGS_WRITE=1 or REMOTE_RELAY_SMOKE_ACCOUNT_SETTINGS_WRITE=1"
     else:
         smoke_note = f"QUOTIO-REMOTE-RELAY-SMOKE-{int(time.time())}"
         after_note_response = request_json(relay_base_url, "PATCH", "/v0/management/auth-files/account-settings", patch_payload(original, smoke_note, False))
@@ -863,7 +928,7 @@ except Exception as exc:
     operation_error = str(exc)
     summary["operation_error"] = operation_error
 finally:
-    if writeback_enabled == "1":
+    if writeback_requested:
         restore_attempted = True
         try:
             restore_response = request_json(relay_base_url, "PATCH", "/v0/management/auth-files/account-settings", patch_payload(original, original["note"], original["disabled"]))

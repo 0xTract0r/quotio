@@ -62,7 +62,8 @@ struct ProvidersScreen: View {
                     remark: displayRemark(for: file, metadataKey: metadataKey),
                     hasConfiguredProxy: effectiveProxyURL(for: file) != nil,
                     identityPackage: modeManager.currentMode.supportsIdentityPackages ? viewModel.identityPackage(for: file) : nil,
-                    supportsIdentityBinding: modeManager.currentMode.supportsIdentityPackages
+                    supportsIdentityBinding: modeManager.currentMode.supportsIdentityPackages,
+                    usesRemoteAccountSettings: modeManager.isRemoteProxyMode
                 )
                 groups[provider, default: []].append(data)
             }
@@ -73,7 +74,8 @@ struct ProvidersScreen: View {
                 let data = AccountRowData.from(
                     directAuthFile: file,
                     metadataKey: metadataKey,
-                    remark: resolvedAccountRemark(for: metadataKey)
+                    remark: resolvedAccountRemark(for: metadataKey),
+                    usesRemoteAccountSettings: modeManager.isRemoteProxyMode
                 )
                 groups[file.provider, default: []].append(data)
             }
@@ -89,7 +91,8 @@ struct ProvidersScreen: View {
                         provider: provider,
                         accountKey: accountKey,
                         metadataKey: metadataKey,
-                        remark: resolvedAccountRemark(for: metadataKey)
+                        remark: resolvedAccountRemark(for: metadataKey),
+                        usesRemoteAccountSettings: modeManager.isRemoteProxyMode
                     )
                     groups[provider, default: []].append(data)
                 }
@@ -114,7 +117,8 @@ struct ProvidersScreen: View {
                 hasConfiguredProxy: false,
                 canToggleDisabled: false,
                 canDelete: true,
-                canEdit: true
+                canEdit: true,
+                usesRemoteAccountSettings: modeManager.isRemoteProxyMode
             )
             groups[.glm, default: []].append(data)
         }
@@ -136,7 +140,8 @@ struct ProvidersScreen: View {
                 hasConfiguredProxy: false,
                 canToggleDisabled: false,
                 canDelete: true,
-                canEdit: true
+                canEdit: true,
+                usesRemoteAccountSettings: modeManager.isRemoteProxyMode
             )
             groups[.warp, default: []].append(data)
         }
@@ -868,7 +873,7 @@ private struct AccountSettingsSheet: View {
     }
 
     private var isRemoteReadOnlyMode: Bool {
-        modeManager.isRemoteProxyMode && context.authFile != nil
+        modeManager.isRemoteProxyMode
     }
 
     private var currentRemoteSettings: AuthFileAccountSettings? {
@@ -1162,7 +1167,7 @@ private struct AccountSettingsSheet: View {
     private var fingerprintSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("上游请求标识")
+                Text("上游请求标识（仅本地有效）")
                     .font(.subheadline)
                     .fontWeight(.medium)
 
@@ -1241,7 +1246,7 @@ private struct AccountSettingsSheet: View {
                 }
 
                 if fingerprintProfile != nil {
-                    Text("变更会在点击保存后写入本地配置与 auth 记录。")
+                    Text("本地变更会在点击保存后写入当前本地配置与 auth 记录。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

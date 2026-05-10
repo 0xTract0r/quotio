@@ -9,21 +9,21 @@
 
 ## 🔴 High Priority
 
-### `DEPRECATED` (third_party/CLIProxyAPIPlus/internal/config/config.go:251)
+### `DEPRECATED` (third_party/CLIProxyAPIPlus/internal/config/config.go:264)
 
 > Use SessionAffinity instead for universal session support.
 
 ## 🟢 Low Priority
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/config/config.go:155)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/config/config.go:158)
 
 > This does not apply to existing per-credential model alias features under:
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/config/config.go:681)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/config/config.go:698)
 
 > Startup legacy key migration is intentionally disabled.
 
-### `NOTE` (third_party/CLIProxyAPIPlus/internal/config/config.go:774)
+### `NOTE` (third_party/CLIProxyAPIPlus/internal/config/config.go:794)
 
 > Legacy migration persistence is intentionally disabled together with
 

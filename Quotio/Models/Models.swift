@@ -160,6 +160,10 @@ enum RuntimeProfile {
         boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_REMOTE_ACCOUNT_SETTINGS") ?? false
     }
 
+    static var remoteCodexQuotaSmokeEnabled: Bool {
+        boolValue(for: "QUOTIO_UI_SMOKE_REMOTE_CODEX_QUOTA") ?? false
+    }
+
     static var providersIdentityBindingSmokeEnabled: Bool {
         boolValue(for: "QUOTIO_UI_SMOKE_PROVIDERS_IDENTITY_BINDING") ?? false
     }
@@ -751,6 +755,16 @@ struct AuthFileAccountSettings: Codable, Hashable, Sendable {
     }
 }
 
+struct AuthFileCodexIDTokenClaims: Codable, Hashable, Sendable {
+    let chatGPTAccountID: String?
+    let planType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case chatGPTAccountID = "chatgpt_account_id"
+        case planType = "plan_type"
+    }
+}
+
 struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     private static let healthyStatusMessages: Set<String> = [
         "ok",
@@ -780,6 +794,7 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
     let accountType: String?
     let account: String?
     let authIndex: String?
+    let idToken: AuthFileCodexIDTokenClaims?
     let createdAt: String?
     let updatedAt: String?
     let lastRefresh: String?
@@ -788,6 +803,7 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
         case id, name, provider, label, status, disabled, unavailable, source, path, note, email, account
         case accountSettings = "account_settings"
         case authIndex = "auth_index"
+        case idToken = "id_token"
         case statusMessage = "status_message"
         case runtimeOnly = "runtime_only"
         case accountType = "account_type"
@@ -832,6 +848,14 @@ struct AuthFile: Codable, Identifiable, Hashable, Sendable {
 
     var effectiveRemoteProxyURL: String? {
         accountSettings?.proxyURL
+    }
+
+    var codexChatGPTAccountID: String? {
+        let candidates = [
+            idToken?.chatGPTAccountID,
+            accountType == "chatgpt_account_id" ? account : nil
+        ]
+        return candidates.compactMap(trimmedAccountSettingsString).first
     }
     
     var isReady: Bool {

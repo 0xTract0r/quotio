@@ -31,8 +31,28 @@
 - 远端 core 的 Codex OAuth auth 与本地正式 / 本地 dev 默认不是同一文件，而是独立副本
 - 同一 Codex 账号若在多运行面并行 refresh，一端轮换后，其它端持有的旧 refresh token 会出现 `invalid_grant` / `refresh_token_reused`
 - 当前默认策略是：不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
+- 若必须用本地账号解除远端 provider-facing 验证阻塞，只允许同步 access-token-only 副本：不要上传 refresh token；在账号设置里把 `refresh_enabled=false`，或使用 `scripts/sync-access-token-only-auth.sh` 生成/上传已移除 refresh token 的临时 auth
 
 后续任何代码或部署变更，都应先在独立 worktree 中完成，再从该 worktree 执行远端部署；不要直接在 `master` 主工作区上改远端真值。
+
+## access-token-only 远端测试账号
+
+当远端 Codex / Claude auth 因 `token_expired`、`refresh_token_reused` 或 `auth_unavailable` 阻塞 provider-facing 验证时，可以临时导入本地 access token 副本，但必须遵守：
+
+- 只复制 `access_token` / 必要账号元数据，不复制 `refresh_token`、`refreshToken` 或其它 refresh-token-like 字段
+- 上传记录必须设置 `refresh_enabled=false` / `refresh_disabled=true`，让远端 core 不调度自动 refresh，manual status refresh 也不进入 provider refresh flow
+- access token 本身通常短期有效；这个流程只用于验收“请求是否进入真实上游”和 managed headers / proxy 链路，不是长期账号托管方案
+- 建议使用默认 dry-run 的脚本，先检查 summary，再显式执行：
+
+```bash
+LOCAL_AUTH_FILE='<本地 auth json>' \
+REMOTE_AUTH_NAME='codex-access-token-only.json' \
+REMOTE_BASE_URL='https://10.1.1.201:18317' \
+EXECUTE=1 \
+./scripts/sync-access-token-only-auth.sh
+```
+
+脚本会把摘要写到 `build/access-token-only-auth-sync/summary.json`，摘要只记录 refresh token 字段是否被移除，不记录 token 值。
 
 ## 什么时候必须看这份文档
 
@@ -46,9 +66,24 @@
 
 本地 `Quotio Dev` 或本机临时 core 只算预检，不算最终验收。若验收对象是 `remote-relay`，还必须确认本机监听端口只作为 relay，账号、token、logs、usage 与管理配置均从远端 core 拉取。
 
-## 标准部署入口
+## 标准部署入口（安全 helper 优先）
 
-标准方式是从本地源码根目录执行部署脚本，把更新推到远端 Docker 运行面，而不是继续维持一个本机临时 core：
+标准方式是从当前 writer worktree 执行默认 dry-run 的安全 helper。它只在显式传 `--execute` 时才会触发远端备份、current image rollback tag、Docker build/load、`docker compose up -d` 和远端 core 重启；默认 `SYNC_AUTH_DIR=0`，不会同步本地 auth 目录，也不会读取或写入 refresh token。
+
+先生成部署计划和本地 manifest：
+
+```bash
+cd <当前 worktree 绝对路径>
+./scripts/deploy-cliproxy-linux-safe.sh --dry-run
+```
+
+可选只读预检当前远端容器镜像 ID（仍不会重启或备份）：
+
+```bash
+./scripts/deploy-cliproxy-linux-safe.sh --dry-run --remote-read
+```
+
+确认维护窗口后再执行：
 
 ```bash
 cd <当前 worktree 绝对路径>
@@ -63,13 +98,43 @@ BUILD_STRATEGY='local-load' \
 CONTAINER_DNS_SERVERS='1.1.1.1,8.8.8.8' \
 SERVER_PROXY_URL='http://Clash:hBnsF3B7@10.1.1.5:7890' \
 SERVER_TLS_ENABLE='1' \
-SERVER_TLS_CERT_FILE='/abs/path/to/server.crt' \
-SERVER_TLS_KEY_FILE='/abs/path/to/server.key' \
 SERVER_TLS_CURL_INSECURE='1' \
-./scripts/deploy-cliproxy-linux.sh
+./scripts/deploy-cliproxy-linux-safe.sh --execute
 ```
 
-- 现在脚本在未显式传 `SERVER_PROXY_URL` / `SERVER_TLS_ENABLE` 时，会优先保留远端当前 `config.yaml` 里的 `proxy-url` 与 TLS 模式，不再静默写空
+如果本机不应读取管理 key，可保留远端现有 `runtime/secrets.env`，让 helper 在远端本机用该文件完成 `/v0/management/auth-files` 版本证明：
+
+```bash
+cd <当前 worktree 绝对路径>
+PRESERVE_REMOTE_MANAGEMENT_SECRET='1' \
+REMOTE_HOST='wisedata@10.1.1.201' \
+DEPLOY_DIR='/home/wisedata/deploy/cliproxyapi-plus' \
+API_PORT='18317' \
+BIND_HOST='10.1.1.201' \
+SERVER_HOST_IP='10.1.1.201' \
+QUOTIO_SOURCE_ROOT='<当前 worktree 绝对路径>' \
+BUILD_STRATEGY='local-load' \
+CONTAINER_DNS_SERVERS='1.1.1.1,8.8.8.8' \
+SERVER_TLS_ENABLE='1' \
+SERVER_TLS_CURL_INSECURE='1' \
+./scripts/deploy-cliproxy-linux-safe.sh --execute
+```
+
+- helper 会生成 `build/remote-deploy-safety/<timestamp>/manifest.env`，记录 `CORE_BUILD_VERSION`、`CORE_BUILD_COMMIT`、`CORE_BUILD_DATE`、expected `X-CPA-*` headers、rollback image tag、远端非 auth runtime 备份目录和 rollback 命令
+- helper 会把 `VERSION` / `COMMIT` / `BUILD_DATE` build args 传给 `scripts/deploy-cliproxy-linux.sh`，dry-run 会先构建本地 version-proof artifact 校验 buildinfo 注入；真正执行后，`/healthz`、`/management.html` 和 `/v0/management/auth-files` 都必须返回匹配 manifest 的 `X-CPA-VERSION` / `X-CPA-COMMIT` / `X-CPA-BUILD-DATE`，否则部署脚本会失败并应按 manifest rollback
+- helper 的 runtime backup 默认只打包 `compose.yaml`、`runtime/config`、`runtime/static`、`runtime/tls` 与 `runtime/secrets.env`，不打包 `runtime/auth`；部署默认 `SYNC_AUTH_DIR=0`，远端 auth 挂载目录应保持原地不变
+- `PRESERVE_REMOTE_MANAGEMENT_SECRET=1` 会保护远端 `runtime/secrets.env` 不被 rsync 覆盖；适用于本机不落管理 key 的维护场景
+- 如果需要回滚，优先使用本次 manifest 里打印的命令；回滚也默认 dry-run，只有显式 `--execute` 才会恢复非 auth runtime 备份、把 rollback image tag 重新标成当前 image 并 `docker compose up -d`
+
+```bash
+./scripts/deploy-cliproxy-linux-safe.sh rollback \
+  --manifest build/remote-deploy-safety/<timestamp>/manifest.env \
+  --execute
+```
+
+`scripts/deploy-cliproxy-linux.sh` 仍是底层部署实现，但不要在生产维护窗口直接绕过 safe helper，除非你已经手工准备同等的 current image rollback tag、非 auth runtime backup、pre/post health checks 和 `X-CPA-*` 版本证明。
+
+- 现在底层脚本在未显式传 `SERVER_PROXY_URL` / `SERVER_TLS_ENABLE` 时，会优先保留远端当前 `config.yaml` 里的 `proxy-url` 与 TLS 模式，不再静默写空
 - 如果远端当前已经是 HTTPS，且你显式想降级到 HTTP，必须额外传 `ALLOW_TLS_DOWNGRADE='1'`
 - 若远端 `runtime/tls/` 里仍有 `server.crt` / `server.key`，脚本在 `SERVER_TLS_ENABLE` 未显式覆盖时会继续复用它们，且默认不会改写这些文件
 - 若远端 `runtime/tls/` 已经为空，脚本会拒绝继续保持 HTTPS 的 redeploy；这时只能二选一：找回旧证书/私钥，或重新签发一张新证书
@@ -140,7 +205,8 @@ management key 文件和取值逻辑不变；启用 HTTPS 后，变化的是：
 1. 用当前协议的 `BASE_URL` 调 `GET /healthz` 返回 `{"status":"ok"}`
 2. 用当前协议的 `BASE_URL` 调 `GET /management.html` 能打开管理页
 3. 用 `runtime/secrets.env` 里的管理 key 调 `GET ${BASE_URL}/v0/management/auth-files` 成功
-4. 对这次受影响的 provider / auth，至少做一次远端 provider-facing 复验
+4. 保存 `/healthz`、`/management.html` 和 `GET ${BASE_URL}/v0/management/auth-files` 的响应头，确认 `X-CPA-COMMIT` 等于本次 manifest 里的 `core_build_commit`，`X-CPA-VERSION` 等于 `core_build_version` 加 `-plus`，`X-CPA-BUILD-DATE` 等于本次 manifest 里的 `core_build_date`
+5. 对这次受影响的 provider / auth，至少做一次远端 provider-facing 复验
 
 若验收对象是 Quotio `remote-relay`，还要额外确认：
 

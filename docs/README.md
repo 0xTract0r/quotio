@@ -24,6 +24,7 @@
 
 - [`multi-identity-fingerprint-summary.md`](./fingerprint/multi-identity-fingerprint-summary.md): 多身份指纹与 CLIProxyAPIPlus 二次开发总览
 - [`account-fingerprint-architecture.md`](./fingerprint/account-fingerprint-architecture.md): 当前实现、链路与边界
+- [`codex-proxy-sync-mvp.md`](./fingerprint/codex-proxy-sync-mvp.md): `codex-proxy` 只读指纹同步报告脚本与禁止边界
 - [`oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md`](./fingerprint/oauth-account-fingerprint-IMPLEMENTATION-GUIDE.md): 身份包路线的当前实现指引与后续续做入口
 
 ## `operations/`

@@ -70,6 +70,7 @@ struct AccountRowData: Identifiable, Hashable {
     let canSwitch: Bool           // Whether this account can be switched (Antigravity only)
     let identityPackage: RuntimeIdentityPackage?
     let supportsIdentityBinding: Bool
+    let usesRemoteAccountSettings: Bool
 
     // Custom initializer to handle canEdit parameter
     init(
@@ -90,7 +91,8 @@ struct AccountRowData: Identifiable, Hashable {
         canEdit: Bool = false,
         canSwitch: Bool = false,
         identityPackage: RuntimeIdentityPackage? = nil,
-        supportsIdentityBinding: Bool = false
+        supportsIdentityBinding: Bool = false,
+        usesRemoteAccountSettings: Bool = false
     ) {
         self.id = id
         self.provider = provider
@@ -111,6 +113,7 @@ struct AccountRowData: Identifiable, Hashable {
         self.canSwitch = canSwitch
         self.identityPackage = identityPackage
         self.supportsIdentityBinding = supportsIdentityBinding
+        self.usesRemoteAccountSettings = usesRemoteAccountSettings
     }
 
     // For menu bar selection
@@ -184,7 +187,8 @@ struct AccountRowData: Identifiable, Hashable {
         remark: String? = nil,
         hasConfiguredProxy: Bool = false,
         identityPackage: RuntimeIdentityPackage? = nil,
-        supportsIdentityBinding: Bool = true
+        supportsIdentityBinding: Bool = true,
+        usesRemoteAccountSettings: Bool = false
     ) -> AccountRowData {
         let name = authFile.email ?? authFile.name
         return AccountRowData(
@@ -203,12 +207,18 @@ struct AccountRowData: Identifiable, Hashable {
             canToggleDisabled: true,
             canDelete: true,
             identityPackage: identityPackage,
-            supportsIdentityBinding: supportsIdentityBinding
+            supportsIdentityBinding: supportsIdentityBinding,
+            usesRemoteAccountSettings: usesRemoteAccountSettings
         )
     }
     
     /// Create from DirectAuthFile (quota-only mode or proxy stopped)
-    static func from(directAuthFile: DirectAuthFile, metadataKey: String? = nil, remark: String? = nil) -> AccountRowData {
+    static func from(
+        directAuthFile: DirectAuthFile,
+        metadataKey: String? = nil,
+        remark: String? = nil,
+        usesRemoteAccountSettings: Bool = false
+    ) -> AccountRowData {
         let name = directAuthFile.email ?? directAuthFile.filename
         return AccountRowData(
             id: directAuthFile.id,
@@ -224,12 +234,19 @@ struct AccountRowData: Identifiable, Hashable {
             isDisabled: directAuthFile.isDisabled,
             hasConfiguredProxy: directAuthFile.proxyURL != nil,
             canToggleDisabled: true,
-            canDelete: true
+            canDelete: true,
+            usesRemoteAccountSettings: usesRemoteAccountSettings
         )
     }
     
     /// Create from auto-detected account (Cursor, Trae)
-    static func from(provider: AIProvider, accountKey: String, metadataKey: String? = nil, remark: String? = nil) -> AccountRowData {
+    static func from(
+        provider: AIProvider,
+        accountKey: String,
+        metadataKey: String? = nil,
+        remark: String? = nil,
+        usesRemoteAccountSettings: Bool = false
+    ) -> AccountRowData {
         AccountRowData(
             id: "\(provider.rawValue)_\(accountKey)",
             provider: provider,
@@ -244,7 +261,8 @@ struct AccountRowData: Identifiable, Hashable {
             isDisabled: false,
             hasConfiguredProxy: false,
             canToggleDisabled: false,
-            canDelete: false
+            canDelete: false,
+            usesRemoteAccountSettings: usesRemoteAccountSettings
         )
     }
 
@@ -258,6 +276,7 @@ struct AccountRowData: Identifiable, Hashable {
         hasher.combine(hasConfiguredProxy)
         hasher.combine(identityPackage)
         hasher.combine(supportsIdentityBinding)
+        hasher.combine(usesRemoteAccountSettings)
     }
 
     static func == (lhs: AccountRowData, rhs: AccountRowData) -> Bool {
@@ -269,7 +288,8 @@ struct AccountRowData: Identifiable, Hashable {
         lhs.remark == rhs.remark &&
         lhs.hasConfiguredProxy == rhs.hasConfiguredProxy &&
         lhs.identityPackage == rhs.identityPackage &&
-        lhs.supportsIdentityBinding == rhs.supportsIdentityBinding
+        lhs.supportsIdentityBinding == rhs.supportsIdentityBinding &&
+        lhs.usesRemoteAccountSettings == rhs.usesRemoteAccountSettings
     }
 }
 
@@ -337,6 +357,45 @@ struct AccountRow: View {
         case .available, .draft:
             return .orange
         }
+    }
+
+    private var accountSettingsHelpText: String {
+        if account.usesRemoteAccountSettings {
+            return "providers.accountSettings.openWebConfig".localized()
+        }
+        if account.canConfigureProxy {
+            return account.hasConfiguredProxy
+                ? "providers.accountSettings.proxyConfigured".localized()
+                : "providers.accountSettings.proxyNotConfigured".localized()
+        }
+        return "providers.accountSettings.edit".localized()
+    }
+
+    private var accountSettingsIconName: String {
+        if account.usesRemoteAccountSettings {
+            return "safari"
+        }
+        return account.canConfigureProxy ? "network" : "note.text"
+    }
+
+    private var accountSettingsIconColor: Color {
+        if account.usesRemoteAccountSettings {
+            return .purple
+        }
+        if account.canConfigureProxy {
+            return account.hasConfiguredProxy ? .blue : .secondary
+        }
+        return hasRemark ? .orange : .secondary
+    }
+
+    private var accountSettingsIconBackground: Color {
+        if account.usesRemoteAccountSettings {
+            return Color.purple.opacity(0.12)
+        }
+        if account.canConfigureProxy {
+            return account.hasConfiguredProxy ? Color.blue.opacity(0.1) : Color.clear
+        }
+        return hasRemark ? Color.orange.opacity(0.12) : Color.clear
     }
     
     var body: some View {
@@ -520,40 +579,27 @@ struct AccountRow: View {
                 .help("action.edit".localized())
             }
 
-            if account.canConfigureProxy, let onConfigureSettings = onConfigureSettings {
+            if let onConfigureSettings = onConfigureSettings {
                 Button {
                     onConfigureSettings()
                 } label: {
                     ZStack {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(account.hasConfiguredProxy ? Color.blue.opacity(0.1) : Color.clear)
+                            .fill(accountSettingsIconBackground)
                             .frame(width: 28, height: 28)
 
-                        Image(systemName: "network")
+                        Image(systemName: accountSettingsIconName)
                             .font(.system(size: 14))
-                            .foregroundStyle(account.hasConfiguredProxy ? .blue : .secondary)
+                            .foregroundStyle(accountSettingsIconColor)
                     }
                 }
                 .buttonStyle(.rowAction)
-                .help(account.hasConfiguredProxy ? "providers.accountSettings.proxyConfigured".localized() : "providers.accountSettings.proxyNotConfigured".localized())
-                .accessibilityLabel("providers.accountSettings.edit".localized())
-            } else if let onConfigureSettings = onConfigureSettings {
-                Button {
-                    onConfigureSettings()
-                } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(hasRemark ? Color.orange.opacity(0.12) : Color.clear)
-                            .frame(width: 28, height: 28)
-
-                        Image(systemName: "note.text")
-                            .font(.system(size: 14))
-                            .foregroundStyle(hasRemark ? .orange : .secondary)
-                    }
-                }
-                .buttonStyle(.rowAction)
-                .help("providers.accountSettings.edit".localized())
-                .accessibilityLabel("providers.accountSettings.edit".localized())
+                .help(accountSettingsHelpText)
+                .accessibilityLabel(
+                    account.usesRemoteAccountSettings
+                        ? "providers.accountSettings.openWebConfig".localized()
+                        : "providers.accountSettings.edit".localized()
+                )
             }
 
             // Delete button (only for proxy accounts)
@@ -634,8 +680,10 @@ struct AccountRow: View {
                     onConfigureSettings()
                 } label: {
                     Label(
-                        "providers.accountSettings.edit".localized(),
-                        systemImage: account.canConfigureProxy ? "network" : "note.text"
+                        account.usesRemoteAccountSettings
+                            ? "providers.accountSettings.openWebConfig".localized()
+                            : "providers.accountSettings.edit".localized(),
+                        systemImage: accountSettingsIconName
                     )
                 }
             }

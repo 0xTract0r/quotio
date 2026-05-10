@@ -460,6 +460,11 @@ final class QuotaViewModel {
 
             modeManager.markConnected()
             await refreshData()
+            #if DEBUG
+            if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                await refreshAllQuotas()
+            }
+            #endif
             startAutoRefresh()
         } else {
             modeManager.setConnectionStatus(.error("Could not connect to remote server"))
@@ -826,7 +831,6 @@ final class QuotaViewModel {
         refreshTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: intervalNs)
-                guard NSApplication.shared.isActive else { continue }
                 _ = await kiroFetcher.refreshAllTokensIfNeeded()
                 await refreshQuotasDirectly()
             }
@@ -844,7 +848,6 @@ final class QuotaViewModel {
         refreshTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: intervalNs)
-                guard NSApplication.shared.isActive else { continue }
                 if !proxyManager.proxyStatus.running {
                     _ = await kiroFetcher.refreshAllTokensIfNeeded()
                     await refreshQuotasUnified()
@@ -1332,7 +1335,6 @@ final class QuotaViewModel {
             
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: intervalNs)
-                guard NSApplication.shared.isActive else { continue }
                 
                 await refreshData()
                 
@@ -1491,6 +1493,7 @@ final class QuotaViewModel {
             await refreshQuotasDirectly()
         } else if modeManager.isRemoteProxyMode {
             await refreshData()
+            await refreshAllQuotas()
         } else if proxyManager.proxyStatus.running {
             await refreshData()
         } else {
@@ -1509,9 +1512,11 @@ final class QuotaViewModel {
         isLoadingQuotas = true
         lastQuotaRefresh = Date()
 
-        // In remote mode, skip local filesystem fetchers — only show data from the remote proxy
-        // (auth files, usage stats, API keys are already fetched by refreshData())
-        if !modeManager.isRemoteProxyMode {
+        if modeManager.isRemoteProxyMode {
+            async let codex: () = refreshRemoteCodexQuotasInternal()
+            async let claude: () = refreshRemoteClaudeQuotasInternal()
+            _ = await (codex, claude)
+        } else {
             // Note: Cursor and Trae removed from auto-refresh (issue #29)
             // User must use "Scan for IDEs" to detect these
             async let antigravity: () = refreshAntigravityQuotasInternal()
@@ -1539,8 +1544,12 @@ final class QuotaViewModel {
     /// In Remote Mode: skips local fetchers (data comes from remote proxy)
     /// Note: Cursor and Trae require explicit user scan (issue #29)
     func refreshQuotasUnified() async {
+        if modeManager.isRemoteProxyMode {
+            await refreshAllQuotas()
+            return
+        }
+
         guard !isLoadingQuotas else { return }
-        guard !modeManager.isRemoteProxyMode else { return }
 
         isLoadingQuotas = true
         lastQuotaRefreshTime = Date()
@@ -1642,6 +1651,359 @@ final class QuotaViewModel {
         let quotas = await openAIFetcher.fetchAllCodexQuotas()
         providerQuotas[.codex] = quotas
     }
+
+    private func setHeader(_ name: String, value: String, in headers: inout [String: String]) {
+        if let existingKey = headers.keys.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+            headers[existingKey] = value
+        } else {
+            headers[name] = value
+        }
+    }
+
+    private func remoteCodexQuotaHeaders(for file: AuthFile, accountID: String?) -> [String: String] {
+        var headers = file.accountSettings?.managedHeaders ?? [:]
+        headers = headers.filter { key, _ in
+            key.caseInsensitiveCompare("Accept-Encoding") != .orderedSame
+        }
+        if let extraHeaders = file.accountSettings?.extraHeaders {
+            for (key, value) in extraHeaders where !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if headers.keys.contains(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) {
+                    continue
+                }
+                headers[key] = value
+            }
+        }
+
+        setHeader("Authorization", value: "Bearer $TOKEN$", in: &headers)
+        setHeader("Accept", value: "application/json", in: &headers)
+        setHeader("Content-Type", value: "application/json", in: &headers)
+        if let accountID = accountID, !accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            setHeader("Chatgpt-Account-Id", value: accountID, in: &headers)
+        }
+        return headers
+    }
+
+    private func remoteQuotaFailureData(_ message: String, planType: String? = nil, isForbidden: Bool = true) -> ProviderQuotaData {
+        ProviderQuotaData(
+            models: [],
+            lastUpdated: Date(),
+            isForbidden: isForbidden,
+            planType: planType,
+            statusMessage: message
+        )
+    }
+
+    private func remoteClaudeQuotaHeaders(for file: AuthFile) -> [String: String] {
+        var headers = file.accountSettings?.managedHeaders ?? [:]
+        headers = headers.filter { key, _ in
+            key.caseInsensitiveCompare("Accept-Encoding") != .orderedSame
+        }
+        if let extraHeaders = file.accountSettings?.extraHeaders {
+            for (key, value) in extraHeaders where !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if headers.keys.contains(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) {
+                    continue
+                }
+                headers[key] = value
+            }
+        }
+
+        setHeader("Authorization", value: "Bearer $TOKEN$", in: &headers)
+        setHeader("Accept", value: "application/json", in: &headers)
+        setHeader("anthropic-beta", value: "oauth-2025-04-20", in: &headers)
+        return headers
+    }
+
+    private func parseRemoteClaudeQuotaUsage(_ json: [String: Any]?, name: String) -> ModelQuota? {
+        guard let json else { return nil }
+        let utilization: Double
+        if let value = json["utilization"] as? Double {
+            utilization = value
+        } else if let value = json["utilization"] as? Int {
+            utilization = Double(value)
+        } else {
+            return nil
+        }
+
+        return ModelQuota(
+            name: name,
+            percentage: max(0, min(100, 100 - utilization)),
+            resetTime: json["resets_at"] as? String ?? ""
+        )
+    }
+
+    private func parseRemoteClaudeExtraUsage(_ json: [String: Any]?) -> ModelQuota? {
+        guard let json,
+              json["is_enabled"] as? Bool == true else {
+            return nil
+        }
+
+        let utilization: Double?
+        if let value = json["utilization"] as? Double {
+            utilization = value
+        } else if let value = json["utilization"] as? Int {
+            utilization = Double(value)
+        } else {
+            utilization = nil
+        }
+        guard let utilization else { return nil }
+
+        var quota = ModelQuota(
+            name: "extra-usage",
+            percentage: max(0, min(100, 100 - utilization)),
+            resetTime: ""
+        )
+        if let used = json["used_credits"] as? Double {
+            quota.used = Int(used)
+        }
+        if let limit = json["monthly_limit"] as? Double {
+            quota.limit = Int(limit)
+        }
+        return quota
+    }
+
+    private func remoteClaudeQuotaData(from body: String) throws -> ProviderQuotaData {
+        guard let data = body.data(using: .utf8),
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw URLError(.cannotParseResponse)
+        }
+
+        if json["type"] as? String == "error",
+           let error = json["error"] as? [String: Any] {
+            let type = error["type"] as? String ?? "unknown_error"
+            let message = error["message"] as? String ?? "Claude quota API returned \(type)."
+            return remoteQuotaFailureData("Claude quota request failed: \(message)", isForbidden: type == "authentication_error")
+        }
+
+        var models: [ModelQuota] = []
+        if let quota = parseRemoteClaudeQuotaUsage(json["five_hour"] as? [String: Any], name: "five-hour-session") {
+            models.append(quota)
+        }
+        if let quota = parseRemoteClaudeQuotaUsage(json["seven_day"] as? [String: Any], name: "seven-day-weekly") {
+            models.append(quota)
+        }
+        if let quota = parseRemoteClaudeQuotaUsage(json["seven_day_sonnet"] as? [String: Any], name: "seven-day-sonnet") {
+            models.append(quota)
+        }
+        if let quota = parseRemoteClaudeQuotaUsage(json["seven_day_opus"] as? [String: Any], name: "seven-day-opus") {
+            models.append(quota)
+        }
+        if let quota = parseRemoteClaudeExtraUsage(json["extra_usage"] as? [String: Any]) {
+            models.append(quota)
+        }
+
+        guard !models.isEmpty else {
+            return remoteQuotaFailureData(
+                "Claude quota request succeeded, but the response did not include quota windows.",
+                isForbidden: false
+            )
+        }
+
+        return ProviderQuotaData(
+            models: models,
+            lastUpdated: Date(),
+            isForbidden: false,
+            planType: nil
+        )
+    }
+
+    private func refreshRemoteCodexQuotasInternal() async {
+        guard let client = apiClient else {
+            Log.quota("Remote Codex quota skipped: management client unavailable")
+            #if DEBUG
+            if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota-skip reason=management-client-unavailable")
+            }
+            #endif
+            return
+        }
+
+        let codexFiles = authFiles.filter { $0.providerType == .codex && !$0.disabled }
+        var quotas: [String: ProviderQuotaData] = [:]
+
+        for file in codexFiles {
+            guard let authIndex = file.authIndex?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !authIndex.isEmpty else {
+                let message = "Remote quota skipped: core did not return auth_index for this account."
+                Log.quota("Remote Codex quota skipped for \(file.name): missing auth_index")
+                quotas[file.quotaLookupKey] = remoteQuotaFailureData(message)
+                #if DEBUG
+                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=skipped reason=missing-auth-index")
+                }
+                #endif
+                continue
+            }
+            let accountID = file.codexChatGPTAccountID
+
+            do {
+                let response = try await client.apiCall(APICallRequest(
+                    authIndex: authIndex,
+                    method: "GET",
+                    url: "https://chatgpt.com/backend-api/wham/usage",
+                    header: remoteCodexQuotaHeaders(for: file, accountID: accountID),
+                    data: nil
+                ))
+
+                guard 200...299 ~= response.statusCode else {
+                    Log.quota("Remote Codex quota failed for \(file.name): upstream HTTP \(response.statusCode)")
+                    quotas[file.quotaLookupKey] = remoteQuotaFailureData("Remote quota request failed: upstream HTTP \(response.statusCode).")
+                    #if DEBUG
+                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=failed upstream_http=\(response.statusCode)")
+                    }
+                    #endif
+                    continue
+                }
+                guard let body = response.body,
+                      let data = body.data(using: .utf8) else {
+                    Log.quota("Remote Codex quota failed for \(file.name): empty response body")
+                    quotas[file.quotaLookupKey] = remoteQuotaFailureData("Remote quota request returned an empty body.")
+                    #if DEBUG
+                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=failed reason=empty-body")
+                    }
+                    #endif
+                    continue
+                }
+
+                let payload = try JSONDecoder().decode(CodexUsageResponse.self, from: data)
+                let quotaData = CodexQuotaData(from: payload).toProviderQuotaData()
+                quotas[file.quotaLookupKey] = quotaData
+                #if DEBUG
+                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                    RuntimeIsolationDebugLog.write(
+                        "[ui-smoke] remote-codex-quota account=\(file.name) status=loaded " +
+                        "models=\(quotaData.models.count) forbidden=\(quotaData.isForbidden) " +
+                        "message_present=\(!(quotaData.statusMessage ?? "").isEmpty)"
+                    )
+                }
+                #endif
+            } catch {
+                Log.quota("Remote Codex quota failed for \(file.name): \(error.localizedDescription)")
+                quotas[file.quotaLookupKey] = remoteQuotaFailureData("Remote quota request failed: \(error.localizedDescription)")
+                #if DEBUG
+                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=failed error=\(error.localizedDescription)")
+                }
+                #endif
+            }
+        }
+
+        providerQuotas[.codex] = quotas
+        #if DEBUG
+        if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+            RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota-complete accounts=\(quotas.count)")
+        }
+        #endif
+    }
+
+    private func refreshRemoteClaudeQuotasInternal() async {
+        guard let client = apiClient else {
+            Log.quota("Remote Claude quota skipped: management client unavailable")
+            #if DEBUG
+            if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota-skip reason=management-client-unavailable")
+            }
+            #endif
+            return
+        }
+
+        let claudeFiles = authFiles.filter { $0.providerType == .claude && !$0.disabled }
+        var quotas: [String: ProviderQuotaData] = [:]
+
+        for file in claudeFiles {
+            guard let authIndex = file.authIndex?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !authIndex.isEmpty else {
+                let message = "Remote Claude quota skipped: core did not return auth_index for this account."
+                Log.quota("Remote Claude quota skipped for \(file.name): missing auth_index")
+                quotas[file.quotaLookupKey] = remoteQuotaFailureData(message)
+                #if DEBUG
+                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=skipped reason=missing-auth-index")
+                }
+                #endif
+                continue
+            }
+
+            do {
+                let response = try await client.apiCall(APICallRequest(
+                    authIndex: authIndex,
+                    method: "GET",
+                    url: "https://api.anthropic.com/api/oauth/usage",
+                    header: remoteClaudeQuotaHeaders(for: file),
+                    data: nil
+                ))
+
+                guard 200...299 ~= response.statusCode else {
+                    Log.quota("Remote Claude quota failed for \(file.name): upstream HTTP \(response.statusCode)")
+                    quotas[file.quotaLookupKey] = remoteQuotaFailureData(
+                        "Remote Claude quota request failed: upstream HTTP \(response.statusCode).",
+                        isForbidden: response.statusCode == 401 || response.statusCode == 403
+                    )
+                    #if DEBUG
+                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=failed upstream_http=\(response.statusCode)")
+                    }
+                    #endif
+                    continue
+                }
+                guard let body = response.body, !body.isEmpty else {
+                    Log.quota("Remote Claude quota failed for \(file.name): empty response body")
+                    quotas[file.quotaLookupKey] = remoteQuotaFailureData(
+                        "Remote Claude quota request returned an empty body.",
+                        isForbidden: false
+                    )
+                    #if DEBUG
+                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=failed reason=empty-body")
+                    }
+                    #endif
+                    continue
+                }
+
+                let quotaData = try remoteClaudeQuotaData(from: body)
+                quotas[file.quotaLookupKey] = quotaData
+                #if DEBUG
+                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                    RuntimeIsolationDebugLog.write(
+                        "[ui-smoke] remote-claude-quota account=\(file.name) status=loaded " +
+                        "models=\(quotaData.models.count) forbidden=\(quotaData.isForbidden) " +
+                        "message_present=\(!(quotaData.statusMessage ?? "").isEmpty)"
+                    )
+                }
+                #endif
+            } catch {
+                Log.quota("Remote Claude quota failed for \(file.name): \(error.localizedDescription)")
+                quotas[file.quotaLookupKey] = remoteQuotaFailureData(
+                    "Remote Claude quota request failed: \(error.localizedDescription)",
+                    isForbidden: false
+                )
+                #if DEBUG
+                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=failed error=\(error.localizedDescription)")
+                }
+                #endif
+            }
+        }
+
+        providerQuotas[.claude] = quotas
+        #if DEBUG
+        if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
+            RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota-complete accounts=\(quotas.count)")
+        }
+        #endif
+    }
+
+    private func refreshRemoteQuotaForProvider(_ provider: AIProvider) async {
+        switch provider {
+        case .codex:
+            await refreshRemoteCodexQuotasInternal()
+        case .claude:
+            await refreshRemoteClaudeQuotasInternal()
+        default:
+            Log.quota("Remote quota refresh for \(provider.rawValue) is not implemented; keeping management-backed account state only")
+        }
+    }
     
     private func refreshCopilotQuotasInternal() async {
         let quotas = await copilotFetcher.fetchAllCopilotQuotas()
@@ -1649,6 +2011,13 @@ final class QuotaViewModel {
     }
     
     func refreshQuotaForProvider(_ provider: AIProvider) async {
+        if modeManager.isRemoteProxyMode {
+            await refreshRemoteQuotaForProvider(provider)
+            pruneMenuBarItems()
+            notifyQuotaDataChanged()
+            return
+        }
+
         switch provider {
         case .antigravity:
             await refreshAntigravityQuotasInternal()

@@ -1,6 +1,6 @@
 # 账户级独立 ClientHello / 传输画像 PRD
 
-最后更新：2026-04-29
+最后更新：2026-04-30
 
 ## 1. 背景
 
@@ -8,9 +8,9 @@
 
 本文件是方案 PRD，不是实现分支。
 
-- 当前 worktree / 分支：`docs/account-clienthello-prd`
-- 用途：沉淀方案、明确边界、给后续实现者提供可执行拆解
-- 不作为后续实际开发分支
+- 当前实现 worktree / 分支：`.worktrees/account-centralized-runtime-source` / `feature/account-centralized-runtime-source`
+- 用途：沉淀方案、明确边界、记录当前 MVP 实现与后续可执行拆解
+- 本文同时包含历史 PRD 与当前实现状态；验收时以代码、测试和远端 evidence 为准
 
 后续真正实施时，必须：
 
@@ -23,14 +23,22 @@
 - 每账号独立出口代理 `proxy_url`
 - 每账号独立上游 HTTP 头档案 `headers`
 
-但“每账号独立 TLS / ClientHello 画像”仍未真正进入运行期请求链路。现状是：
+但“每账号独立 TLS / ClientHello 画像”只完成了 MVP 级运行时接入，距离完整 provider-facing TLS 等价仍有差距。现状是：
 
-- Quotio 本地只保存了一份 TLS 档案说明，主要用于 UI 展示和边界提示
-- Claude 运行期真正发请求时，仍走 `CLIProxyAPIPlus` 的 runtime transport
-- 当前 runtime client 按 `proxyURL` 缓存，并不会按账号隔离 transport / 连接池
-- Claude OAuth 路径已有 `uTLS HelloChrome_Auto`，但它不等于 Claude 模型请求阶段的账号级 ClientHello
+- 账号侧 `transport_profile` 已进入 `CLIProxyAPIPlus` runtime transport 选择，HTTP client cache key 包含 `provider + authID + account + baseURLHost + proxyURL + profile`
+- 即使账号没有手动填写 `transport_profile` / `tls_profile`，core 也会自动生成账号运行身份：Claude 默认 `claude_reqwest_rustls_compatible_v1`，Gemini 默认 CLI-native account isolation；Codex 默认 `codex_proxy_compatible_v1`，用于执行 Codex-Proxy-compatible Go transport approximation、隔离 HTTP client、连接池、代理 transport 和 WebSocket session；用户不需要手动生成 TLS 身份
+- `runtime_identity_state` 已作为账号设置内的 core-managed 只读状态持久化，包含 `identity_id`、provider policy、source、revision、created/updated、seed/auth/account/proxy hash、profile IDs 和 history；它不保存明文 token / proxy credential
+- Claude 默认 `transport_profile` / `tls_profile` 现在解析为 `claude_reqwest_rustls_compatible_v1`，参考社区 Rust `reqwest` + `rustls-tls` CLI 实现并由 Go runtime 近似执行；显式 Chrome-like preset 仍会进入 uTLS runtime transport，但只是高级 opt-in
+- Codex 默认路径已迁到 `codex_proxy_compatible_v1`：managed headers 采用 Codex Desktop-like bundle，Go transport 对齐 `codex-proxy` 的 per-account/per-proxy cache、ALPN/HTTP1.1 控制与 session 隔离；`codex_rustls_native_v1` 是后续 Rust sidecar/addon 入口
 
-这意味着：如果两个 Claude 账号共用同一种 runtime transport，即便它们的代理和 headers 已不同，TLS 侧仍可能高度相似，不能满足“每个 OAuth 账号都必须被视为一个独立运行主体”的高要求目标。
+这意味着：现在已经解决了“账号配置只在 UI/schema 里展示、不进 runtime”的问题，但验收口径必须继续区分“runtime builder 选中了账号级 profile”和“真实 provider-facing TLS 指纹完全等价”。后者仍需要 MITM / TLS 指纹回显等更强证据。
+
+T057 开始把用户要求的“90% provider-edge TLS parity”收敛为项目内可执行评分；T058 后该评分只作为社区实现方案 readiness 门槛，不再作为方案设计主线：
+
+- API 字段名为 `provider_edge_parity_score`，但它的 `claim_scope` 固定表明这是 `project-defined-provider-edge-parity-approximation-not-provider-attestation`
+- `score >= 90` 只表示 controlled / core-mediated 证据足够满足本项目当前“CLI TLS 指纹策略 readiness”门槛
+- 评分覆盖账号 runtime identity、managed headers 策略来源、runtime transport / TLS profile、受控 echo 返回的 TLS/HTTP2 指纹字段、账号 proxy/runtime 路径、安全边界
+- 当前产品目标是“参考社区最佳实践做 CLI 运行指纹策略”；Codex、Claude、Gemini 需要按各自 CLI/runtime 分开建模，不能互相套用
 
 ## 2. 问题定义
 
@@ -107,21 +115,23 @@ Claude runtime transport 的基线必须同时看官方 contract 和高信号 tr
 官方资料负责定义不能偏离的协议边界：
 
 - Anthropic API 基址与 Messages 入口：`https://platform.claude.com/docs/en/api/overview`
-- Messages / Streaming：`https://platform.claude.com/docs/en/build-with-claude/working-with-messages`、`https://platform.claude.com/docs/en/api/messages-streaming`
-- Claude Code 代理与证书边界：`https://code.claude.com/docs/en/corporate-proxy`
+- Messages / Streaming：`https://platform.claude.com/docs/en/build-with-claude/working-with-messages`、`https://platform.claude.com/docs/en/build-with-claude/streaming`
+- Claude Code enterprise network / proxy / CA / mTLS 边界：`https://docs.anthropic.com/en/docs/claude-code/corporate-proxy`（当前会重定向到 `https://code.claude.com/docs/en/corporate-proxy`）
 - Claude Code native binary 说明：`https://code.claude.com/docs/en/getting-started`
 
 开源项目只作为工程参考：
 
+- `icebear0828/codex-proxy`：适合借鉴 transport abstraction、native addon boundary、fingerprint 配置/提取流水线；不适合把 Codex Desktop / Cloudflare cookie / direct fallback 直接作为 Claude 默认方案
 - `refraction-networking/utls`：适合借鉴 ClientHello preset / custom spec / low-level handshake 控制；但 parrot 重点覆盖 ClientHello，不等于完整 transport 画像
 - `lwthiker/curl-impersonate`：适合借鉴“TLS + HTTP/2 + headers/flags 作为一个 profile 束”的方法论
 - `bogdanfinn/tls-client`：适合借鉴 profile 对象化和 TLS / HTTP2 / HTTP3 一起建模的抽象；但它本质是浏览器画像库，不能原样套到 Claude API runtime
+- 社区 Claude 项目多数只做标准 `httpx` / `reqwest` / `fetch` 转发和 header 处理，缺少可直接搬入的 Claude 专属 native TLS addon；其中 `ultraworkers/claw-code` 的 Rust `reqwest` + `rustls-tls` 客户端和 proxy model 是当前可借鉴的 Claude CLI 方向，因此默认 profile 使用 `claude_reqwest_rustls_compatible_v1`，但仍不能把“Codex native TLS 方案”直接改名为 Claude 方案
 
 当前结论：
 
 - Claude OAuth 和 Claude runtime 必须分开验收。OAuth 目标是登录 / refresh 到认证 host；runtime 目标是 `CLIProxyAPIPlus -> api.anthropic.com/v1/messages`。
 - OAuth 里的 `HelloChrome_Auto` 可以作为构建能力来源，但不能宣称为“真实 Claude 官方 runtime 指纹”。
-- 不能把浏览器 profile 原样搬进 Claude runtime，否则容易形成“浏览器 TLS + API 客户端头”的混搭画像。
+- 不能把 Codex Desktop / 浏览器 profile 原样搬进 Claude runtime，否则容易形成“Codex/Web/浏览器 TLS + Claude API/Stainless 头”的混搭画像。
 - 不能只做 JA3 / ClientHello；HTTP/2 SETTINGS、ALPN、header bundle 和连接复用同样属于 provider-facing 画像。
 - cache key 至少应升级为 `provider + authID + baseURLHost + proxyURL + transportProfileID`；如果 profile 支持热切换，再加入 `profileVersion`。
 
@@ -140,7 +150,7 @@ Claude runtime transport 的基线必须同时看官方 contract 和高信号 tr
 }
 ```
 
-命名必须保持中性，例如 `claude_utls_chrome_like_v1`。不要命名成 `real_claude_native` 或 `official_claude_fingerprint`，因为 Anthropic 官方没有提供 JA3 / JA4 / ALPN / HTTP2 SETTINGS 的官方指纹基线。
+命名必须保持中性，例如 `claude_utls_chrome_like_v1`。不要命名成 `real_claude_native`；Claude 当前按社区实现和可验证 runtime 行为推进。
 
 ## 7. 方案总览
 
@@ -185,12 +195,13 @@ AccountRuntimeTransportProfile
 
 - `claude_chrome_like_mac_v1`
 - `claude_chrome_like_mac_v2`
-- `claude_chrome_like_mac_v3`
+- `claude_utls_chrome_133`
 
 说明：
 
 - Phase 1 不建议直接暴露 `safari` / `firefox` 这类跨度过大的 profile
 - 先在“Chrome-like / Node-like”同一家族里做小范围变体，更容易与 Claude HTTP 头保持一致
+- `claude_chrome_like_mac_v3` 与 `chrome_133` 仅保留为兼容 alias；推荐名改为 `claude_utls_chrome_133`，避免误解为官方 Claude Code TLS 指纹
 
 ### 8.2 Auth 持久化
 
@@ -214,9 +225,10 @@ AccountRuntimeTransportProfile
 Claude executor 运行期新增规则：
 
 1. 先读取账号的 `transport_profile`
-2. 根据 `authID + proxyURL + transport_profile.profile_id` 构造 transport cache key
+2. 根据 `provider + authID + account + baseURLHost + proxyURL + transport_profile/tls_profile` 构造 transport cache key
 3. 为每个 key 分配独立 `RoundTripper` / `http.Client`
 4. 禁止不同账号在相同 provider 上复用同一条 HTTP/2 连接
+5. 如果 profile 内声明的 `provider` 与 auth 的真实 provider 不一致，必须 fallback 到默认 transport 并返回可见 warning，不能把 Codex profile 套到 Claude auth 上
 
 ### 8.4 UI / 配置面
 
@@ -376,7 +388,8 @@ cacheKey = provider + "|" + authID + "|" + proxyURL + "|" + transportProfileID
 
 ### 13.1 数据迁移
 
-- 旧账户没有 `transport_profile` 时，默认使用 `provider-default`
+- 旧账户没有 `transport_profile` 时，由 core 自动生成并持久化账号级 runtime identity：Claude / Gemini 默认 `*_cli_native_v1`，Codex 默认 `codex_proxy_compatible_v1`；这会进入账号级 transport/cache/session 隔离
+- 首次读取 / 写入账号设置时，core 会维护 `runtime_identity_state.current`；后续 profile/source/provider 语义变化会追加 `runtime_identity_state.history`，同账号重复读取不会刷新 revision 或制造空历史
 - 已保存的 `tls` 档案不删除，迁移成新的 `transport_profile` 默认值
 
 ### 13.2 发布顺序
@@ -397,15 +410,36 @@ cacheKey = provider + "|" + authID + "|" + proxyURL + "|" + transportProfileID
 
 ### 15.1 行业/官方资料
 
-- Cloudflare JA3 / JA4 指纹说明  
+- Cloudflare JA3 / JA4 指纹说明
   https://developers.cloudflare.com/bots/additional-configurations/ja3-ja4-fingerprint/
-- Cloudflare JA4 Signals 介绍  
+- Cloudflare JA4 Signals 介绍
   https://blog.cloudflare.com/ja4-signals/
-- Anthropic 关于位置判断使用 `IP address and other signals` 的说明  
+- Anthropic 关于位置判断使用 `IP address and other signals` 的说明
   https://privacy.claude.com/en/articles/11186740-does-claude-use-my-location
+- Claude Code enterprise network / proxy / CA / mTLS
+  https://docs.anthropic.com/en/docs/claude-code/corporate-proxy
+- Claude Messages / Streaming API
+  https://platform.claude.com/docs/en/build-with-claude/working-with-messages
+  https://platform.claude.com/docs/en/build-with-claude/streaming
 
 ### 15.2 开源方案
 
+- `icebear0828/codex-proxy`
+  https://github.com/icebear0828/codex-proxy
+  参考点：Rust N-API native transport、`reqwest 0.12.28` / `rustls 0.23.36` 版本基线、fingerprint 配置化、headers/UA 分层；排除点：Cloudflare cookie capture/replay、direct fallback、未经本项目 provider-facing 验证的 Desktop 完全仿真声明。
+- `openai/codex`
+  https://github.com/openai/codex
+  参考点：官方 Codex 客户端的 `originator`、`User-Agent`、residency header、`reqwest` / `rustls` 依赖基线；这是 Codex 方向的第一方来源，不等于 Claude 方向来源。
+- `777genius/claude-code-source-code-full`
+  https://github.com/777genius/claude-code-source-code-full
+  参考点：Anthropic SDK client、应用层 `User-Agent` / headers、base URL、proxy、CA/mTLS 配置边界；排除点：不能把应用层 `fingerprint.ts` 或客户端源码片段当成 JA3 / JA4 / HTTP2 SETTINGS 证据。
+- `ultraworkers/claw-code`
+  https://github.com/ultraworkers/claw-code
+  参考点：Anthropic base URL、Rust/reqwest 客户端和 proxy 配置方式；排除点：未提供可复用的 Claude provider-edge TLS fingerprint 基线。
+- `anthropics/claude-code` 与 Claude Code 官方文档
+  https://github.com/anthropics/claude-code
+  https://code.claude.com/docs/en/corporate-proxy
+  参考点：企业代理、CA、mTLS 和网络边界；排除点：未公开官方 Claude Code JA3 / JA4 / HTTP2 SETTINGS 基线。
 - `uTLS`  
   https://github.com/refraction-networking/utls
 - `tls-client`  
@@ -424,26 +458,36 @@ cacheKey = provider + "|" + authID + "|" + proxyURL + "|" + transportProfileID
 - Quotio 主仓库
 - `third_party/CLIProxyAPIPlus` 子模块
 
-本次方案核对时使用过的已验证源码副本：
+本次实现核对入口：
 
 - Quotio 当前账号指纹架构  
   `docs/fingerprint/account-fingerprint-architecture.md`
 - Claude 运行期 client 选择  
-  `/tmp/CLIProxyAPIPlus-quotio/internal/runtime/executor/proxy_helpers.go`
+  `third_party/CLIProxyAPIPlus/internal/runtime/executor/helps/proxy_helpers.go`
 - Claude OAuth `uTLS` transport  
-  `/tmp/CLIProxyAPIPlus-quotio/internal/auth/claude/utls_transport.go`
+  `third_party/CLIProxyAPIPlus/internal/auth/claude/utls_transport.go`
 - per-auth round tripper provider  
-  `/tmp/CLIProxyAPIPlus-quotio/sdk/cliproxy/rtprovider.go`
+  `third_party/CLIProxyAPIPlus/sdk/cliproxy/rtprovider.go`
 - auth metadata `headers` 持久化与恢复  
-  `/tmp/CLIProxyAPIPlus-quotio/internal/api/handlers/management/auth_files.go`
-  `/tmp/CLIProxyAPIPlus-quotio/internal/watcher/synthesizer/helpers.go`
-  `/tmp/CLIProxyAPIPlus-quotio/internal/watcher/synthesizer/file.go`
+  `third_party/CLIProxyAPIPlus/internal/api/handlers/management/auth_files.go`
+  `third_party/CLIProxyAPIPlus/internal/watcher/synthesizer/helpers.go`
+  `third_party/CLIProxyAPIPlus/internal/watcher/synthesizer/file.go`
 
 注意：
 
-- `/tmp/CLIProxyAPIPlus-quotio/...` 仅用于本次方案阶段的历史核对和证据引用
-- 后续任何真实实现、提交、验证都不应在 `/tmp/...` 下进行
-- 后续实现必须改回项目内 `third_party/CLIProxyAPIPlus`
+- 后续任何真实实现、提交、验证都必须继续使用项目内 `third_party/CLIProxyAPIPlus`
+- `/tmp/...` 仅允许历史比较，不是开发或构建真源
+
+### 15.4 Claude / Codex 指纹来源分界
+
+- Codex 方向按 `icebear0828/codex-proxy` 社区实现迁入：Desktop-like managed headers、native transport 分层、per-account/per-proxy client cache、ALPN/HTTP1.1 开关和 provider-facing 验证方法已经成为本项目 Codex 方案来源。
+- Claude 方向已核对 `anthropics/claude-code`、`ultraworkers/claw-code`、`777genius/claude-code-source-code` 与 Claude proxy 项目：没有发现可像 `codex-proxy` 一样直接搬入的 Claude native TLS addon。
+- 因此 Claude 不能复用 Codex TLS 指纹值；当前默认采用 `claude_reqwest_rustls_compatible_v1`，参考 `ultraworkers/claw-code` 的 Rust `reqwest` + `rustls-tls` 客户端和 proxy model，并复用本项目账号级 transport 抽象、profile cache key、provider-facing 验证机制。
+- `claude_utls_chrome_133`、旧 `claude_chrome_like_mac_v3` / `chrome_133` 只作为兼容 alias 和高级显式 opt-in。Chrome-like uTLS 不是 `provider-default`，也不是 Claude Code CLI 完整指纹仿真。
+- T048 追加了 Claude access-token-only 隔离本地 core 与远端 core 验证：历史验证时使用旧 alias `claude_chrome_like_mac_v3`，等价解析为当前 canonical `claude_utls_chrome_133`；controlled echo 返回 JA3 / JA4 / HTTP/2 指纹字段，同一 core 的真实 `/v1/messages?beta=true` 返回 `OK` / `OK.`。这关闭运行时 enforcement，不关闭 Anthropic provider-edge TLS parity。
+- T054 追加 core-managed account runtime identity：不同 auth file / account / base URL / proxy / profile 不共享 runtime HTTP client。Claude 在 T058 改为 `claude_reqwest_rustls_compatible_v1` 默认 profile，Gemini 保持 CLI-native，Codex 在 T058 改为 Codex-Proxy-compatible 默认 profile。Chrome-like uTLS 仍只在用户显式选择 `claude_utls_chrome_133` 或兼容 alias 时启用。
+- T056 纠偏补齐持久化账号运行身份：`runtime_identity_state` 由 core 自动维护并只读返回给 management UI，记录 identity revision 和历史变化。它解决的是“账号 TLS 身份自动生成 / 隔离 / 可审计”。
+- T058 Codex MVP 已改为 `codex_proxy_compatible_v1`：headers 和 Go transport 行为按 `codex-proxy` 社区实现对齐；Rust `reqwest/rustls` wire-level clone 仍需后续 sidecar/addon。
 
 ## 16. 最终建议
 

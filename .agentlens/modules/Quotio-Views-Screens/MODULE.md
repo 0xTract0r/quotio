@@ -14,7 +14,7 @@
 | `Quotio/Views/Screens/FallbackScreen.swift` | 539 | 📊 |
 | `Quotio/Views/Screens/IdentityPackagesScreen.swift` | 769 | 📊 |
 | `Quotio/Views/Screens/LogsScreen.swift` | 599 | 📊 |
-| `Quotio/Views/Screens/ProvidersScreen.swift` | 3017 | 📊 |
+| `Quotio/Views/Screens/ProvidersScreen.swift` | 3022 | 📊 |
 | `Quotio/Views/Screens/QuotaScreen.swift` | 1599 | 📊 |
 | `Quotio/Views/Screens/SettingsScreen.swift` | 3100 | 📊 |
 
@@ -29,7 +29,7 @@
 
 ## 🟢 Low Priority
 
-### `NOTE` (Quotio/Views/Screens/ProvidersScreen.swift:83)
+### `NOTE` (Quotio/Views/Screens/ProvidersScreen.swift:85)
 
 > GLM uses API key auth via CustomProviderService, so skip it here
 ---

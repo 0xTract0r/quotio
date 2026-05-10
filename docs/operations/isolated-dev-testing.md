@@ -70,9 +70,9 @@ git worktree add ../quotio.worktrees/feat-<short-name> -b feat/<short-name> HEAD
 - 正式版常驻实例仍可继续从原目录提供 API
 - 一个功能一个分支，便于回滚和验收
 
-### 2. 运行时隔离：给测试版单独的 Local.xcconfig
+### 2. 运行时隔离：给测试版单独的 bundle id
 
-在测试 worktree 中创建：
+如果你要在 Xcode 里手工运行测试版，在测试 worktree 中创建：
 
 ```bash
 cp Config/Local.xcconfig.example Config/Local.xcconfig
@@ -121,7 +121,9 @@ defaults write dev.quotio.desktop.dev proxyPort -int <recommended-port>
 这个脚本会：
 
 - 固定把测试版构建到 `build/DerivedData-dev`
+- 显式传入 `PRODUCT_BUNDLE_IDENTIFIER=dev.quotio.desktop.dev`、`PRODUCT_NAME=Quotio Dev` 和 `AppIconDev`，即使没有本地 `Config/Local.xcconfig` 也会产出隔离 Dev bundle
 - 自动定位 `Quotio Dev.app`
+- 启动前校验产物不是正式版 bundle id
 - 只重启测试版，不会去杀正式版 `Quotio`
 
 ### 4. 首次启动后先验证 4 个隔离点

@@ -2,7 +2,12 @@
 set -euo pipefail
 
 REMOTE_HOST="${REMOTE_HOST:?REMOTE_HOST is required, e.g. wisedata@10.1.1.201}"
-MANAGEMENT_PASSWORD="${MANAGEMENT_PASSWORD:?MANAGEMENT_PASSWORD is required}"
+MANAGEMENT_PASSWORD="${MANAGEMENT_PASSWORD:-}"
+PRESERVE_REMOTE_MANAGEMENT_SECRET="${PRESERVE_REMOTE_MANAGEMENT_SECRET:-0}"
+if [[ "${PRESERVE_REMOTE_MANAGEMENT_SECRET}" != "1" && -z "${MANAGEMENT_PASSWORD}" ]]; then
+  echo "MANAGEMENT_PASSWORD is required unless PRESERVE_REMOTE_MANAGEMENT_SECRET=1" >&2
+  exit 1
+fi
 
 DEPLOY_DIR="${DEPLOY_DIR:-/home/wisedata/deploy/cliproxyapi-plus}"
 API_PORT="${API_PORT:-18317}"
@@ -12,6 +17,9 @@ CONTAINER_NAME="${CONTAINER_NAME:-cliproxyapi-plus-remote}"
 IMAGE_NAME="${IMAGE_NAME:-cliproxyapi-plus:linux-server}"
 BUILD_STRATEGY="${BUILD_STRATEGY:-remote}"
 IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
+CORE_BUILD_VERSION="${CORE_BUILD_VERSION:-}"
+CORE_BUILD_COMMIT="${CORE_BUILD_COMMIT:-}"
+CORE_BUILD_DATE="${CORE_BUILD_DATE:-}"
 CONTAINER_UID_GID="${CONTAINER_UID_GID:-1000:1000}"
 TZ_VALUE="${TZ_VALUE:-Asia/Shanghai}"
 SYNC_AUTH_DIR="${SYNC_AUTH_DIR:-1}"
@@ -74,6 +82,52 @@ require_cmd() {
   }
 }
 
+redact_url_credentials() {
+  local value="$1"
+  if [[ "${value}" =~ ^([^:/?#]+://)([^/@]+@)(.*)$ ]]; then
+    printf '%s<redacted>@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}"
+  else
+    printf '%s' "${value}"
+  fi
+}
+
+assert_version_headers() {
+  local label="$1"
+  local headers_file="$2"
+  python3 - "$label" "$headers_file" "${EXPECTED_CORE_HEADER_VERSION}" "${EXPECTED_CORE_HEADER_COMMIT}" "${EXPECTED_CORE_HEADER_BUILD_DATE}" <<'PY'
+import sys
+
+label, headers_file, expected_version, expected_commit, expected_build_date = sys.argv[1:6]
+expected = {
+    "x-cpa-version": expected_version,
+    "x-cpa-commit": expected_commit,
+    "x-cpa-build-date": expected_build_date,
+}
+headers = {}
+with open(headers_file, "r", encoding="utf-8", errors="replace") as fh:
+    for raw_line in fh:
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        headers[name.strip().lower()] = value.strip()
+missing = [name for name in expected if name not in headers]
+mismatched = [
+    f"{name}: got {headers.get(name)!r}, want {want!r}"
+    for name, want in expected.items()
+    if name in headers and headers[name] != want
+]
+if missing or mismatched:
+    details = []
+    if missing:
+        details.append("missing " + ", ".join(missing))
+    details.extend(mismatched)
+    print(f"{label} version header check failed: " + "; ".join(details), file=sys.stderr)
+    sys.exit(1)
+print(f"{label} version headers OK")
+PY
+}
+
 require_cmd ssh
 require_cmd rsync
 require_cmd npm
@@ -93,6 +147,30 @@ fi
   exit 1
 }
 
+if [[ -z "${CORE_BUILD_VERSION}" ]]; then
+  CORE_BUILD_VERSION="$(git -C "${CORE_SRC}" describe --tags --always --dirty 2>/dev/null || echo "dev")"
+fi
+if [[ -z "${CORE_BUILD_COMMIT}" ]]; then
+  CORE_BUILD_COMMIT="$(git -C "${CORE_SRC}" rev-parse HEAD 2>/dev/null || echo "none")"
+  if git -C "${CORE_SRC}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! git -C "${CORE_SRC}" diff --quiet --ignore-submodules -- 2>/dev/null || ! git -C "${CORE_SRC}" diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      CORE_BUILD_COMMIT="${CORE_BUILD_COMMIT}-dirty"
+    fi
+  fi
+fi
+if [[ -z "${CORE_BUILD_DATE}" ]]; then
+  CORE_BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+fi
+EXPECTED_CORE_HEADER_VERSION="${CORE_BUILD_VERSION}-plus"
+EXPECTED_CORE_HEADER_COMMIT="${CORE_BUILD_COMMIT}"
+EXPECTED_CORE_HEADER_BUILD_DATE="${CORE_BUILD_DATE}"
+
+echo "[info] Core build metadata:"
+echo "  VERSION=${CORE_BUILD_VERSION}"
+echo "  COMMIT=${CORE_BUILD_COMMIT}"
+echo "  BUILD_DATE=${CORE_BUILD_DATE}"
+echo "  EXPECTED_X_CPA_VERSION=${EXPECTED_CORE_HEADER_VERSION}"
+
 [[ -f "${LOCAL_CONFIG_PATH}" ]] || {
   echo "Local config not found: ${LOCAL_CONFIG_PATH}" >&2
   exit 1
@@ -107,6 +185,7 @@ validate_toggle_flag "SERVER_TLS_CURL_INSECURE" "${SERVER_TLS_CURL_INSECURE}"
 validate_toggle_flag "ALLOW_TLS_DOWNGRADE" "${ALLOW_TLS_DOWNGRADE}"
 validate_toggle_flag "SERVER_TLS_GENERATE_REMOTE" "${SERVER_TLS_GENERATE_REMOTE}"
 validate_toggle_flag "SERVER_TLS_GENERATE_REMOTE_OVERWRITE" "${SERVER_TLS_GENERATE_REMOTE_OVERWRITE}"
+validate_toggle_flag "PRESERVE_REMOTE_MANAGEMENT_SECRET" "${PRESERVE_REMOTE_MANAGEMENT_SECRET}"
 
 if [[ -n "${BIND_HOST}" ]]; then
   PORT_MAPPING="${BIND_HOST}:${API_PORT}:${API_PORT}"
@@ -180,14 +259,14 @@ read_remote_runtime_state
 
 if [[ "${SERVER_PROXY_URL_SET}" == "1" ]]; then
   if [[ -n "${SERVER_PROXY_URL}" ]]; then
-    echo "[info] Using server proxy URL: ${SERVER_PROXY_URL}"
+    echo "[info] Using server proxy URL: $(redact_url_credentials "${SERVER_PROXY_URL}")"
   else
     echo "[warn] SERVER_PROXY_URL was explicitly set empty; proxy-url will be cleared"
   fi
 elif [[ "${REMOTE_CONFIG_PRESENT}" == "1" ]]; then
   SERVER_PROXY_URL="${REMOTE_PROXY_URL}"
   if [[ -n "${SERVER_PROXY_URL}" ]]; then
-    echo "[info] Preserving remote proxy URL: ${SERVER_PROXY_URL}"
+    echo "[info] Preserving remote proxy URL: $(redact_url_credentials "${SERVER_PROXY_URL}")"
   else
     echo "[info] Preserving empty remote proxy-url"
   fi
@@ -398,14 +477,27 @@ with output_path.open("w", encoding="utf-8") as f:
     yaml.safe_dump(data, f, allow_unicode=False, sort_keys=False)
 PY
 
-cat > "${TMP_DIR}/runtime/secrets.env" <<EOF
+if [[ "${PRESERVE_REMOTE_MANAGEMENT_SECRET}" == "1" ]]; then
+  ssh "${REMOTE_HOST}" "test -s '${DEPLOY_DIR}/runtime/secrets.env'"
+else
+  cat > "${TMP_DIR}/runtime/secrets.env" <<EOF
 MANAGEMENT_PASSWORD=${MANAGEMENT_PASSWORD}
 EOF
+fi
 
 if [[ "${BUILD_STRATEGY}" == "local-load" ]]; then
   BUILD_BLOCK=""
 else
-  BUILD_BLOCK=$'    build:\n      context: ./source/CLIProxyAPIPlus\n      dockerfile: Dockerfile'
+  BUILD_BLOCK=$(cat <<EOF
+    build:
+      context: ./source/CLIProxyAPIPlus
+      dockerfile: Dockerfile
+      args:
+        VERSION: "${CORE_BUILD_VERSION}"
+        COMMIT: "${CORE_BUILD_COMMIT}"
+        BUILD_DATE: "${CORE_BUILD_DATE}"
+EOF
+)
 fi
 
 DNS_BLOCK=""
@@ -468,6 +560,9 @@ RSYNC_ARGS=(-az --delete)
 if [[ "${SYNC_AUTH_DIR}" != "1" ]]; then
   RSYNC_ARGS+=(--filter='P runtime/auth/' --filter='P runtime/auth/***')
 fi
+if [[ "${PRESERVE_REMOTE_MANAGEMENT_SECRET}" == "1" ]]; then
+  RSYNC_ARGS+=(--filter='P runtime/secrets.env')
+fi
 RSYNC_ARGS+=(--filter='P backups/' --filter='P backups/***')
 if [[ -z "${SERVER_TLS_CERT_FILE}" && -z "${SERVER_TLS_KEY_FILE}" ]]; then
   RSYNC_ARGS+=(--filter='P runtime/tls/' --filter='P runtime/tls/***')
@@ -494,6 +589,9 @@ if [[ "${BUILD_STRATEGY}" == "local-load" ]]; then
   echo "[4/6] Building local image ${IMAGE_NAME} (${IMAGE_PLATFORM})"
   docker buildx build \
     --platform "${IMAGE_PLATFORM}" \
+    --build-arg "VERSION=${CORE_BUILD_VERSION}" \
+    --build-arg "COMMIT=${CORE_BUILD_COMMIT}" \
+    --build-arg "BUILD_DATE=${CORE_BUILD_DATE}" \
     --load \
     -t "${IMAGE_NAME}" \
     "${TMP_DIR}/source/CLIProxyAPIPlus"
@@ -517,15 +615,29 @@ for _ in $(seq 1 30); do
 done
 
 echo "[verify] Verifying deployment at ${BASE_URL}"
-curl "${CURL_ARGS[@]}" "${BASE_URL}/healthz"
+HEALTH_HEADERS="/tmp/cliproxy-health.headers"
+MANAGEMENT_HEADERS="/tmp/cliproxy-management.headers"
+AUTH_FILES_HEADERS="/tmp/cliproxy-auth-files.headers"
+AUTH_FILES_JSON="/tmp/cliproxy-auth-files.json"
+
+curl "${CURL_ARGS[@]}" -D "${HEALTH_HEADERS}" "${BASE_URL}/healthz"
+assert_version_headers "healthz" "${HEALTH_HEADERS}"
 echo
-curl "${CURL_ARGS[@]}" "${BASE_URL}/management.html" -o /tmp/cliproxy-management.html
+curl "${CURL_ARGS[@]}" -D "${MANAGEMENT_HEADERS}" "${BASE_URL}/management.html" -o /tmp/cliproxy-management.html
+assert_version_headers "management.html" "${MANAGEMENT_HEADERS}"
 wc -c /tmp/cliproxy-management.html
 sed -n '1,3p' /tmp/cliproxy-management.html
 echo
-curl "${CURL_ARGS[@]}" \
-  -H "Authorization: Bearer ${MANAGEMENT_PASSWORD}" \
-  "${BASE_URL}/v0/management/auth-files" | \
-  python3 -c 'import json,sys; data=json.load(sys.stdin); items=data.get("files") or data.get("auth-files") or data.get("auth_files") or []; print("auth_files=", len(items)); print([item.get("name") for item in items])'
-echo
+if [[ -n "${MANAGEMENT_PASSWORD}" ]]; then
+  curl "${CURL_ARGS[@]}" \
+    -D "${AUTH_FILES_HEADERS}" \
+    -H "Authorization: Bearer ${MANAGEMENT_PASSWORD}" \
+    "${BASE_URL}/v0/management/auth-files" \
+    -o "${AUTH_FILES_JSON}"
+  assert_version_headers "auth-files" "${AUTH_FILES_HEADERS}"
+  python3 -c 'import json,sys; data=json.load(sys.stdin); items=data.get("files") or data.get("auth-files") or data.get("auth_files") or []; print("auth_files=", len(items)); print([item.get("name") for item in items])' < "${AUTH_FILES_JSON}"
+  echo
+else
+  echo "[verify] MANAGEMENT_PASSWORD not provided locally; auth-files verification is deferred to safe wrapper remote-secret proof"
+fi
 ssh "${REMOTE_HOST}" "cd '${DEPLOY_DIR}' && sudo docker compose ps"

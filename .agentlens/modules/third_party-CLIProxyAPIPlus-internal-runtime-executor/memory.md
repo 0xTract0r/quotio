@@ -9,7 +9,7 @@
 
 ## 🔴 High Priority
 
-### `RULE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/claude_executor.go:1762)
+### `RULE` (third_party/CLIProxyAPIPlus/internal/runtime/executor/claude_executor.go:1766)
 
 > Anthropic's documentation, cache prefixes are created in order: tools -> system -> messages.
 

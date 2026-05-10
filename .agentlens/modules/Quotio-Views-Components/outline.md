@@ -4,7 +4,7 @@
 
 Symbol maps for 2 large files in this module.
 
-## Quotio/Views/Components/AccountRow.swift (732 lines)
+## Quotio/Views/Components/AccountRow.swift (780 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
@@ -12,13 +12,13 @@ Symbol maps for 2 large files in this module.
 | 26 | enum | AccountLiveAlertLevel | (internal) |
 | 47 | fn | badgeCountText | (internal) |
 | 54 | struct | AccountRowData | (internal) |
-| 75 | method | init | (internal) |
-| 181 | fn | from | (internal) |
-| 211 | fn | from | (internal) |
-| 232 | fn | from | (internal) |
-| 250 | fn | hash | (internal) |
-| 278 | struct | AccountRow | (internal) |
-| 668 | fn | handleMenuBarToggle | (private) |
+| 76 | method | init | (internal) |
+| 184 | fn | from | (internal) |
+| 216 | fn | from | (internal) |
+| 243 | fn | from | (internal) |
+| 268 | fn | hash | (internal) |
+| 298 | struct | AccountRow | (internal) |
+| 716 | fn | handleMenuBarToggle | (private) |
 
 ## Quotio/Views/Components/AgentConfigSheet.swift (989 lines)
 

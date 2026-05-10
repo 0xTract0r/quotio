@@ -1,6 +1,6 @@
 # third_party/CLIProxyAPIPlus/internal/watcher/watcher_test.go
 
-[← Back to Module](../modules/root/MODULE.md) | [← Back to INDEX](../INDEX.md)
+[← Back to Module](../modules/third_party-CLIProxyAPIPlus-internal-watcher/MODULE.md) | [← Back to INDEX](../INDEX.md)
 
 ## Overview
 

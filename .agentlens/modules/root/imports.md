@@ -61,6 +61,8 @@ graph TD
     root[root] --> _eslint[@eslint]
     root[root] --> _playwright[@playwright]
     root[root] --> _vitejs[@vitejs]
+    root[root] --> __future__[__future__]
+    root[root] --> argparse[argparse]
     root[root] --> atomic[atomic]
     root[root] --> base64[base64]
     root[root] --> big[big]
@@ -68,11 +70,12 @@ graph TD
     root[root] --> brotli[brotli]
     root[root] --> bufio[bufio]
     root[root] --> bun[bun]
+    root[root] --> certifi[certifi]
     root[root] --> child_process[child_process]
     root[root] --> cliproxy[cliproxy]
     root[root] --> context[context]
+    root[root] --> dataclasses[dataclasses]
     root[root] --> datetime[datetime]
-    root[root] --> diff[diff]
     root[root] --> eslint_plugin_react_hooks[eslint-plugin-react-hooks]
     root[root] --> eslint_plugin_react_refresh[eslint-plugin-react-refresh]
     root[root] --> filepath[filepath]
@@ -80,12 +83,12 @@ graph TD
     root[root] --> flate[flate]
     root[root] --> fmt[fmt]
     root[root] --> fs[fs]
-    root[root] --> fsnotify[fsnotify]
     root[root] --> gjson[gjson]
     root[root] --> globals[globals]
     root[root] --> godotenv[godotenv]
     root[root] --> google[google]
     root[root] --> gzip[gzip]
+    root[root] --> hashlib[hashlib]
     root[root] --> helps[helps]
     root[root] --> hex[hex]
     root[root] --> hmac[hmac]
@@ -114,20 +117,20 @@ graph TD
     root[root] --> sjson[sjson]
     root[root] --> sort[sort]
     root[root] --> sql[sql]
+    root[root] --> ssl[ssl]
     root[root] --> strconv[strconv]
     root[root] --> strings[strings]
     root[root] --> subtle[subtle]
-    root[root] --> sync[sync]
-    root[root] --> synthesizer[synthesizer]
+    root[root] --> sys[sys]
     root[root] --> syscall[syscall]
     root[root] --> testing[testing]
     root[root] --> textproto[textproto]
-    root[root] --> tls[tls]
     root[root] --> tokenizer[tokenizer]
-    root[root] --> transport[transport]
     root[root] --> tui[tui]
     root[root] --> typescript_eslint[typescript-eslint]
+    root[root] --> typing[typing]
     root[root] --> url[url]
+    root[root] --> urllib[urllib]
     root[root] --> uuid[uuid]
     root[root] --> v6[v6]
     root[root] --> v7[v7]
@@ -174,12 +177,16 @@ Dependencies within this module:
 - `os`
 - `proxy`
 - `proxyutil`
+- `re`
 - `registry`
 - `runtime`
 - `store`
+- `sync`
 - `thinking`
 - `time`
+- `tls`
 - `translator`
+- `transport`
 - `usage`
 - `util`
 - `vite`
@@ -245,6 +252,8 @@ Dependencies from other modules:
 - `@eslint/js`
 - `@playwright/test`
 - `@vitejs/plugin-react`
+- `__future__`
+- `argparse`
 - `atomic`
 - `base64`
 - `big`
@@ -252,11 +261,12 @@ Dependencies from other modules:
 - `brotli`
 - `bufio`
 - `bun`
+- `certifi`
 - `child_process`
 - `cliproxy`
 - `context`
+- `dataclasses`
 - `datetime`
-- `diff`
 - `eslint-plugin-react-hooks`
 - `eslint-plugin-react-refresh`
 - `filepath`
@@ -264,12 +274,12 @@ Dependencies from other modules:
 - `flate`
 - `fmt`
 - `fs`
-- `fsnotify`
 - `gjson`
 - `globals`
 - `godotenv`
 - `google`
 - `gzip`
+- `hashlib`
 - `helps`
 - `hex`
 - `hmac`
@@ -298,20 +308,20 @@ Dependencies from other modules:
 - `sjson`
 - `sort`
 - `sql`
+- `ssl`
 - `strconv`
 - `strings`
 - `subtle`
-- `sync`
-- `synthesizer`
+- `sys`
 - `syscall`
 - `testing`
 - `textproto`
-- `tls`
 - `tokenizer`
-- `transport`
 - `tui`
 - `typescript-eslint`
+- `typing`
 - `url`
+- `urllib`
 - `uuid`
 - `v6`
 - `v7`

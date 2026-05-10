@@ -1,6 +1,6 @@
 # Quotio/Models/Models.swift
 
-[← Back to Module](../modules/Quotio-Models/MODULE.md) | [← Back to INDEX](../INDEX.md)
+[← Back to Module](../modules/root/MODULE.md) | [← Back to INDEX](../INDEX.md)
 
 ## Overview
 

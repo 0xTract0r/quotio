@@ -4,109 +4,114 @@
 
 ## Overview
 
-- **Lines:** 2056
+- **Lines:** 2120
 - **Language:** Go
-- **Symbols:** 94
-- **Public symbols:** 59
+- **Symbols:** 99
+- **Public symbols:** 64
 
 ## Symbol Table
 
 | Line | Kind | Name | Visibility | Signature |
 | ---- | ---- | ---- | ---------- | --------- |
 | 31 | struct | Config | pub | - |
-| 175 | struct | ClaudeHeaderDefaults | pub | - |
-| 188 | struct | CodexHeaderDefaults | pub | - |
-| 194 | struct | TLSConfig | pub | - |
-| 204 | struct | PprofConfig | pub | - |
-| 212 | struct | RemoteManagement | pub | - |
-| 229 | struct | QuotaExceeded | pub | - |
-| 243 | struct | RoutingConfig | pub | - |
-| 269 | struct | OAuthModelAlias | pub | - |
-| 278 | struct | AmpModelMapping | pub | - |
-| 294 | struct | AmpCode | pub | - |
-| 324 | struct | AmpUpstreamAPIKeyEntry | pub | - |
-| 333 | struct | PayloadConfig | pub | - |
-| 347 | struct | PayloadFilterRule | pub | - |
-| 355 | struct | PayloadRule | pub | - |
-| 364 | struct | PayloadModelRule | pub | - |
-| 373 | struct | CloakConfig | pub | - |
-| 396 | struct | ClaudeKey | pub | - |
-| 432 | fn | GetAPIKey | pub | `func (k ClaudeKey) GetAPIKey() string { return ...` |
-| 433 | fn | GetBaseURL | pub | `func (k ClaudeKey) GetBaseURL() string { return...` |
-| 436 | struct | ClaudeModel | pub | - |
-| 444 | fn | GetName | pub | `func (m ClaudeModel) GetName() string { return ...` |
-| 445 | fn | GetAlias | pub | `func (m ClaudeModel) GetAlias() string { return...` |
-| 449 | struct | CodexKey | pub | - |
-| 480 | fn | GetAPIKey | pub | `func (k CodexKey) GetAPIKey() string { return k...` |
-| 481 | fn | GetBaseURL | pub | `func (k CodexKey) GetBaseURL() string { return ...` |
-| 484 | struct | CodexModel | pub | - |
-| 492 | fn | GetName | pub | `func (m CodexModel) GetName() string { return m...` |
-| 493 | fn | GetAlias | pub | `func (m CodexModel) GetAlias() string { return ...` |
-| 497 | struct | GeminiKey | pub | - |
-| 524 | fn | GetAPIKey | pub | `func (k GeminiKey) GetAPIKey() string { return ...` |
-| 525 | fn | GetBaseURL | pub | `func (k GeminiKey) GetBaseURL() string { return...` |
-| 528 | struct | GeminiModel | pub | - |
-| 536 | fn | GetName | pub | `func (m GeminiModel) GetName() string { return ...` |
-| 537 | fn | GetAlias | pub | `func (m GeminiModel) GetAlias() string { return...` |
-| 540 | struct | KiroKey | pub | - |
-| 556 | struct | KiroFingerprintConfig | pub | - |
-| 572 | struct | OpenAICompatibility | pub | - |
-| 597 | struct | OpenAICompatibilityAPIKey | pub | - |
-| 607 | struct | OpenAICompatibilityModel | pub | - |
-| 619 | fn | GetName | pub | `func (m OpenAICompatibilityModel) GetName() str...` |
-| 620 | fn | GetAlias | pub | `func (m OpenAICompatibilityModel) GetAlias() st...` |
-| 632 | fn | LoadConfig | pub | `func LoadConfig(configFile string) (*Config, er...` |
-| 639 | fn | LoadConfigOptional | pub | `func LoadConfigOptional(configFile string, opti...` |
-| 794 | fn | SanitizePayloadRules | pub | `func (cfg *Config) SanitizePayloadRules() {` |
-| 802 | fn | sanitizePayloadRawRules | (private) | `func sanitizePayloadRawRules(rules []PayloadRul...` |
-| 837 | fn | payloadRawString | (private) | `func payloadRawString(value any) ([]byte, bool) {` |
-| 850 | fn | SanitizeCodexHeaderDefaults | pub | `func (cfg *Config) SanitizeCodexHeaderDefaults() {` |
-| 860 | fn | SanitizeClaudeHeaderDefaults | pub | `func (cfg *Config) SanitizeClaudeHeaderDefaults...` |
-| 873 | fn | SanitizeKiroKeys | pub | `func (cfg *Config) SanitizeKiroKeys() {` |
-| 898 | fn | SanitizeOAuthModelAlias | pub | `func (cfg *Config) SanitizeOAuthModelAlias() {` |
-| 969 | fn | SanitizeOpenAICompatibility | pub | `func (cfg *Config) SanitizeOpenAICompatibility() {` |
-| 991 | fn | SanitizeCodexKeys | pub | `func (cfg *Config) SanitizeCodexKeys() {` |
-| 1011 | fn | SanitizeClaudeKeys | pub | `func (cfg *Config) SanitizeClaudeKeys() {` |
-| 1025 | fn | SanitizeGeminiKeys | pub | `func (cfg *Config) SanitizeGeminiKeys() {` |
-| 1053 | fn | normalizeModelPrefix | (private) | `func normalizeModelPrefix(prefix string) string {` |
-| 1066 | fn | looksLikeBcrypt | (private) | `func looksLikeBcrypt(s string) bool {` |
-| 1071 | fn | NormalizeHeaders | pub | `func NormalizeHeaders(headers map[string]string...` |
-| 1092 | fn | NormalizeExcludedModels | pub | `func NormalizeExcludedModels(models []string) [...` |
-| 1117 | fn | NormalizeOAuthExcludedModels | pub | `func NormalizeOAuthExcludedModels(entries map[s...` |
-| 1140 | fn | hashSecret | (private) | `func hashSecret(secret string) (string, error) {` |
-| 1151 | fn | SaveConfigPreserveComments | pub | `func SaveConfigPreserveComments(configFile stri...` |
-| 1222 | fn | SaveConfigPreserveCommentsUpdateNestedScalar | pub | `func SaveConfigPreserveCommentsUpdateNestedScal...` |
-| 1273 | fn | NormalizeCommentIndentation | pub | `func NormalizeCommentIndentation(data []byte) [...` |
-| 1295 | fn | getOrCreateMapValue | (private) | `func getOrCreateMapValue(mapNode *yaml.Node, ke...` |
-| 1317 | fn | mergeMappingPreserve | (private) | `func mergeMappingPreserve(dst, src *yaml.Node, ...` |
-| 1356 | fn | mergeNodePreserve | (private) | `func mergeNodePreserve(dst, src *yaml.Node, pat...` |
-| 1423 | fn | findMapKeyIndex | (private) | `func findMapKeyIndex(mapNode *yaml.Node, key st...` |
-| 1436 | fn | appendPath | (private) | `func appendPath(path []string, key string) []st...` |
-| 1449 | fn | isKnownDefaultValue | (private) | `func isKnownDefaultValue(path []string, node *y...` |
-| 1491 | fn | pruneKnownDefaultsInNewNode | (private) | `func pruneKnownDefaultsInNewNode(path []string,...` |
-| 1530 | fn | isZeroValueNode | (private) | `func isZeroValueNode(node *yaml.Node) bool {` |
-| 1573 | fn | deepCopyNode | (private) | `func deepCopyNode(n *yaml.Node) *yaml.Node {` |
-| 1589 | fn | copyNodeShallow | (private) | `func copyNodeShallow(dst, src *yaml.Node) {` |
-| 1607 | fn | reorderSequenceForMerge | (private) | `func reorderSequenceForMerge(dst, src *yaml.Nod...` |
-| 1629 | fn | matchSequenceElement | (private) | `func matchSequenceElement(original []*yaml.Node...` |
-| 1672 | fn | sequenceElementIdentity | (private) | `func sequenceElementIdentity(node *yaml.Node) s...` |
-| 1696 | fn | mappingScalarValue | (private) | `func mappingScalarValue(node *yaml.Node, key st...` |
-| 1714 | fn | nodesStructurallyEqual | (private) | `func nodesStructurallyEqual(a, b *yaml.Node) bo...` |
-| 1754 | fn | removeMapKey | (private) | `func removeMapKey(mapNode *yaml.Node, key strin...` |
-| 1766 | fn | pruneMappingToGeneratedKeys | (private) | `func pruneMappingToGeneratedKeys(dstRoot, srcRo...` |
-| 1809 | fn | pruneMissingMapKeys | (private) | `func pruneMissingMapKeys(dstMap, srcMap *yaml.N...` |
-| 1843 | fn | normalizeCollectionNodeStyles | (private) | `func normalizeCollectionNodeStyles(node *yaml.N...` |
-| 1868 | struct | legacyConfigData | (private) | - |
-| 1877 | struct | legacyOpenAICompatibility | (private) | - |
-| 1883 | fn | migrateLegacyGeminiKeys | (private) | `func (cfg *Config) migrateLegacyGeminiKeys(lega...` |
-| 1911 | fn | migrateLegacyOpenAICompatibilityKeys | (private) | `func (cfg *Config) migrateLegacyOpenAICompatibi...` |
-| 1931 | fn | mergeLegacyOpenAICompatAPIKeys | (private) | `func mergeLegacyOpenAICompatAPIKeys(entry *Open...` |
-| 1959 | fn | findOpenAICompatTarget | (private) | `func findOpenAICompatTarget(entries []OpenAICom...` |
-| 1987 | fn | migrateLegacyAmpConfig | (private) | `func (cfg *Config) migrateLegacyAmpConfig(legac...` |
-| 2015 | fn | removeLegacyOpenAICompatAPIKeys | (private) | `func removeLegacyOpenAICompatAPIKeys(root *yaml...` |
-| 2034 | fn | removeLegacyAmpKeys | (private) | `func removeLegacyAmpKeys(root *yaml.Node) {` |
-| 2044 | fn | removeLegacyGenerativeLanguageKeys | (private) | `func removeLegacyGenerativeLanguageKeys(root *y...` |
-| 2051 | fn | removeLegacyAuthBlock | (private) | `func removeLegacyAuthBlock(root *yaml.Node) {` |
+| 178 | struct | ClaudeHeaderDefaults | pub | - |
+| 191 | struct | CodexHeaderDefaults | pub | - |
+| 200 | struct | ManagedHeaderProfileConfig | pub | - |
+| 207 | struct | TLSConfig | pub | - |
+| 217 | struct | PprofConfig | pub | - |
+| 225 | struct | RemoteManagement | pub | - |
+| 242 | struct | QuotaExceeded | pub | - |
+| 256 | struct | RoutingConfig | pub | - |
+| 282 | struct | OAuthModelAlias | pub | - |
+| 291 | struct | AmpModelMapping | pub | - |
+| 307 | struct | AmpCode | pub | - |
+| 337 | struct | AmpUpstreamAPIKeyEntry | pub | - |
+| 346 | struct | PayloadConfig | pub | - |
+| 360 | struct | PayloadFilterRule | pub | - |
+| 368 | struct | PayloadRule | pub | - |
+| 377 | struct | PayloadModelRule | pub | - |
+| 386 | struct | CloakConfig | pub | - |
+| 409 | struct | ClaudeKey | pub | - |
+| 445 | fn | GetAPIKey | pub | `func (k ClaudeKey) GetAPIKey() string { return ...` |
+| 446 | fn | GetBaseURL | pub | `func (k ClaudeKey) GetBaseURL() string { return...` |
+| 449 | struct | ClaudeModel | pub | - |
+| 457 | fn | GetName | pub | `func (m ClaudeModel) GetName() string { return ...` |
+| 458 | fn | GetAlias | pub | `func (m ClaudeModel) GetAlias() string { return...` |
+| 462 | struct | CodexKey | pub | - |
+| 493 | fn | GetAPIKey | pub | `func (k CodexKey) GetAPIKey() string { return k...` |
+| 494 | fn | GetBaseURL | pub | `func (k CodexKey) GetBaseURL() string { return ...` |
+| 497 | struct | CodexModel | pub | - |
+| 505 | fn | GetName | pub | `func (m CodexModel) GetName() string { return m...` |
+| 506 | fn | GetAlias | pub | `func (m CodexModel) GetAlias() string { return ...` |
+| 510 | struct | GeminiKey | pub | - |
+| 537 | fn | GetAPIKey | pub | `func (k GeminiKey) GetAPIKey() string { return ...` |
+| 538 | fn | GetBaseURL | pub | `func (k GeminiKey) GetBaseURL() string { return...` |
+| 541 | struct | GeminiModel | pub | - |
+| 549 | fn | GetName | pub | `func (m GeminiModel) GetName() string { return ...` |
+| 550 | fn | GetAlias | pub | `func (m GeminiModel) GetAlias() string { return...` |
+| 553 | struct | KiroKey | pub | - |
+| 569 | struct | KiroFingerprintConfig | pub | - |
+| 585 | struct | OpenAICompatibility | pub | - |
+| 610 | struct | OpenAICompatibilityAPIKey | pub | - |
+| 620 | struct | OpenAICompatibilityModel | pub | - |
+| 632 | fn | GetName | pub | `func (m OpenAICompatibilityModel) GetName() str...` |
+| 633 | fn | GetAlias | pub | `func (m OpenAICompatibilityModel) GetAlias() st...` |
+| 645 | fn | LoadConfig | pub | `func LoadConfig(configFile string) (*Config, er...` |
+| 652 | fn | LoadConfigOptional | pub | `func LoadConfigOptional(configFile string, opti...` |
+| 814 | fn | SanitizePayloadRules | pub | `func (cfg *Config) SanitizePayloadRules() {` |
+| 822 | fn | sanitizePayloadRawRules | (private) | `func sanitizePayloadRawRules(rules []PayloadRul...` |
+| 857 | fn | payloadRawString | (private) | `func payloadRawString(value any) ([]byte, bool) {` |
+| 870 | fn | SanitizeCodexHeaderDefaults | pub | `func (cfg *Config) SanitizeCodexHeaderDefaults() {` |
+| 880 | fn | SanitizeClaudeHeaderDefaults | pub | `func (cfg *Config) SanitizeClaudeHeaderDefaults...` |
+| 892 | fn | SanitizeManagedHeaderProfile | pub | `func (cfg *Config) SanitizeManagedHeaderProfile...` |
+| 910 | fn | ManagedHeaderOnlineUpdateEnabled | pub | `func ManagedHeaderOnlineUpdateEnabled(cfg *Conf...` |
+| 916 | fn | ManagedHeaderProfileFetchTimeout | pub | `func ManagedHeaderProfileFetchTimeout(cfg *Conf...` |
+| 926 | fn | ManagedHeaderProfileCacheTTL | pub | `func ManagedHeaderProfileCacheTTL(cfg *Config) ...` |
+| 937 | fn | SanitizeKiroKeys | pub | `func (cfg *Config) SanitizeKiroKeys() {` |
+| 962 | fn | SanitizeOAuthModelAlias | pub | `func (cfg *Config) SanitizeOAuthModelAlias() {` |
+| 1033 | fn | SanitizeOpenAICompatibility | pub | `func (cfg *Config) SanitizeOpenAICompatibility() {` |
+| 1055 | fn | SanitizeCodexKeys | pub | `func (cfg *Config) SanitizeCodexKeys() {` |
+| 1075 | fn | SanitizeClaudeKeys | pub | `func (cfg *Config) SanitizeClaudeKeys() {` |
+| 1089 | fn | SanitizeGeminiKeys | pub | `func (cfg *Config) SanitizeGeminiKeys() {` |
+| 1117 | fn | normalizeModelPrefix | (private) | `func normalizeModelPrefix(prefix string) string {` |
+| 1130 | fn | looksLikeBcrypt | (private) | `func looksLikeBcrypt(s string) bool {` |
+| 1135 | fn | NormalizeHeaders | pub | `func NormalizeHeaders(headers map[string]string...` |
+| 1156 | fn | NormalizeExcludedModels | pub | `func NormalizeExcludedModels(models []string) [...` |
+| 1181 | fn | NormalizeOAuthExcludedModels | pub | `func NormalizeOAuthExcludedModels(entries map[s...` |
+| 1204 | fn | hashSecret | (private) | `func hashSecret(secret string) (string, error) {` |
+| 1215 | fn | SaveConfigPreserveComments | pub | `func SaveConfigPreserveComments(configFile stri...` |
+| 1286 | fn | SaveConfigPreserveCommentsUpdateNestedScalar | pub | `func SaveConfigPreserveCommentsUpdateNestedScal...` |
+| 1337 | fn | NormalizeCommentIndentation | pub | `func NormalizeCommentIndentation(data []byte) [...` |
+| 1359 | fn | getOrCreateMapValue | (private) | `func getOrCreateMapValue(mapNode *yaml.Node, ke...` |
+| 1381 | fn | mergeMappingPreserve | (private) | `func mergeMappingPreserve(dst, src *yaml.Node, ...` |
+| 1420 | fn | mergeNodePreserve | (private) | `func mergeNodePreserve(dst, src *yaml.Node, pat...` |
+| 1487 | fn | findMapKeyIndex | (private) | `func findMapKeyIndex(mapNode *yaml.Node, key st...` |
+| 1500 | fn | appendPath | (private) | `func appendPath(path []string, key string) []st...` |
+| 1513 | fn | isKnownDefaultValue | (private) | `func isKnownDefaultValue(path []string, node *y...` |
+| 1555 | fn | pruneKnownDefaultsInNewNode | (private) | `func pruneKnownDefaultsInNewNode(path []string,...` |
+| 1594 | fn | isZeroValueNode | (private) | `func isZeroValueNode(node *yaml.Node) bool {` |
+| 1637 | fn | deepCopyNode | (private) | `func deepCopyNode(n *yaml.Node) *yaml.Node {` |
+| 1653 | fn | copyNodeShallow | (private) | `func copyNodeShallow(dst, src *yaml.Node) {` |
+| 1671 | fn | reorderSequenceForMerge | (private) | `func reorderSequenceForMerge(dst, src *yaml.Nod...` |
+| 1693 | fn | matchSequenceElement | (private) | `func matchSequenceElement(original []*yaml.Node...` |
+| 1736 | fn | sequenceElementIdentity | (private) | `func sequenceElementIdentity(node *yaml.Node) s...` |
+| 1760 | fn | mappingScalarValue | (private) | `func mappingScalarValue(node *yaml.Node, key st...` |
+| 1778 | fn | nodesStructurallyEqual | (private) | `func nodesStructurallyEqual(a, b *yaml.Node) bo...` |
+| 1818 | fn | removeMapKey | (private) | `func removeMapKey(mapNode *yaml.Node, key strin...` |
+| 1830 | fn | pruneMappingToGeneratedKeys | (private) | `func pruneMappingToGeneratedKeys(dstRoot, srcRo...` |
+| 1873 | fn | pruneMissingMapKeys | (private) | `func pruneMissingMapKeys(dstMap, srcMap *yaml.N...` |
+| 1907 | fn | normalizeCollectionNodeStyles | (private) | `func normalizeCollectionNodeStyles(node *yaml.N...` |
+| 1932 | struct | legacyConfigData | (private) | - |
+| 1941 | struct | legacyOpenAICompatibility | (private) | - |
+| 1947 | fn | migrateLegacyGeminiKeys | (private) | `func (cfg *Config) migrateLegacyGeminiKeys(lega...` |
+| 1975 | fn | migrateLegacyOpenAICompatibilityKeys | (private) | `func (cfg *Config) migrateLegacyOpenAICompatibi...` |
+| 1995 | fn | mergeLegacyOpenAICompatAPIKeys | (private) | `func mergeLegacyOpenAICompatAPIKeys(entry *Open...` |
+| 2023 | fn | findOpenAICompatTarget | (private) | `func findOpenAICompatTarget(entries []OpenAICom...` |
+| 2051 | fn | migrateLegacyAmpConfig | (private) | `func (cfg *Config) migrateLegacyAmpConfig(legac...` |
+| 2079 | fn | removeLegacyOpenAICompatAPIKeys | (private) | `func removeLegacyOpenAICompatAPIKeys(root *yaml...` |
+| 2098 | fn | removeLegacyAmpKeys | (private) | `func removeLegacyAmpKeys(root *yaml.Node) {` |
+| 2108 | fn | removeLegacyGenerativeLanguageKeys | (private) | `func removeLegacyGenerativeLanguageKeys(root *y...` |
+| 2115 | fn | removeLegacyAuthBlock | (private) | `func removeLegacyAuthBlock(root *yaml.Node) {` |
 
 ## Public API
 
@@ -116,7 +121,7 @@
 func (k ClaudeKey) GetAPIKey() string  { return k.APIKey }
 ```
 
-**Line:** 432 | **Kind:** fn
+**Line:** 445 | **Kind:** fn
 
 ### `GetBaseURL`
 
@@ -124,7 +129,7 @@ func (k ClaudeKey) GetAPIKey() string  { return k.APIKey }
 func (k ClaudeKey) GetBaseURL() string { return k.BaseURL }
 ```
 
-**Line:** 433 | **Kind:** fn
+**Line:** 446 | **Kind:** fn
 
 ### `GetName`
 
@@ -132,7 +137,7 @@ func (k ClaudeKey) GetBaseURL() string { return k.BaseURL }
 func (m ClaudeModel) GetName() string  { return m.Name }
 ```
 
-**Line:** 444 | **Kind:** fn
+**Line:** 457 | **Kind:** fn
 
 ### `GetAlias`
 
@@ -140,7 +145,7 @@ func (m ClaudeModel) GetName() string  { return m.Name }
 func (m ClaudeModel) GetAlias() string { return m.Alias }
 ```
 
-**Line:** 445 | **Kind:** fn
+**Line:** 458 | **Kind:** fn
 
 ### `GetAPIKey`
 
@@ -148,7 +153,7 @@ func (m ClaudeModel) GetAlias() string { return m.Alias }
 func (k CodexKey) GetAPIKey() string  { return k.APIKey }
 ```
 
-**Line:** 480 | **Kind:** fn
+**Line:** 493 | **Kind:** fn
 
 ### `GetBaseURL`
 
@@ -156,7 +161,7 @@ func (k CodexKey) GetAPIKey() string  { return k.APIKey }
 func (k CodexKey) GetBaseURL() string { return k.BaseURL }
 ```
 
-**Line:** 481 | **Kind:** fn
+**Line:** 494 | **Kind:** fn
 
 ### `GetName`
 
@@ -164,7 +169,7 @@ func (k CodexKey) GetBaseURL() string { return k.BaseURL }
 func (m CodexModel) GetName() string  { return m.Name }
 ```
 
-**Line:** 492 | **Kind:** fn
+**Line:** 505 | **Kind:** fn
 
 ### `GetAlias`
 
@@ -172,7 +177,7 @@ func (m CodexModel) GetName() string  { return m.Name }
 func (m CodexModel) GetAlias() string { return m.Alias }
 ```
 
-**Line:** 493 | **Kind:** fn
+**Line:** 506 | **Kind:** fn
 
 ### `GetAPIKey`
 
@@ -180,7 +185,7 @@ func (m CodexModel) GetAlias() string { return m.Alias }
 func (k GeminiKey) GetAPIKey() string  { return k.APIKey }
 ```
 
-**Line:** 524 | **Kind:** fn
+**Line:** 537 | **Kind:** fn
 
 ### `GetBaseURL`
 
@@ -188,7 +193,7 @@ func (k GeminiKey) GetAPIKey() string  { return k.APIKey }
 func (k GeminiKey) GetBaseURL() string { return k.BaseURL }
 ```
 
-**Line:** 525 | **Kind:** fn
+**Line:** 538 | **Kind:** fn
 
 ### `GetName`
 
@@ -196,7 +201,7 @@ func (k GeminiKey) GetBaseURL() string { return k.BaseURL }
 func (m GeminiModel) GetName() string  { return m.Name }
 ```
 
-**Line:** 536 | **Kind:** fn
+**Line:** 549 | **Kind:** fn
 
 ### `GetAlias`
 
@@ -204,7 +209,7 @@ func (m GeminiModel) GetName() string  { return m.Name }
 func (m GeminiModel) GetAlias() string { return m.Alias }
 ```
 
-**Line:** 537 | **Kind:** fn
+**Line:** 550 | **Kind:** fn
 
 ### `GetName`
 
@@ -212,7 +217,7 @@ func (m GeminiModel) GetAlias() string { return m.Alias }
 func (m OpenAICompatibilityModel) GetName() string  { return m.Name }
 ```
 
-**Line:** 619 | **Kind:** fn
+**Line:** 632 | **Kind:** fn
 
 ### `GetAlias`
 
@@ -220,7 +225,7 @@ func (m OpenAICompatibilityModel) GetName() string  { return m.Name }
 func (m OpenAICompatibilityModel) GetAlias() string { return m.Alias }
 ```
 
-**Line:** 620 | **Kind:** fn
+**Line:** 633 | **Kind:** fn
 
 ### `LoadConfig`
 
@@ -228,7 +233,7 @@ func (m OpenAICompatibilityModel) GetAlias() string { return m.Alias }
 func LoadConfig(configFile string) (*Config, error) {
 ```
 
-**Line:** 632 | **Kind:** fn
+**Line:** 645 | **Kind:** fn
 
 ### `LoadConfigOptional`
 
@@ -236,7 +241,7 @@ func LoadConfig(configFile string) (*Config, error) {
 func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 ```
 
-**Line:** 639 | **Kind:** fn
+**Line:** 652 | **Kind:** fn
 
 ### `SanitizePayloadRules`
 
@@ -244,7 +249,7 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 func (cfg *Config) SanitizePayloadRules() {
 ```
 
-**Line:** 794 | **Kind:** fn
+**Line:** 814 | **Kind:** fn
 
 ### `SanitizeCodexHeaderDefaults`
 
@@ -252,7 +257,7 @@ func (cfg *Config) SanitizePayloadRules() {
 func (cfg *Config) SanitizeCodexHeaderDefaults() {
 ```
 
-**Line:** 850 | **Kind:** fn
+**Line:** 870 | **Kind:** fn
 
 ### `SanitizeClaudeHeaderDefaults`
 
@@ -260,7 +265,39 @@ func (cfg *Config) SanitizeCodexHeaderDefaults() {
 func (cfg *Config) SanitizeClaudeHeaderDefaults() {
 ```
 
-**Line:** 860 | **Kind:** fn
+**Line:** 880 | **Kind:** fn
+
+### `SanitizeManagedHeaderProfile`
+
+```
+func (cfg *Config) SanitizeManagedHeaderProfile() {
+```
+
+**Line:** 892 | **Kind:** fn
+
+### `ManagedHeaderOnlineUpdateEnabled`
+
+```
+func ManagedHeaderOnlineUpdateEnabled(cfg *Config) bool {
+```
+
+**Line:** 910 | **Kind:** fn
+
+### `ManagedHeaderProfileFetchTimeout`
+
+```
+func ManagedHeaderProfileFetchTimeout(cfg *Config) int {
+```
+
+**Line:** 916 | **Kind:** fn
+
+### `ManagedHeaderProfileCacheTTL`
+
+```
+func ManagedHeaderProfileCacheTTL(cfg *Config) int {
+```
+
+**Line:** 926 | **Kind:** fn
 
 ### `SanitizeKiroKeys`
 
@@ -268,7 +305,7 @@ func (cfg *Config) SanitizeClaudeHeaderDefaults() {
 func (cfg *Config) SanitizeKiroKeys() {
 ```
 
-**Line:** 873 | **Kind:** fn
+**Line:** 937 | **Kind:** fn
 
 ### `SanitizeOAuthModelAlias`
 
@@ -276,7 +313,7 @@ func (cfg *Config) SanitizeKiroKeys() {
 func (cfg *Config) SanitizeOAuthModelAlias() {
 ```
 
-**Line:** 898 | **Kind:** fn
+**Line:** 962 | **Kind:** fn
 
 ### `SanitizeOpenAICompatibility`
 
@@ -284,7 +321,7 @@ func (cfg *Config) SanitizeOAuthModelAlias() {
 func (cfg *Config) SanitizeOpenAICompatibility() {
 ```
 
-**Line:** 969 | **Kind:** fn
+**Line:** 1033 | **Kind:** fn
 
 ### `SanitizeCodexKeys`
 
@@ -292,7 +329,7 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 func (cfg *Config) SanitizeCodexKeys() {
 ```
 
-**Line:** 991 | **Kind:** fn
+**Line:** 1055 | **Kind:** fn
 
 ### `SanitizeClaudeKeys`
 
@@ -300,7 +337,7 @@ func (cfg *Config) SanitizeCodexKeys() {
 func (cfg *Config) SanitizeClaudeKeys() {
 ```
 
-**Line:** 1011 | **Kind:** fn
+**Line:** 1075 | **Kind:** fn
 
 ### `SanitizeGeminiKeys`
 
@@ -308,7 +345,7 @@ func (cfg *Config) SanitizeClaudeKeys() {
 func (cfg *Config) SanitizeGeminiKeys() {
 ```
 
-**Line:** 1025 | **Kind:** fn
+**Line:** 1089 | **Kind:** fn
 
 ### `NormalizeHeaders`
 
@@ -316,7 +353,7 @@ func (cfg *Config) SanitizeGeminiKeys() {
 func NormalizeHeaders(headers map[string]string) map[string]string {
 ```
 
-**Line:** 1071 | **Kind:** fn
+**Line:** 1135 | **Kind:** fn
 
 ### `NormalizeExcludedModels`
 
@@ -324,7 +361,7 @@ func NormalizeHeaders(headers map[string]string) map[string]string {
 func NormalizeExcludedModels(models []string) []string {
 ```
 
-**Line:** 1092 | **Kind:** fn
+**Line:** 1156 | **Kind:** fn
 
 ### `NormalizeOAuthExcludedModels`
 
@@ -332,7 +369,7 @@ func NormalizeExcludedModels(models []string) []string {
 func NormalizeOAuthExcludedModels(entries map[string][]string) map[string][]string {
 ```
 
-**Line:** 1117 | **Kind:** fn
+**Line:** 1181 | **Kind:** fn
 
 ### `SaveConfigPreserveComments`
 
@@ -340,7 +377,7 @@ func NormalizeOAuthExcludedModels(entries map[string][]string) map[string][]stri
 func SaveConfigPreserveComments(configFile string, cfg *Config) error {
 ```
 
-**Line:** 1151 | **Kind:** fn
+**Line:** 1215 | **Kind:** fn
 
 ### `SaveConfigPreserveCommentsUpdateNestedScalar`
 
@@ -348,7 +385,7 @@ func SaveConfigPreserveComments(configFile string, cfg *Config) error {
 func SaveConfigPreserveCommentsUpdateNestedScalar(configFile string, path []string, value string) error {
 ```
 
-**Line:** 1222 | **Kind:** fn
+**Line:** 1286 | **Kind:** fn
 
 ### `NormalizeCommentIndentation`
 
@@ -356,23 +393,23 @@ func SaveConfigPreserveCommentsUpdateNestedScalar(configFile string, path []stri
 func NormalizeCommentIndentation(data []byte) []byte {
 ```
 
-**Line:** 1273 | **Kind:** fn
+**Line:** 1337 | **Kind:** fn
 
 ## Memory Markers
 
-### 🟢 `NOTE` (line 155)
+### 🟢 `NOTE` (line 158)
 
 > This does not apply to existing per-credential model alias features under:
 
-### 🔴 `DEPRECATED` (line 251)
+### 🔴 `DEPRECATED` (line 264)
 
 > Use SessionAffinity instead for universal session support.
 
-### 🟢 `NOTE` (line 681)
+### 🟢 `NOTE` (line 698)
 
 > Startup legacy key migration is intentionally disabled.
 
-### 🟢 `NOTE` (line 774)
+### 🟢 `NOTE` (line 794)
 
 > Legacy migration persistence is intentionally disabled together with
 
