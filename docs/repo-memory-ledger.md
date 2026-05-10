@@ -63,6 +63,12 @@ proxy/core 相关实验默认先走 dev runtime 或独立 worktree。
 
 本地正式、本地 dev、远端 core 的 Codex OAuth auth 默认不是同一个文件；同一账号被多个运行面长期并行 refresh，会触发 `invalid_grant` 或 `refresh_token_reused` 一类轮换冲突。
 
+### 6.1 Claude OAuth 重认证要看真实 token exchange 和 provider 请求
+
+远端 Claude 账号重认证不能只看 management UI 显示“成功”或“等待中”。最小闭环证据必须同时包含：远端日志显示 callback 被消费、token exchange completed、目标 auth 文件更新时间变化、management `api-call` 对 Anthropic `/v1/messages` 返回 `200`，以及本地 `18317` relay 的真实 Claude 请求返回成功。
+
+`connection not allowed by ruleset` 这类错误发生在 SOCKS CONNECT 阶段，含义是账号代理链路或上游代理规则拒绝了到 `api.anthropic.com:443` 的连接；它不是 Anthropic OAuth 返回、不是 token 保存失败，也不能直接归因为 TLS 指纹。T076 的真实成功路径是第一次 Claude OAuth token exchange 被 SOCKS ruleset 拒绝，随后同一账号路径短重试成功；日志没有出现标准 OAuth transport fallback，因此不能把 fallback 说成真实发生。
+
 ### 7. 模型同步是分层问题，不是单点问题
 
 排查“为什么这里看不到新模型”时，要分清三层：

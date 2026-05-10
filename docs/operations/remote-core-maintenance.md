@@ -32,6 +32,7 @@
 - 同一 Codex 账号若在多运行面并行 refresh，一端轮换后，其它端持有的旧 refresh token 会出现 `invalid_grant` / `refresh_token_reused`
 - 当前默认策略是：不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
 - 若必须用本地账号解除远端 provider-facing 验证阻塞，只允许同步 access-token-only 副本：不要上传 refresh token；在账号设置里把 `refresh_enabled=false`，或使用 `scripts/sync-access-token-only-auth.sh` 生成/上传已移除 refresh token 的临时 auth
+- Claude OAuth 重新认证排障要看 token exchange 和真实 provider 请求，不能只看 UI 状态。T076 的实测故障链路是远端已收到 localhost callback，但第一次 `api.anthropic.com:443` token exchange 被 SOCKS 代理返回 `connection not allowed by ruleset`；短重试后同一账号路径成功，没有触发标准 OAuth transport fallback。这个错误应优先按代理规则 / 出口策略排查，不应误判为 callback 没提交、token 已拿到但没落盘、Anthropic 业务 4xx 或 TLS 指纹拒绝。
 
 后续任何代码或部署变更，都应先在独立 worktree 中完成，再从该 worktree 执行远端部署；不要直接在 `master` 主工作区上改远端真值。
 
