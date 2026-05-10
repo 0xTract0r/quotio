@@ -114,6 +114,18 @@ npm --prefix third_party/Cli-Proxy-API-Management-Center run build
 ./scripts/start-management-center.sh
 ```
 
+直接进入用量统计页：
+
+```bash
+./scripts/start-management-center.sh --route '#/usage'
+```
+
+预览模式默认优先读取本地 Management API 的真实 usage 数据；若本地 usage 为空或接口暂不可用，会显示一小份预览示例数据，避免打开页面时全空。需要严格只看真实数据时：
+
+```bash
+./scripts/start-management-center.sh --route '#/usage' --no-sample-usage
+```
+
 如果你只是想直接登录当前 Quotio 正在运行的正式版，不必额外起前端预览端口，直接打开：
 
 ```text

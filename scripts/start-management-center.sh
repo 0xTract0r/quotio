@@ -16,6 +16,8 @@ QUOTIO_CONFIG_PATH="${QUOTIO_CONFIG_PATH:-}"
 API_BASE="${API_BASE:-}"
 MANAGEMENT_KEY="${MANAGEMENT_KEY:-}"
 KEYCHAIN_SERVICE="${KEYCHAIN_SERVICE:-}"
+MANAGEMENT_ROUTE="${MANAGEMENT_ROUTE:-}"
+PREVIEW_SAMPLE_USAGE="${PREVIEW_SAMPLE_USAGE:-1}"
 RUN_NPM_CI=0
 KEEP_STAGING=0
 
@@ -47,6 +49,8 @@ Options:
   --api-base URL           手工指定 Management API 基础地址，例如 http://127.0.0.1:18317
   --management-key KEY     手工指定 management key
   --keychain-service NAME  手工指定 Keychain service 名称
+  --route HASH_ROUTE       bootstrap 后跳转到指定前端路由，例如 '#/usage'
+  --no-sample-usage        本地 usage 为空或不可用时不显示预览示例数据
   --npm-ci                 启动前强制执行 npm ci
   --no-open                不自动打开浏览器
   --keep-staging           保留临时 staging 目录，便于调试
@@ -270,6 +274,8 @@ build_ui() {
 stage_preview_files() {
   local api_base="$1"
   local management_key="$2"
+  local route="$3"
+  local sample_usage="$4"
   local build_dir="$UI_DIR/dist"
   [[ -f "$build_dir/index.html" ]] || die "构建产物缺失：$build_dir/index.html"
 
@@ -278,8 +284,12 @@ stage_preview_files() {
   cp "$build_dir/index.html" "$STAGING_DIR/management.html"
 
   local api_base_json key_json
+  local route_json
+  local sample_usage_json
   api_base_json="$(printf '%s' "$api_base" | json_escape)"
   key_json="$(printf '%s' "$management_key" | json_escape)"
+  route_json="$(printf '%s' "$route" | json_escape)"
+  sample_usage_json="$(printf '%s' "$sample_usage" | json_escape)"
 
   cat > "$STAGING_DIR/bootstrap.html" <<EOF
 <!doctype html>
@@ -295,7 +305,14 @@ stage_preview_files() {
       localStorage.setItem('apiBase', ${api_base_json});
       localStorage.setItem('managementKey', ${key_json});
       localStorage.setItem('isLoggedIn', 'true');
-      window.location.replace('/management.html');
+      const sampleUsage = ${sample_usage_json};
+      if (sampleUsage === '1') {
+        localStorage.setItem('cli-proxy-preview-sample-usage-v1', '1');
+      } else {
+        localStorage.removeItem('cli-proxy-preview-sample-usage-v1');
+      }
+      const route = ${route_json};
+      window.location.replace('/management.html' + (route || ''));
     </script>
   </body>
 </html>
@@ -342,6 +359,14 @@ while [[ $# -gt 0 ]]; do
     --keychain-service)
       KEYCHAIN_SERVICE="${2:-}"
       shift 2
+      ;;
+    --route)
+      MANAGEMENT_ROUTE="${2:-}"
+      shift 2
+      ;;
+    --no-sample-usage)
+      PREVIEW_SAMPLE_USAGE=0
+      shift
       ;;
     --npm-ci)
       RUN_NPM_CI=1
@@ -402,5 +427,5 @@ if [[ "$MODE" == "build" ]]; then
   exit 0
 fi
 
-stage_preview_files "$RESOLVED_API_BASE" "$RESOLVED_KEY"
+stage_preview_files "$RESOLVED_API_BASE" "$RESOLVED_KEY" "$MANAGEMENT_ROUTE" "$PREVIEW_SAMPLE_USAGE"
 start_preview_server
