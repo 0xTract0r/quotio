@@ -23,7 +23,7 @@
 | `third_party/CLIProxyAPIPlus/internal/cmd/openai_login.go` | 72 |  |
 | `third_party/CLIProxyAPIPlus/internal/cmd/qwen_login.go` | 60 |  |
 | `third_party/CLIProxyAPIPlus/internal/cmd/run.go` | 98 |  |
-| `third_party/CLIProxyAPIPlus/internal/cmd/vertex_import.go` | 123 |  |
+| `third_party/CLIProxyAPIPlus/internal/cmd/vertex_import.go` | 139 |  |
 
 ## Documentation
 

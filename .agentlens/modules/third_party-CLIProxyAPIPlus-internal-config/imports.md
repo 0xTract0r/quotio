@@ -13,6 +13,7 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_config[third_party-CLIProxyAPIPlus-internal-config] --> fmt[fmt]
     third_party_CLIProxyAPIPlus_internal_config[third_party-CLIProxyAPIPlus-internal-config] --> json[json]
     third_party_CLIProxyAPIPlus_internal_config[third_party-CLIProxyAPIPlus-internal-config] --> os[os]
+    third_party_CLIProxyAPIPlus_internal_config[third_party-CLIProxyAPIPlus-internal-config] --> registry[registry]
     third_party_CLIProxyAPIPlus_internal_config[third_party-CLIProxyAPIPlus-internal-config] --> strings[strings]
     third_party_CLIProxyAPIPlus_internal_config[third_party-CLIProxyAPIPlus-internal-config] --> syscall[syscall]
     third_party_CLIProxyAPIPlus_internal_config[third_party-CLIProxyAPIPlus-internal-config] --> testing[testing]
@@ -30,6 +31,7 @@ Dependencies from other modules:
 - `fmt`
 - `json`
 - `os`
+- `registry`
 - `strings`
 - `syscall`
 - `testing`

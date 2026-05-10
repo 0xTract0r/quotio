@@ -274,13 +274,15 @@ struct ProviderQuotaData: Codable, Sendable {
     var isForbidden: Bool
     var planType: String?
     var tokenExpiresAt: Date?  // For Kiro: token expiry time
+    var statusMessage: String?
 
-    init(models: [ModelQuota] = [], lastUpdated: Date = Date(), isForbidden: Bool = false, planType: String? = nil, tokenExpiresAt: Date? = nil) {
+    init(models: [ModelQuota] = [], lastUpdated: Date = Date(), isForbidden: Bool = false, planType: String? = nil, tokenExpiresAt: Date? = nil, statusMessage: String? = nil) {
         self.models = models
         self.lastUpdated = lastUpdated
         self.isForbidden = isForbidden
         self.planType = planType
         self.tokenExpiresAt = tokenExpiresAt
+        self.statusMessage = statusMessage
     }
 
     /// Format token expiry time in user's local timezone

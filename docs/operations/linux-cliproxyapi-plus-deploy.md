@@ -175,7 +175,15 @@ curl -ksS -i -X POST https://10.1.1.201:18317/v0/management/api-call \
 
 ## 当前部署命令
 
-本次最终有效的部署命令：
+2026-04-30 起，远端 core 维护窗口优先使用默认 dry-run 的安全 helper。它会先生成本地 manifest，并在真正执行前列出 pre/post health check、current image rollback tag、非 auth runtime backup、底层部署命令、`X-CPA-*` 版本证明与 rollback 命令。
+
+先 dry-run：
+
+```bash
+./scripts/deploy-cliproxy-linux-safe.sh --dry-run
+```
+
+确认维护窗口后执行：
 
 ```bash
 MANAGEMENT_PASSWORD='<RAW_MANAGEMENT_PASSWORD>' \
@@ -189,14 +197,41 @@ BUILD_STRATEGY='local-load' \
 CONTAINER_DNS_SERVERS='1.1.1.1,8.8.8.8' \
 SERVER_PROXY_URL='http://Clash:hBnsF3B7@10.1.1.5:7890' \
 SERVER_TLS_ENABLE='1' \
-SERVER_TLS_CERT_FILE='/abs/path/to/server.crt' \
-SERVER_TLS_KEY_FILE='/abs/path/to/server.key' \
 SERVER_TLS_CURL_INSECURE='1' \
-./scripts/deploy-cliproxy-linux.sh
+./scripts/deploy-cliproxy-linux-safe.sh --execute
+```
+
+如果本机不应读取管理 key，可改用远端保留密钥模式。该模式不会把本机 `MANAGEMENT_PASSWORD` 写入部署包，也会保护远端已有 `runtime/secrets.env` 不被覆盖；`/v0/management/auth-files` 版本证明改由远端本机读取该文件后执行：
+
+```bash
+PRESERVE_REMOTE_MANAGEMENT_SECRET='1' \
+REMOTE_HOST='wisedata@10.1.1.201' \
+DEPLOY_DIR='/home/wisedata/deploy/cliproxyapi-plus' \
+API_PORT='18317' \
+BIND_HOST='10.1.1.201' \
+SERVER_HOST_IP='10.1.1.201' \
+QUOTIO_SOURCE_ROOT='<当前 worktree 绝对路径>' \
+BUILD_STRATEGY='local-load' \
+CONTAINER_DNS_SERVERS='1.1.1.1,8.8.8.8' \
+SERVER_TLS_ENABLE='1' \
+SERVER_TLS_CURL_INSECURE='1' \
+./scripts/deploy-cliproxy-linux-safe.sh --execute
+```
+
+如果执行失败或 post-deploy 验收失败，用本次 manifest 回滚：
+
+```bash
+./scripts/deploy-cliproxy-linux-safe.sh rollback \
+  --manifest build/remote-deploy-safety/<timestamp>/manifest.env \
+  --execute
 ```
 
 补充说明：
 
+- safe helper 默认 `SYNC_AUTH_DIR=0`，并拒绝同步 auth 目录；它的 runtime backup 不包含 `runtime/auth`，避免复制 refresh token
+- `PRESERVE_REMOTE_MANAGEMENT_SECRET=1` 只保留远端管理密钥文件，不会同步或改写 auth 目录
+- safe helper 会把 `CORE_BUILD_VERSION` / `CORE_BUILD_COMMIT` / `CORE_BUILD_DATE` 传入 Docker `VERSION` / `COMMIT` / `BUILD_DATE` build args；dry-run 会构建本地 version-proof artifact 校验 buildinfo 注入，执行态会断言 `/healthz`、`/management.html`、`/v0/management/auth-files` 都返回匹配 manifest 的 `X-CPA-VERSION` / `X-CPA-COMMIT` / `X-CPA-BUILD-DATE`
+- 底层 `scripts/deploy-cliproxy-linux.sh` 仍可作为实现入口，但生产维护窗口不要直接绕过 safe helper，除非已经手工准备同等 rollback tag、非 auth runtime backup 和版本证明
 - 如果未来服务器确实需要全局代理，再显式传：
 
 ```bash
@@ -419,7 +454,21 @@ ssh wisedata@10.1.1.201 'tail -f /home/wisedata/deploy/cliproxyapi-plus/runtime/
 
 ## 当前回滚基线
 
-本次部署后已准备：
+新的安全 helper 每次执行都会生成独立 rollback 基线：
+
+- 本地 manifest：`build/remote-deploy-safety/<timestamp>/manifest.env`
+- 回滚镜像 tag：manifest 中的 `rollback_image`
+- 非 auth runtime 备份：manifest 中的 `remote_backup_dir/runtime-non-auth.tgz`
+
+推荐回滚命令：
+
+```bash
+./scripts/deploy-cliproxy-linux-safe.sh rollback \
+  --manifest build/remote-deploy-safety/<timestamp>/manifest.env \
+  --execute
+```
+
+历史部署后曾准备：
 
 - 回滚镜像 tag：`cliproxyapi-plus:rollback-20260415T092232Z`
 - 运行目录备份：`/home/wisedata/deploy/cliproxyapi-plus/backups/runtime-20260415T092232Z.tgz`

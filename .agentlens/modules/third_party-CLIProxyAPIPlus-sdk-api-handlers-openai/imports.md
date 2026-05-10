@@ -6,6 +6,7 @@
 
 ```mermaid
 graph TD
+    third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> base64[base64]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> bytes[bytes]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> context[context]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> errors[errors]
@@ -15,7 +16,9 @@ graph TD
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> http[http]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> httptest[httptest]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> interfaces[interfaces]
+    third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> io[io]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> json[json]
+    third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> multipart[multipart]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> registry[registry]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> sjson[sjson]
     third_party_CLIProxyAPIPlus_sdk_api_handlers_openai[third_party-CLIProxyAPIPlus-sdk-api-handlers-openai] --> strconv[strconv]
@@ -39,6 +42,7 @@ Dependencies within this module:
 
 Dependencies from other modules:
 
+- `base64`
 - `bytes`
 - `context`
 - `errors`
@@ -48,7 +52,9 @@ Dependencies from other modules:
 - `http`
 - `httptest`
 - `interfaces`
+- `io`
 - `json`
+- `multipart`
 - `registry`
 - `sjson`
 - `strconv`

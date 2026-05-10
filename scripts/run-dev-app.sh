@@ -7,24 +7,15 @@ PROJECT_NAME="Quotio"
 SCHEME="${SCHEME:-Quotio}"
 CONFIGURATION="${CONFIGURATION:-Debug}"
 DERIVED_DATA_PATH="${PROJECT_DIR}/build/DerivedData-dev"
-EXPECTED_APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Quotio Dev.app"
-DEV_EXECUTABLE_PATTERN="/Quotio Dev.app/Contents/MacOS/Quotio Dev"
 
-if [[ ! -f "${PROJECT_DIR}/Config/Local.xcconfig" ]]; then
-    echo "缺少 Config/Local.xcconfig。先执行：cp Config/Local.xcconfig.example Config/Local.xcconfig" >&2
-    exit 1
-fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/dev-app-utils.sh"
+
+EXPECTED_APP_PATH="$(dev_app_path "${DERIVED_DATA_PATH}" "${CONFIGURATION}")"
+DEV_EXECUTABLE_PATTERN="/${DEV_PRODUCT_NAME}.app/Contents/MacOS/${DEV_PRODUCT_NAME}"
 
 echo "[1/3] Building ${SCHEME} (${CONFIGURATION}) to ${DERIVED_DATA_PATH}"
-xcodebuild \
-    -project "${PROJECT_DIR}/${PROJECT_NAME}.xcodeproj" \
-    -scheme "${SCHEME}" \
-    -configuration "${CONFIGURATION}" \
-    -derivedDataPath "${DERIVED_DATA_PATH}" \
-    build \
-    CODE_SIGN_IDENTITY="-" \
-    CODE_SIGNING_REQUIRED=NO \
-    CODE_SIGNING_ALLOWED=NO
+build_isolated_dev_app "${PROJECT_DIR}" "${SCHEME}" "${CONFIGURATION}" "${DERIVED_DATA_PATH}"
 
 APP_PATH=""
 if [[ -d "${EXPECTED_APP_PATH}" ]]; then
@@ -34,9 +25,11 @@ else
 fi
 
 if [[ -z "${APP_PATH}" || ! -d "${APP_PATH}" ]]; then
-    echo "未找到 Quotio Dev.app。预期路径：${EXPECTED_APP_PATH}" >&2
+    echo "未找到 ${DEV_PRODUCT_NAME}.app。预期路径：${EXPECTED_APP_PATH}" >&2
     exit 1
 fi
+
+validate_isolated_dev_app_bundle "${APP_PATH}"
 
 echo "[2/3] Restarting existing Quotio Dev if needed"
 pkill -f "${DEV_EXECUTABLE_PATTERN}" 2>/dev/null || true

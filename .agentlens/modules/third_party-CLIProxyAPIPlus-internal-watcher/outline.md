@@ -1,0 +1,81 @@
+# Outline
+
+[← Back to MODULE](MODULE.md) | [← Back to INDEX](../../INDEX.md)
+
+Symbol maps for 1 large files in this module.
+
+## third_party/CLIProxyAPIPlus/internal/watcher/watcher_test.go (1693 lines)
+
+| Line | Kind | Name | Visibility |
+| ---- | ---- | ---- | ---------- |
+| 25 | fn | TestApplyAuthExcludedModelsMeta_APIKey | pub |
+| 41 | fn | TestApplyAuthExcludedModelsMeta_OAuthProvider | pub |
+| 63 | fn | TestBuildAPIKeyClientsCounts | pub |
+| 82 | fn | TestNormalizeAuthStripsTemporalFields | pub |
+| 107 | fn | TestMatchProvider | pub |
+| 116 | fn | TestSnapshotCoreAuths_ConfigAndAuthFiles | pub |
+| 210 | fn | TestReloadConfigIfChanged_TriggersOnChangeAndSkipsUnchanged | pub |
+| 267 | fn | TestStartAndStopSuccess | pub |
+| 302 | fn | TestStartFailsWhenConfigMissing | pub |
+| 324 | fn | TestDispatchRuntimeAuthUpdateEnqueuesAndUpdatesState | pub |
+| 363 | fn | TestAddOrUpdateClientSkipsUnchanged | pub |
+| 390 | fn | TestAddOrUpdateClientTriggersReloadAndHash | pub |
+| 419 | fn | TestRemoveClientRemovesHash | pub |
+| 444 | fn | TestAuthFileEventsDoNotInvokeSnapshotCoreAuths | pub |
+| 475 | fn | TestAuthSliceToMap | pub |
+| 546 | fn | TestTriggerServerUpdateCancelsPendingTimerOnImmediate | pub |
+| 586 | fn | TestShouldDebounceRemove | pub |
+| 606 | fn | TestAuthFileUnchangedUsesHash | pub |
+| 636 | fn | TestAuthFileUnchangedEmptyAndMissing | pub |
+| 658 | fn | TestReloadClientsCachesAuthHashes | pub |
+| 678 | fn | TestReloadClientsLogsConfigDiffs | pub |
+| 697 | fn | TestReloadClientsHandlesNilConfig | pub |
+| 702 | fn | TestReloadClientsFiltersProvidersWithNilCurrentAuths | pub |
+| 714 | fn | TestSetAuthUpdateQueueNilResetsDispatch | pub |
+| 727 | fn | TestPersistAsyncEarlyReturns | pub |
+| 737 | struct | errorPersister | (private) |
+| 742 | fn | PersistConfig | pub |
+| 747 | fn | PersistAuthFiles | pub |
+| 752 | fn | TestPersistAsyncErrorPaths | pub |
+| 766 | fn | TestStopConfigReloadTimerSafeWhenNil | pub |
+| 776 | fn | TestHandleEventRemovesAuthFile | pub |
+| 808 | fn | TestDispatchAuthUpdatesFlushesQueue | pub |
+| 833 | fn | TestDispatchLoopExitsOnContextDoneWhileSending | pub |
+| 860 | fn | TestProcessEventsHandlesEventErrorAndChannelClose | pub |
+| 893 | fn | TestProcessEventsReturnsWhenErrorsChannelClosed | pub |
+| 919 | fn | TestHandleEventIgnoresUnrelatedFiles | pub |
+| 945 | fn | TestHandleEventConfigChangeSchedulesReload | pub |
+| 973 | fn | TestHandleEventAuthWriteTriggersUpdate | pub |
+| 1003 | fn | TestHandleEventRemoveDebounceSkips | pub |
+| 1033 | fn | TestHandleEventAtomicReplaceUnchangedSkips | pub |
+| 1066 | fn | TestHandleEventAtomicReplaceChangedTriggersUpdate | pub |
+| 1100 | fn | TestHandleEventRemoveUnknownFileIgnored | pub |
+| 1127 | fn | TestHandleEventRemoveKnownFileDeletes | pub |
+| 1158 | fn | TestNormalizeAuthPathAndDebounceCleanup | pub |
+| 1185 | fn | TestRefreshAuthStateDispatchesRuntimeAuths | pub |
+| 1214 | fn | TestAddOrUpdateClientEdgeCases | pub |
+| 1245 | fn | TestLoadFileClientsWalkError | pub |
+| 1266 | fn | TestReloadConfigIfChangedHandlesMissingAndEmpty | pub |
+| 1287 | fn | TestReloadConfigUsesMirroredAuthDir | pub |
+| 1318 | fn | TestReloadConfigFiltersAffectedOAuthProviders | pub |
+| 1384 | fn | TestReloadConfigTriggersCallbackForMaxRetryCredentialsChange | pub |
+| 1445 | fn | TestStartFailsWhenAuthDirMissing | pub |
+| 1468 | fn | TestDispatchRuntimeAuthUpdateReturnsFalseWithoutQueue | pub |
+| 1478 | fn | TestNormalizeAuthNil | pub |
+| 1485 | struct | stubStore | (private) |
+| 1493 | fn | List | pub |
+| 1494 | fn | Save | pub |
+| 1497 | fn | Delete | pub |
+| 1498 | fn | PersistConfig | pub |
+| 1502 | fn | PersistAuthFiles | pub |
+| 1508 | fn | AuthDir | pub |
+| 1510 | fn | TestNewWatcherDetectsPersisterAndAuthDir | pub |
+| 1529 | fn | TestPersistConfigAndAuthAsyncInvokePersister | pub |
+| 1553 | fn | TestScheduleConfigReloadDebounces | pub |
+| 1582 | fn | TestPrepareAuthUpdatesLockedForceAndDelete | pub |
+| 1606 | fn | TestAuthEqualIgnoresTemporalFields | pub |
+| 1615 | fn | TestDispatchLoopExitsWhenQueueNilAndContextCanceled | pub |
+| 1643 | fn | TestReloadClientsFiltersOAuthProvidersWithoutRescan | pub |
+| 1667 | fn | TestScheduleProcessEventsStopsOnContextDone | pub |
+| 1691 | fn | hexString | (private) |
+

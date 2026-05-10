@@ -8,13 +8,13 @@
 
 | File | Lines | Large |
 | ---- | ----- | ----- |
-| `Quotio/Views/Components/AccountRow.swift` | 732 | 📊 |
+| `Quotio/Views/Components/AccountRow.swift` | 780 | 📊 |
 | `Quotio/Views/Components/AccountsEmptyState.swift` | 80 |  |
 | `Quotio/Views/Components/AddProviderPopover.swift` | 158 |  |
 | `Quotio/Views/Components/AgentCard.swift` | 147 |  |
 | `Quotio/Views/Components/AgentConfigSheet.swift` | 989 | 📊 |
 | `Quotio/Views/Components/BindIdentityPackageSheet.swift` | 372 |  |
-| `Quotio/Views/Components/CurrentModeBadge.swift` | 122 |  |
+| `Quotio/Views/Components/CurrentModeBadge.swift` | 130 |  |
 | `Quotio/Views/Components/CustomProviderSheet.swift` | 500 |  |
 | `Quotio/Views/Components/ExperimentalBadge.swift` | 40 |  |
 | `Quotio/Views/Components/FallbackSheets.swift` | 362 |  |

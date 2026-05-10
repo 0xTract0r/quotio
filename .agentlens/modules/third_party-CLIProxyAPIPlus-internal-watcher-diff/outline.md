@@ -4,7 +4,7 @@
 
 Symbol maps for 1 large files in this module.
 
-## third_party/CLIProxyAPIPlus/internal/watcher/diff/config_diff_test.go (541 lines)
+## third_party/CLIProxyAPIPlus/internal/watcher/diff/config_diff_test.go (548 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
@@ -15,9 +15,9 @@ Symbol maps for 1 large files in this module.
 | 181 | fn | TestBuildConfigChangeDetails_NilSafe | pub |
 | 190 | fn | TestBuildConfigChangeDetails_SecretsAndCounts | pub |
 | 220 | fn | TestBuildConfigChangeDetails_FlagsAndKeys | pub |
-| 309 | fn | TestBuildConfigChangeDetails_AllBranches | pub |
-| 471 | fn | TestFormatProxyURL | pub |
-| 495 | fn | TestBuildConfigChangeDetails_SecretAndUpstreamUpdates | pub |
-| 518 | fn | TestBuildConfigChangeDetails_CountBranches | pub |
-| 536 | fn | TestTrimStrings | pub |
+| 312 | fn | TestBuildConfigChangeDetails_AllBranches | pub |
+| 478 | fn | TestFormatProxyURL | pub |
+| 502 | fn | TestBuildConfigChangeDetails_SecretAndUpstreamUpdates | pub |
+| 525 | fn | TestBuildConfigChangeDetails_CountBranches | pub |
+| 543 | fn | TestTrimStrings | pub |
 

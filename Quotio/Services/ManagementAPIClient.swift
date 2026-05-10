@@ -209,6 +209,17 @@ actor ManagementAPIClient {
         let response = try JSONDecoder().decode(AuthFilesResponse.self, from: data)
         return response.files
     }
+
+    func fetchAuthFileAccountSettings(name: String) async throws -> AuthFileAccountSettings {
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        let data = try await makeRequest("/auth-files/account-settings?name=\(encoded)")
+
+        if let wrappedResponse = try? JSONDecoder().decode(AuthFileAccountSettingsResponse.self, from: data) {
+            return wrappedResponse.accountSettings
+        }
+
+        return try JSONDecoder().decode(AuthFileAccountSettings.self, from: data)
+    }
     
     func fetchAuthFileModels(name: String) async throws -> [AuthFileModelInfo] {
         let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
@@ -704,6 +715,14 @@ struct LogsResponse: Codable, Sendable {
 
 struct AuthFileModelsResponse: Codable, Sendable {
     let models: [AuthFileModelInfo]
+}
+
+private struct AuthFileAccountSettingsResponse: Codable, Sendable {
+    let accountSettings: AuthFileAccountSettings
+
+    enum CodingKeys: String, CodingKey {
+        case accountSettings = "account_settings"
+    }
 }
 
 struct AuthFileModelInfo: Codable, Sendable {

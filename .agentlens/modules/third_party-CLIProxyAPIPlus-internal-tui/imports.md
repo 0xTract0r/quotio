@@ -19,6 +19,7 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_tui[third_party-CLIProxyAPIPlus-internal-tui] --> strconv[strconv]
     third_party_CLIProxyAPIPlus_internal_tui[third_party-CLIProxyAPIPlus-internal-tui] --> strings[strings]
     third_party_CLIProxyAPIPlus_internal_tui[third_party-CLIProxyAPIPlus-internal-tui] --> sync[sync]
+    third_party_CLIProxyAPIPlus_internal_tui[third_party-CLIProxyAPIPlus-internal-tui] --> testing[testing]
     third_party_CLIProxyAPIPlus_internal_tui[third_party-CLIProxyAPIPlus-internal-tui] --> textinput[textinput]
     third_party_CLIProxyAPIPlus_internal_tui[third_party-CLIProxyAPIPlus-internal-tui] --> time[time]
     third_party_CLIProxyAPIPlus_internal_tui[third_party-CLIProxyAPIPlus-internal-tui] --> url[url]
@@ -42,6 +43,7 @@ Dependencies from other modules:
 - `strconv`
 - `strings`
 - `sync`
+- `testing`
 - `textinput`
 - `time`
 - `url`

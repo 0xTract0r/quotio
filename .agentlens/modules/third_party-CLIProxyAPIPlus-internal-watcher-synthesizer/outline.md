@@ -25,7 +25,7 @@ Symbol maps for 2 large files in this module.
 | 545 | fn | TestConfigSynthesizer_IDStability | pub |
 | 574 | fn | TestConfigSynthesizer_AllProviders | pub |
 
-## third_party/CLIProxyAPIPlus/internal/watcher/synthesizer/file_test.go (943 lines)
+## third_party/CLIProxyAPIPlus/internal/watcher/synthesizer/file_test.go (960 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
@@ -34,23 +34,23 @@ Symbol maps for 2 large files in this module.
 | 33 | fn | TestFileSynthesizer_Synthesize_EmptyAuthDir | pub |
 | 50 | fn | TestFileSynthesizer_Synthesize_NonExistentDir | pub |
 | 67 | fn | TestFileSynthesizer_Synthesize_ValidAuthFile | pub |
-| 124 | fn | TestFileSynthesizer_Synthesize_GeminiProviderMapping | pub |
-| 159 | fn | TestFileSynthesizer_Synthesize_SkipsInvalidFiles | pub |
-| 192 | fn | TestFileSynthesizer_Synthesize_SkipsDirectories | pub |
-| 223 | fn | TestFileSynthesizer_Synthesize_RelativeID | pub |
-| 255 | fn | TestFileSynthesizer_Synthesize_PrefixValidation | pub |
-| 300 | fn | TestFileSynthesizer_Synthesize_PriorityParsing | pub |
-| 372 | fn | TestFileSynthesizer_Synthesize_OAuthExcludedModelsMerged | pub |
-| 411 | fn | TestSynthesizeGeminiVirtualAuths_NilInputs | pub |
-| 425 | fn | TestSynthesizeGeminiVirtualAuths_SingleProject | pub |
-| 444 | fn | TestSynthesizeGeminiVirtualAuths_MultiProject | pub |
-| 521 | fn | TestSynthesizeGeminiVirtualAuths_EmptyProviderAndLabel | pub |
-| 552 | fn | TestSynthesizeGeminiVirtualAuths_NilPrimaryAttributes | pub |
-| 580 | fn | TestSplitGeminiProjectIDs | pub |
-| 639 | fn | TestFileSynthesizer_Synthesize_MultiProjectGemini | pub |
-| 699 | fn | TestBuildGeminiVirtualID | pub |
-| 748 | fn | TestSynthesizeGeminiVirtualAuths_NotePropagated | pub |
-| 783 | fn | TestSynthesizeGeminiVirtualAuths_NoteAbsentWhenEmpty | pub |
-| 813 | fn | TestFileSynthesizer_Synthesize_NoteParsing | pub |
-| 895 | fn | TestFileSynthesizer_Synthesize_MultiProjectGeminiWithNote | pub |
+| 134 | fn | TestFileSynthesizer_Synthesize_GeminiProviderMapping | pub |
+| 169 | fn | TestFileSynthesizer_Synthesize_SkipsInvalidFiles | pub |
+| 202 | fn | TestFileSynthesizer_Synthesize_SkipsDirectories | pub |
+| 233 | fn | TestFileSynthesizer_Synthesize_RelativeID | pub |
+| 268 | fn | TestFileSynthesizer_Synthesize_PrefixValidation | pub |
+| 313 | fn | TestFileSynthesizer_Synthesize_PriorityParsing | pub |
+| 385 | fn | TestFileSynthesizer_Synthesize_OAuthExcludedModelsMerged | pub |
+| 424 | fn | TestSynthesizeGeminiVirtualAuths_NilInputs | pub |
+| 438 | fn | TestSynthesizeGeminiVirtualAuths_SingleProject | pub |
+| 457 | fn | TestSynthesizeGeminiVirtualAuths_MultiProject | pub |
+| 538 | fn | TestSynthesizeGeminiVirtualAuths_EmptyProviderAndLabel | pub |
+| 569 | fn | TestSynthesizeGeminiVirtualAuths_NilPrimaryAttributes | pub |
+| 597 | fn | TestSplitGeminiProjectIDs | pub |
+| 656 | fn | TestFileSynthesizer_Synthesize_MultiProjectGemini | pub |
+| 716 | fn | TestBuildGeminiVirtualID | pub |
+| 765 | fn | TestSynthesizeGeminiVirtualAuths_NotePropagated | pub |
+| 800 | fn | TestSynthesizeGeminiVirtualAuths_NoteAbsentWhenEmpty | pub |
+| 830 | fn | TestFileSynthesizer_Synthesize_NoteParsing | pub |
+| 912 | fn | TestFileSynthesizer_Synthesize_MultiProjectGeminiWithNote | pub |
 

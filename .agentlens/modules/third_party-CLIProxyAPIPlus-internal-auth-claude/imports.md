@@ -18,12 +18,12 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> misc[misc]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> net[net]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> os[os]
-    third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> proxy[proxy]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> proxyutil[proxyutil]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> rand[rand]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> sha256[sha256]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> strings[strings]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> sync[sync]
+    third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> testing[testing]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> time[time]
     third_party_CLIProxyAPIPlus_internal_auth_claude[third_party-CLIProxyAPIPlus-internal-auth-claude] --> url[url]
 ```
@@ -33,6 +33,7 @@ graph TD
 Dependencies within this module:
 
 - `errors`
+- `proxy`
 
 ## External Dependencies
 
@@ -50,12 +51,12 @@ Dependencies from other modules:
 - `misc`
 - `net`
 - `os`
-- `proxy`
 - `proxyutil`
 - `rand`
 - `sha256`
 - `strings`
 - `sync`
+- `testing`
 - `time`
 - `url`
 

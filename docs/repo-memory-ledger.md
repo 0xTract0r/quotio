@@ -1,6 +1,6 @@
 # Repo Memory Ledger
 
-最后更新：2026-04-24
+最后更新：2026-04-25
 
 这份文档只记录仓库级、长期有效、值得反复记住的事实和边界。
 
@@ -57,9 +57,17 @@ proxy/core 相关实验默认先走 dev runtime 或独立 worktree。
 
 对远端 core、Docker、auth mount、上游代理、远程部署做判断时，最终验收面不是本机猜测，而是 `10.1.1.201` 上的真实运行态与对应操作文档。
 
+远端 core 部署不要直接绕过安全入口：先用 `scripts/deploy-cliproxy-linux-safe.sh --dry-run` 生成 manifest；进入维护窗口后再 `--execute`。这条入口默认 `SYNC_AUTH_DIR=0`，会准备 current image rollback tag、非 auth runtime backup，并把 core 的 `VERSION` / `COMMIT` / `BUILD_DATE` build args 注入 Docker 构建；dry-run 要先证明本地 artifact 已注入 buildinfo，部署后必须用 `/healthz`、`/management.html` 和 management API 响应头 `X-CPA-VERSION` / `X-CPA-COMMIT` / `X-CPA-BUILD-DATE` 证明运行二进制版本。
+
 ### 6. Codex auth 在不同运行面默认是独立副本
 
 本地正式、本地 dev、远端 core 的 Codex OAuth auth 默认不是同一个文件；同一账号被多个运行面长期并行 refresh，会触发 `invalid_grant` 或 `refresh_token_reused` 一类轮换冲突。
+
+### 6.1 Claude OAuth 重认证要看真实 token exchange 和 provider 请求
+
+远端 Claude 账号重认证不能只看 management UI 显示“成功”或“等待中”。最小闭环证据必须同时包含：远端日志显示 callback 被消费、token exchange completed、目标 auth 文件更新时间变化、management `api-call` 对 Anthropic `/v1/messages` 返回 `200`，以及本地 `18317` relay 的真实 Claude 请求返回成功。
+
+`connection not allowed by ruleset` 这类错误发生在 SOCKS CONNECT 阶段，含义是账号代理链路或上游代理规则拒绝了到 `api.anthropic.com:443` 的连接；它不是 Anthropic OAuth 返回、不是 token 保存失败，也不能直接归因为 TLS 指纹。T076 的真实成功路径是第一次 Claude OAuth token exchange 被 SOCKS ruleset 拒绝，随后同一账号路径短重试成功；日志没有出现标准 OAuth transport fallback，因此不能把 fallback 说成真实发生。
 
 ### 7. 模型同步是分层问题，不是单点问题
 
@@ -93,6 +101,64 @@ proxy/core 相关实验默认先走 dev runtime 或独立 worktree。
 - 这两种远端模式下，Providers、API Keys、Logs、quota / usage、远端 routing / retry / 上游代理配置都以远端 core 为真源，不应回退成“本地宿主数据”
 - `remote-core` / `remote-relay` / `monitor` 启动时不应再预备本地 core runtime 或写 `local-management-key`
 - 远端模式当前不暴露本地专属 `Identity Packages`，避免把宿主侧 phase-1 能力误当成远端 runtime 真源
+- 对“远端 management key”的 dev-only 例外已经单独收口：显式设置 `QUOTIO_REMOTE_MANAGEMENT_KEY_STORE=file` 后，Quotio 只把远端连接 key 落到本地 JSON，并继续把本地 core 的 `local-management-key` / `config.yaml remote-management.secret-key` 留在原链路；默认关闭，不改变正式版默认行为
+
+### 11. 账号设置正在替代远端 `Identity Package` 主流程
+
+- 对远端账号来说，“一个账号就是一个运行身份”；结构化真源在 core 的 `account_settings`，不是 Quotio 本地 `Identity Package`
+- 远端账号配置主入口在 management center；Quotio 远端模式负责摘要、状态、日志、用量和快速操作，不再承担远端身份真源
+- 这轮真实生效的账号字段是 `proxy_url`、`note`、`disabled`、`managed_headers`、`extra_headers`
+- `refresh_enabled` 是账号级安全开关，默认 `true`；设为 `false` 时 core 不调度自动 refresh，manual status refresh 也只返回 warning，不会调用 provider refresh flow。它主要服务 access-token-only 远端测试 / 受控迁移，不能被写成长期明文 token 方案
+- `managed_headers` 由 core 按 provider/runtime 策略自动生成并只读返回，重点覆盖 Claude / Codex 这类版本敏感头；用户长期可编辑的只有 `extra_headers`
+- Management Center 里自动生成的 managed 内容不能渲染成 textarea/input：`managed_headers` 应显示为“运行时实际应用”的只读 header 表格，`managed_header_state` 应显示为“核心自动升级策略状态”的摘要/字段类别/历史；只有 `extra_headers` 是用户可编辑 header 文本框
+- `managed_header_state.policy_version` 里的 `claude-managed/v2` / `codex-managed/v2` 是 core 内部 managed-header 策略 ID，不是 Claude/Codex 官方客户端版本；UI 主显示应拆成“托管策略 / 策略版本 / 自动更新规则”，内部 ID 只能作为调试信息
+- `managed_headers` 的真正要求不是“对外暴露几个字段”，而是 core policy 必须跟随 provider/runtime 新版本持续自动更新；如果 header 里声称的客户端版本/能力与真实运行能力失配，就应视为该方向未完成
+- 截至 `2026-05-09` 的修正规则：联网只能自动更新有真实来源证明的字段。Codex 默认 `codex_proxy_compatible_v1` 会优先从 allowlist 的 `icebear0828/codex-proxy` 公共配置同步 Codex Desktop-like coherent bundle；Claude Code 的 npm package 版本只能作为 `claude-cli/<version>` UA 来源，不能凭 npm 版本推导 `X-Stainless-Package-Version` / `X-Stainless-Runtime-Version`、OS/arch、TLS ClientHello 或 HTTP/2 指纹
+- 对外 `managed_header_state.current` 必须披露 `source` / `source_url` / `checked_at` / `completeness`：`community:codex-proxy` + `online-coherent-bundle` 表示已从 allowlist codex-proxy 公共配置同步成一组自洽 bundle；`online:npm` + `partial-cli-version-only` 表示只校验/升级 CLI UA 版本；`observed:first_party` 表示真实客户端请求观察；`default` 表示默认策略且未联网校验
+- T058 方向纠偏：Codex 不再停留在“参考一下 `codex-proxy`”。核心默认 Codex runtime identity 已切到 `codex_proxy_compatible_v1`，managed headers 采用 `icebear0828/codex-proxy` 的 Codex Desktop-like `Originator` / UA / Chromium client hints / fetch headers 这组社区实现方案；当前 Go 实现吸收 native transport 分层、per-proxy/per-account client cache、HTTP/1.1 forcing 开关和 header bundle，但不复制 cookie replay / token-cookie 采集 / anti-detection 叙事
+- `codex_rustls_native_v1` 作为显式 profile 名保留给后续 Rust sidecar/addon；当前没有 Rust sidecar 时，Codex runtime 是 Go-compatible approximation，而不是 Rust wire-level clone
+- 当前对外 `managed_headers` 返回仍只是最小可观测摘要，不应被误读成完整长期 contract；版本源、升级触发和回归验证必须作为策略边界一起展示
+- 截至 `2026-04-29` 的并行调研结论：主流官方/开源实现更常见的是“按字段分层 merge + 只 patch 会变的版本标记”，而不是维护一整套 `managed_headers` / fingerprint 大 blob 的历史版本库
+- 对 Claude / Codex 这类版本敏感 provider，更稳的字段 owner 切法至少包括：
+  - `versioned_capabilities`：CLI/SDK version、`X-Stainless-Package-Version`、Claude beta/date token 等允许自动升级的字段
+  - `runtime_fingerprint`：OS/arch/runtime/terminal 等只应随真实运行环境变化的字段
+  - `stable_identity`：`Originator`、`X-App`、账号/工作区身份位
+- 自动更新默认只允许触碰 `versioned_capabilities`；`runtime_fingerprint` 与 `stable_identity` 不应在普通版本升级时一起被重写
+- 历史版本必须 append-only：升级前后的 `versioned_capabilities`、changed fields、source/source_url、reason 都要保留；不要只保留一个最新快照
+- 当前实现已把这条规则最小落到 core：
+  - `account_settings.managed_header_state` 记录当前 projection 与 append-only history
+  - Claude 继续用现有 stabilized device profile 输出 managed headers；联网 registry 版本只升级 `claude-cli/<version>` 这类版本标记，Stainless package/runtime 与 OS/arch 保持既有基线或真实观察值
+  - Codex 默认 Desktop-like bundle 现在会联网拉取 allowlist 的 `codex-proxy` `config/default.yaml` 与 `config/fingerprint.yaml`，只在 `originator` / `app_version` 等关键字段形成 coherent bundle 时升级 `User-Agent` / `Version` / Chromium client hints / fetch headers；如果 codex-proxy 来源不可用，则保留本地静态 community fallback，不回退到 npm CLI 版本混搭
+  - `managed_header_state` 只有在 projection 真变化时才追加 history，避免把时间戳刷新误记成版本演进
+  - T060 已完成远端闭环：safe deploy manifest `build/remote-deploy-safety/20260509T083141Z/manifest.env`；远端 3 个 Codex 账号均返回 `completeness=online-coherent-bundle` / `source=community:codex-proxy` / `codex_proxy_compatible_v1`，Claude 返回 `completeness=partial-cli-version-only` / `source=online:npm` / `claude_reqwest_rustls_compatible_v1`；controlled echo runtime probe 证明托管 header policy/source/version 已进入 core-mediated 账号运行证据，但仍不是 provider 官方 attestation
+- `extra_headers` 若与 managed / protocol-reserved headers 冲突，必须由 core API 拒绝，而不是默默覆盖
+- Management Center `/quota` 页面现在是远端配额观测主入口之一：页面挂载期间默认启用自动刷新，默认间隔 1 分钟，并显示上次刷新时间；实现上只刷新当前可见/当前分页的账号配额，避免打开页面后无界地批量打 provider
+- Quotio 远端模式的配额自动刷新不能依赖 `NSApplication.shared.isActive`。菜单栏常驻/窗口隐藏时 app 可能不是 active，但用户配置的 1 分钟刷新仍应执行；否则 menu bar 会持续显示几分钟前的旧数据
+- `transport_profile` / `tls_profile` 当前要分开讲：
+  - `transport_profile` 已有真实运行态：Claude 空配置现在生成 `claude_reqwest_rustls_compatible_v1`，Gemini 空配置仍生成 CLI-native 账号运行身份；Codex 空配置现在生成 `codex_proxy_compatible_v1`，把 Codex-Proxy-like Go transport、HTTP client cache、连接池、代理 transport 和 WebSocket session pinning 提升到账号级隔离；隔离键至少包含真实 provider、auth/account、base URL host、effective proxy、profile token
+  - `tls_profile` 现在有两层：Claude 默认是 `claude_reqwest_rustls_compatible_v1` 的 Go-compatible reqwest/rustls CLI 方案，Gemini 默认 CLI-native account isolation 自动生效；Codex 默认是 `codex_proxy_compatible_v1` 的 Go-compatible TLS/transport approximation；Claude 的 Chrome-like uTLS ClientHello preset 仍必须显式 opt-in，`provider-default` / 空配置不自动映射成 Chrome-like
+  - Claude 当前默认 runtime profile 是 `claude_reqwest_rustls_compatible_v1`；`claude_utls_chrome_133`、旧 `claude_chrome_like_mac_v3` / `chrome_133` 只保留为高级显式 opt-in alias，不再作为推荐默认方案或官方 Claude Code 指纹名展示
+  - Claude 不应直接沿用 Codex TLS 指纹值。`anthropics/claude-code`、`ultraworkers/claw-code`、`777genius/claude-code-source-code` 与 Claude proxy 项目可借鉴 Anthropic SDK client、base URL、proxy、CA/mTLS、应用层 headers 与网络边界；当前没有发现可像 `codex-proxy` 一样直接搬入 Claude Code native TLS addon 的同级项目，但 `ultraworkers/claw-code` 的 Rust `reqwest` + `rustls-tls` 客户端/proxy model 可作为 Claude CLI 默认 profile 来源
+  - 当前 Claude MVP 已改为 Claude 专属 `claude_reqwest_rustls_compatible_v1`：参考 `ultraworkers/claw-code` 的 `reqwest` + `rustls-tls` 客户端/代理模型并在 Go runtime 中近似执行；Chrome-like uTLS 仅保留为高级显式 opt-in，不能把 Codex Desktop 指纹改名套到 Claude
+  - `2026-05-08` T052 远端复验曾返回真实 `/v1/messages?beta=true` `401 authentication_error`；这只能说明远端账号凭据失效，不能算真实 Claude 验证完成。T053 已纠偏：只从本地当前 Claude auth 复制 access credential 到内存，移除/不上传 refresh/id credential，保留远端 proxy / managed history / transport profile 后上传到同名远端账号；复跑真实远端 core `/v1/messages?beta=true` 返回 `200`、model `claude-haiku-4-5-20251001`、输出 `OK.`。
+  - T053 同时复跑 controlled echo：真实远端 Claude 账号仍显式配置旧 alias，但 runtime 规范化为 `claude_utls_chrome_133`；controlled echo 返回 JA3 / JA4 / HTTP/2 字段且 `authorization_sent=false`。Chrome-like TLS 仍只能说是历史高级 opt-in 的浏览器式 ClientHello preset，不能说成 Claude Code CLI 完整指纹；新默认应使用 `claude_reqwest_rustls_compatible_v1`。
+  - T058 语义更新：核心现在会自动生成账号级 runtime identity；Claude 默认 `claude_reqwest_rustls_compatible_v1`，Codex 默认 `codex_proxy_compatible_v1`，Gemini 仍默认 CLI-native。用户不需要手工生成 TLS 身份。每份 auth/account 默认隔离 runtime HTTP client / 连接池 / 代理 transport；如果多个账号都显式选择同一个 Chrome-like preset，它们的 TLS 形态仍相同，只是连接池和账号运行态隔离。
+  - T056 纠偏：`runtime_identity_state` 已持久化进账号设置，由 core 自动生成和维护，management API/UI 只读展示。它包含 `identity_id`、provider policy、source、revision、created/updated、seed/auth/account/proxy hash、profile IDs 和 history；同账号重复读取保持稳定，不同 auth/account 生成不同身份，profile/source 变化才追加历史。它仍不保存明文 token / proxy credential，也不宣称 provider-edge TLS parity。
+  - T057 口径：`provider_edge_parity_score` 是项目定义的 90 分 readiness gate，不是官方 provider-edge attestation。它把“社区最佳实践驱动的 CLI TLS 指纹策略”拆成账号 runtime identity、managed headers、runtime transport/TLS profile、controlled echo TLS/HTTP2 字段、proxy/runtime path、安全边界等可审计组件；`score >= 90` 只能说满足本项目当前 controlled/core-mediated 近似标准，不能说 OpenAI / Anthropic / Google 官方 TLS 指纹已经完全一致。
+  - T058 Codex 已从 `codex_cli_native_v1` 推进到 `codex_proxy_compatible_v1` 默认路径：headers 和 Go transport 行为向 `codex-proxy` 对齐；剩余边界是 Rust `reqwest/rustls` wire-level clone 尚未搬入，后续需 Rust sidecar/addon 或等价实现
+
+### 12. 本机 `local-load` deploy 若报 Docker `_ping 500`，先查 `vpnkitCIDR` 与 VPN 路由冲突
+
+- 在这台开发机上，`BUILD_STRATEGY=local-load` 一度持续失败，表现为：
+  - `docker version` / `docker info` 卡住或返回 `_ping 500`
+  - Docker Desktop 日志反复出现 `still dialing 192.168.65.7:2375 ... no route to host`
+- 这不是仓库代码回归；根因是 Docker Desktop 的默认 `vpnkitCIDR=192.168.65.0/24` 与当前 VPN 路由冲突，`route -n get 192.168.65.7` 会落到 `utun`
+- 当前已验证可行的最小修复：
+  - 先备份 `~/Library/Group Containers/group.com.docker/settings-store.json`
+  - 先备份 `~/Library/Group Containers/group.com.docker/settings.json`
+  - 把两份配置里的 `vpnkitCIDR` 从 `192.168.65.0/24` 改到未冲突网段（当前验证值：`172.31.255.0/24`）
+  - 重启 Docker Desktop，再复验 `docker version`
+- 这条记忆的用途是避免再次把“本机 Docker Desktop 内部网段冲突”误判成远端 deploy 脚本或 core 代码问题
 
 ## 收敛补充规则
 

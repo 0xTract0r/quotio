@@ -4,30 +4,32 @@
 
 Symbol maps for 2 large files in this module.
 
-## third_party/CLIProxyAPIPlus/internal/registry/model_definitions.go (863 lines)
+## third_party/CLIProxyAPIPlus/internal/registry/model_definitions.go (920 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
-| 10 | struct | staticModelsJSON | (private) |
-| 27 | fn | GetClaudeModels | pub |
-| 32 | fn | GetGeminiModels | pub |
-| 37 | fn | GetGeminiVertexModels | pub |
-| 42 | fn | GetGeminiCLIModels | pub |
-| 47 | fn | GetAIStudioModels | pub |
-| 52 | fn | GetCodexFreeModels | pub |
-| 57 | fn | GetCodexTeamModels | pub |
-| 62 | fn | GetCodexPlusModels | pub |
-| 67 | fn | GetCodexProModels | pub |
-| 72 | fn | GetQwenModels | pub |
-| 77 | fn | GetIFlowModels | pub |
-| 82 | fn | GetKimiModels | pub |
-| 87 | fn | GetAntigravityModels | pub |
-| 92 | fn | cloneModelInfos | (private) |
-| 120 | fn | GetStaticModelDefinitionsByChannel | pub |
-| 158 | fn | LookupStaticModelInfo | pub |
-| 193 | fn | GetGitHubCopilotModels | pub |
-| 523 | fn | GetKiroModels | pub |
-| 805 | fn | GetAmazonQModels | pub |
+| 9 | const | codexBuiltinImageModelID | (private) |
+| 12 | struct | staticModelsJSON | (private) |
+| 29 | fn | GetClaudeModels | pub |
+| 34 | fn | GetGeminiModels | pub |
+| 39 | fn | GetGeminiVertexModels | pub |
+| 44 | fn | GetGeminiCLIModels | pub |
+| 49 | fn | GetAIStudioModels | pub |
+| 54 | fn | GetCodexFreeModels | pub |
+| 59 | fn | GetCodexTeamModels | pub |
+| 64 | fn | GetCodexPlusModels | pub |
+| 69 | fn | GetCodexProModels | pub |
+| 74 | fn | GetKimiModels | pub |
+| 79 | fn | GetAntigravityModels | pub |
+| 86 | fn | WithCodexBuiltins | pub |
+| 90 | fn | codexBuiltinImageModelInfo | (private) |
+| 102 | fn | upsertModelInfos | (private) |
+| 149 | fn | cloneModelInfos | (private) |
+| 177 | fn | GetStaticModelDefinitionsByChannel | pub |
+| 215 | fn | LookupStaticModelInfo | pub |
+| 250 | fn | GetGitHubCopilotModels | pub |
+| 580 | fn | GetKiroModels | pub |
+| 862 | fn | GetAmazonQModels | pub |
 
 ## third_party/CLIProxyAPIPlus/internal/registry/model_registry.go (1336 lines)
 

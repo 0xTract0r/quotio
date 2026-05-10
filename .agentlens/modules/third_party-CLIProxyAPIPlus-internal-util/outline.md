@@ -4,7 +4,7 @@
 
 Symbol maps for 2 large files in this module.
 
-## third_party/CLIProxyAPIPlus/internal/util/gemini_schema.go (785 lines)
+## third_party/CLIProxyAPIPlus/internal/util/gemini_schema.go (803 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
@@ -14,41 +14,41 @@ Symbol maps for 2 large files in this module.
 | 32 | fn | cleanJSONSchema | (private) |
 | 63 | fn | removeKeywords | (private) |
 | 82 | fn | removePlaceholderFields | (private) |
-| 147 | fn | convertRefsToHints | (private) |
-| 171 | fn | convertConstToEnum | (private) |
-| 187 | fn | convertEnumValuesToStrings | (private) |
-| 208 | fn | addEnumHints | (private) |
-| 228 | fn | addAdditionalPropertiesHints | (private) |
-| 243 | fn | moveConstraintsToDescription | (private) |
-| 261 | fn | mergeAllOf | (private) |
-| 296 | fn | flattenAnyOfOneOf | (private) |
-| 329 | fn | selectBest | (private) |
-| 356 | fn | flattenTypeArrays | (private) |
-| 429 | fn | removeUnsupportedKeywords | (private) |
-| 457 | fn | removeExtensionFields | (private) |
-| 471 | fn | walkForExtensions | (private) |
-| 498 | fn | cleanupRequiredFields | (private) |
-| 530 | fn | addEmptySchemaPlaceholder | (private) |
-| 593 | fn | findPaths | (private) |
-| 599 | fn | findPathsByFields | (private) |
-| 609 | fn | walkForFields | (private) |
-| 635 | fn | sortByDepth | (private) |
-| 639 | fn | trimSuffix | (private) |
-| 646 | fn | joinPath | (private) |
-| 653 | fn | setRawAt | (private) |
-| 661 | fn | isPropertyDefinition | (private) |
-| 665 | fn | descriptionPath | (private) |
-| 672 | fn | appendHint | (private) |
-| 685 | fn | appendHintRaw | (private) |
-| 694 | fn | getStrings | (private) |
-| 704 | fn | contains | (private) |
-| 713 | fn | orDefault | (private) |
-| 720 | fn | escapeGJSONPathKey | (private) |
-| 727 | fn | unescapeGJSONPathKey | (private) |
-| 744 | fn | splitGJSONPath | (private) |
-| 772 | fn | mergeDescriptionRaw | (private) |
+| 149 | fn | convertRefsToHints | (private) |
+| 174 | fn | convertConstToEnum | (private) |
+| 191 | fn | convertEnumValuesToStrings | (private) |
+| 214 | fn | addEnumHints | (private) |
+| 234 | fn | addAdditionalPropertiesHints | (private) |
+| 249 | fn | moveConstraintsToDescription | (private) |
+| 267 | fn | mergeAllOf | (private) |
+| 304 | fn | flattenAnyOfOneOf | (private) |
+| 337 | fn | selectBest | (private) |
+| 364 | fn | flattenTypeArrays | (private) |
+| 439 | fn | removeUnsupportedKeywords | (private) |
+| 467 | fn | removeExtensionFields | (private) |
+| 481 | fn | walkForExtensions | (private) |
+| 508 | fn | cleanupRequiredFields | (private) |
+| 541 | fn | addEmptySchemaPlaceholder | (private) |
+| 609 | fn | findPaths | (private) |
+| 615 | fn | findPathsByFields | (private) |
+| 625 | fn | walkForFields | (private) |
+| 651 | fn | sortByDepth | (private) |
+| 655 | fn | trimSuffix | (private) |
+| 662 | fn | joinPath | (private) |
+| 669 | fn | setRawAt | (private) |
+| 677 | fn | isPropertyDefinition | (private) |
+| 681 | fn | descriptionPath | (private) |
+| 688 | fn | appendHint | (private) |
+| 702 | fn | appendHintRaw | (private) |
+| 712 | fn | getStrings | (private) |
+| 722 | fn | contains | (private) |
+| 731 | fn | orDefault | (private) |
+| 738 | fn | escapeGJSONPathKey | (private) |
+| 745 | fn | unescapeGJSONPathKey | (private) |
+| 762 | fn | splitGJSONPath | (private) |
+| 790 | fn | mergeDescriptionRaw | (private) |
 
-## third_party/CLIProxyAPIPlus/internal/util/gemini_schema_test.go (1048 lines)
+## third_party/CLIProxyAPIPlus/internal/util/gemini_schema_test.go (1072 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
@@ -86,4 +86,5 @@ Symbol maps for 2 large files in this module.
 | 852 | fn | TestCleanJSONSchemaForAntigravity_BooleanEnumToString | pub |
 | 873 | fn | TestCleanJSONSchemaForGemini_RemovesGeminiUnsupportedMetadataFields | pub |
 | 924 | fn | TestRemoveExtensionFields | pub |
+| 1051 | fn | TestCleanJSONSchemaForAntigravity_UniqueItemsStripped | pub |
 

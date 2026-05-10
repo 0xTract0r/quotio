@@ -2,7 +2,7 @@
 
 [← Back to INDEX](../../INDEX.md)
 
-**Type:** implicit | **Files:** 6
+**Type:** implicit | **Files:** 8
 
 ## Files
 
@@ -12,20 +12,11 @@
 | `third_party/CLIProxyAPIPlus/sdk/translator/formats.go` | 12 |  |
 | `third_party/CLIProxyAPIPlus/sdk/translator/helpers.go` | 28 |  |
 | `third_party/CLIProxyAPIPlus/sdk/translator/pipeline.go` | 106 |  |
-| `third_party/CLIProxyAPIPlus/sdk/translator/registry.go` | 142 |  |
+| `third_party/CLIProxyAPIPlus/sdk/translator/registry.go` | 155 |  |
+| `third_party/CLIProxyAPIPlus/sdk/translator/registry_bytes_test.go` | 52 |  |
+| `third_party/CLIProxyAPIPlus/sdk/translator/registry_test.go` | 92 |  |
 | `third_party/CLIProxyAPIPlus/sdk/translator/types.go` | 34 |  |
 
----
+## Documentation
 
-```mermaid
-graph TD
-    third_party_CLIProxyAPIPlus_sdk_translator[third_party-CLIProxyAPIPlus-sdk-translator] --> context[context]
-    third_party_CLIProxyAPIPlus_sdk_translator[third_party-CLIProxyAPIPlus-sdk-translator] --> sync[sync]
-```
-
-## External Dependencies
-
-Dependencies from other modules:
-
-- `context`
-- `sync`
+- [imports.md](imports.md) - Dependencies

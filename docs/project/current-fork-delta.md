@@ -86,7 +86,11 @@
 - `remote-core` / `remote-relay` / `monitor` 启动时不应再预备本地 core runtime 或写 `local-management-key`；Keychain 读写默认非交互，legacy keychain migration 只有显式设置 `QUOTIO_ENABLE_LEGACY_KEYCHAIN_MIGRATION=1` 才启用
 - 旧 `remote` 语义只保留给历史配置迁移；维护时不要再把它当成新的产品能力入口
 - `remote-core` / `remote-relay` 当前目标保留的能力包括：Providers、API Keys、Agents、Logs、quota / usage；本地专属能力如本地 core 控制、fallback、identity packages 不再在远端模式暴露，避免把本地宿主状态误当成远端真源
+- 远端账号的运行配置真源现在进一步收敛到 core 账号设置：management center 是主配置入口，Quotio 远端模式主要展示只读摘要、状态、日志、用量与快速操作，不再把本地 `Identity Package` 当成远端账号真源
 - 隔离 smoke 或临时调试可用 `QUOTIO_REMOTE_ENDPOINT`、`QUOTIO_REMOTE_MANAGEMENT_KEY`、`QUOTIO_REMOTE_VERIFY_SSL` 注入远端连接；需要强制本机入口时再加 `QUOTIO_REMOTE_EXPOSE_LOCAL_RELAY=1` 并把 `QUOTIO_OPERATING_MODE` 设为 `remote-relay`
+- 若当前虚拟/开发态不想反复触发 Keychain 授权，可显式启用 `QUOTIO_REMOTE_MANAGEMENT_KEY_STORE=file`；此时远端 management key 会写入 `QUOTIO_APP_SUPPORT_DIR` 下的本地 JSON（默认文件名 `remote-management-keys[.<namespace>].json`，可用 `QUOTIO_REMOTE_MANAGEMENT_KEY_FILE` 覆盖路径）
+- 这条 file store 只作用于“远端连接 key”，不影响本地 core 的 `local-management-key`、`config.yaml remote-management.secret-key` 或远端 runtime 的 management key 存储；默认关闭，只有显式开关才启用
+- 开启 file store 后，首次仍可用 `QUOTIO_REMOTE_MANAGEMENT_KEY` 做一次性种子；后续重启 `remote-core` / `remote-relay` 时，可直接从本地 JSON 读回，不再依赖远端 key 的 Keychain 条目
 
 ### 4. 多身份指纹不是停留在想法
 
@@ -118,6 +122,29 @@
 - 本地 usage / token 历史不在 `~/.cli-proxy-api*/logs`；清理请求/响应日志时，默认要保留 `~/Library/Application Support/Quotio*/.usage-statistics.json` 和 `~/Library/Application Support/Quotio*/request-history.json`
 - usage 统计现在开始带官方价格估算的 `total_cost_usd` / `cost_by_day`，并区分 `cache_read_input_tokens` 与 `cache_write_input_tokens`；`gpt-5.3-codex-spark` 这类官方价格未最终确定的模型会标成 `pricing_status=unfinalized`，不能静默按 0 美元当成“免费”
 - management center 的 `/usage` 页面现在优先使用 core 返回的 request-level `cost_usd` / `pricing_status`，不再把浏览器 localStorage 里的模型价格当成唯一真源；页面下方的价格表只保留给旧快照或未内置定价模型做 fallback
+- core 现在把账号运行配置结构化暴露为 `account_settings`：最小已生效字段是 `proxy_url`、`note`、`disabled`、`managed_headers`、`extra_headers`、`refresh_enabled`，其中 runtime 真实复用了成熟链路 `auth.ProxyURL`、`auth headers` 与 auth refresh scheduler/manual refresh guard
+- `refresh_enabled=false` 是 access-token-only 远端测试 / 受控迁移开关：core 不调度自动 refresh，manual status refresh 也不会调用 provider refresh flow；配套脚本 `scripts/sync-access-token-only-auth.sh` 会递归移除 `refresh_token` / `refreshToken` 后再上传，默认 dry-run，必须显式 `EXECUTE=1`
+- `managed_headers` 与 `extra_headers` 现在明确分层：Claude / Codex 这类版本敏感头由 core 策略自动生成并只读返回；用户只编辑 `extra_headers`，与 managed / protocol-reserved 头冲突时 API 会拒绝
+- 但 `managed_headers` 不能只停在静态摘要；对 Claude / Codex 这类版本敏感 provider，core policy 必须跟随可信来源持续自动更新，避免旧版本头/UA 搭配新能力
+- 截至 `2026-05-09` 的最新修正：Codex 默认 `codex_proxy_compatible_v1` 会优先联网同步 allowlist 的 `icebear0828/codex-proxy` `config/default.yaml` 与 `config/fingerprint.yaml`，形成 coherent Desktop-like bundle 后才升级 `User-Agent` / `Version` / Chromium client hints / fetch headers；Claude Code npm registry 版本只作为 `claude-cli/<version>` UA 来源，Stainless package/runtime、平台/终端、TLS 指纹不能凭 package 版本号推导
+- `managed_header_state.current` 现在应披露 `source` / `source_url` / `checked_at` / `completeness`：`community:codex-proxy` + `online-coherent-bundle` 是 allowlist codex-proxy 同步；`online:npm` + `partial-cli-version-only` 是公开 registry 只校验 CLI UA 版本；`observed:first_party` 是真实请求观察；`default` 是默认策略未联网校验
+- T058 后 Codex 方向以 `icebear0828/codex-proxy` 的社区实现为主线：默认 managed header policy 输出 Codex Desktop-like `Originator` / UA / Chromium client hints / fetch headers，默认 runtime profile 改为 `codex_proxy_compatible_v1`，Go transport 吸收 per-account/per-proxy cache、ALPN/HTTP1.1 控制和 WebSocket session 隔离
+- 明确不搬 `codex-proxy` 的 Cloudflare cookie capture/replay、token-cookie 采集、anti-detection 或 ToS 自担风险叙事；这些不能成为 Quotio / CLIProxyAPIPlus 默认产品能力
+- 较稳方向不是“整包 managed headers 重写”，而是按字段分层管理：自动更新默认只碰有来源证明的 version markers，runtime/environment 与 stable identity 字段保持保真；历史记录使用 append-only policy patch，而不是只存一份最新快照
+- 这条策略现在已有最小代码落点：
+  - `account_settings.managed_header_state` 会记录当前 managed header projection 与 append-only history
+  - Claude 继续走 stabilized device profile；联网 registry 版本只更新 `claude-cli/<version>`，不凭空改 `X-Stainless-Package-Version` / `X-Stainless-Runtime-Version`
+  - Codex 新增 profile resolver / cache；默认 Desktop-like 路径优先跟随 codex-proxy coherent bundle，公共来源不可用时才使用本地静态 community fallback；不把 npm `@openai/codex` CLI 版本混入 Codex Desktop-like UA
+  - history 会记录升级前后的 `versioned_capabilities`、changed fields、source/source_url 与 reason
+- `transport_profile` / `tls_profile` 不再是同一状态：
+  - `transport_profile` 现在至少已有两类真实运行态：
+    - Claude 预设进入 uTLS runtime transport，按 `provider + authID + account + baseURLHost + proxyURL + profile` 隔离 HTTP client cache
+    - Codex `provider-default` / 空配置默认落到 `codex_proxy_compatible_v1`，执行 Codex-Proxy-compatible Go transport approximation（HTTP transport cache 与 WebSocket session 都按账号 / effective proxy / profile 隔离）
+  - `tls_profile` 现在有 MVP 级 runtime 生效：
+    - Claude 默认支持 `claude_reqwest_rustls_compatible_v1`，参考社区 Rust `reqwest` + `rustls-tls` CLI 实现；`claude_chrome_like_mac_v1/v2/v3` / `chrome_120/131/133` 这类 uTLS ClientHello preset 仅作为高级 opt-in 用于 Anthropic API host
+    - Codex 支持 `codex_proxy_compatible_v1` / `codex_rustls_native_v1` / Go ALPN / HTTP/1.1 forcing / cache 隔离 preset；当前无 Rust sidecar 时仍由 Go transport 执行
+  - Claude 不复用 Codex TLS 指纹值：Codex 方向按 `codex-proxy` 社区实现迁入；Claude 方向当前采用 `claude_reqwest_rustls_compatible_v1` 默认 Go-compatible approximation，Chrome-like uTLS 仅高级 opt-in，避免“Codex Desktop/Web TLS + Claude API/Stainless 头”的混搭画像
+  - 当前 Codex 已不是旧的纯账号级隔离占位：`codex_proxy_compatible_v1` 已真实进入默认 runtime profile；剩余缺口是 Rust `reqwest/rustls` wire-level clone 尚未搬入
 
 这部分当前真源：
 
@@ -139,6 +166,7 @@
 
 - 普通请求已按账号强制选择 identity package
 - TLS / ClientHello 已经真实按账号生效
+- 远端模式下它也不再承担账号运行身份真源；远端账号配置的主入口在 core management center，Quotio 只展示核心侧摘要或跳转入口
 
 配套入口：
 

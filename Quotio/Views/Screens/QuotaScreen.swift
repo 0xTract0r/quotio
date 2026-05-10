@@ -452,6 +452,36 @@ private struct AccountQuotaCardV2: View {
         guard let data = account.quotaData else { return false }
         return !data.models.isEmpty
     }
+
+    private var quotaStatusMessage: String? {
+        if let message = account.quotaData?.statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !message.isEmpty {
+            return message
+        }
+
+        if let data = account.quotaData, data.isForbidden {
+            return "Usage limit reached. Hover the reset times below to understand when quota returns."
+        }
+
+        return nil
+    }
+
+    private var quotaRefreshSummary: String {
+        guard let lastUpdated = account.quotaData?.lastUpdated else {
+            return "Quota not refreshed yet"
+        }
+
+        let relative = lastUpdated.formatted(.relative(presentation: .named))
+        return "Quota refreshed \(relative)"
+    }
+
+    private var quotaRefreshDetail: String {
+        guard let lastUpdated = account.quotaData?.lastUpdated else {
+            return "No quota refresh result is available for this account yet."
+        }
+
+        return "Last quota refresh: " + lastUpdated.formatted(date: .abbreviated, time: .standard)
+    }
     
     private var displayEmail: String {
         account.email.masked(if: settings.hideSensitiveInfo)
@@ -515,12 +545,26 @@ private struct AccountQuotaCardV2: View {
             
             if isLoading {
                 QuotaLoadingView()
-            } else if hasQuotaData {
-                usageSection
-            } else if let message = account.authFile?.humanReadableStatus {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            } else {
+                if hasQuotaData {
+                    usageSection
+                }
+
+                if let message = quotaStatusMessage {
+                    QuotaStatusMessageView(
+                        message: message,
+                        color: account.quotaData?.isForbidden == true ? .orange : .secondary,
+                        icon: account.quotaData?.isForbidden == true ? "exclamationmark.triangle.fill" : "info.circle"
+                    )
+                } else if !hasQuotaData, let message = account.authFile?.humanReadableStatus {
+                    QuotaStatusMessageView(message: message, color: .secondary, icon: "info.circle")
+                } else if !hasQuotaData {
+                    QuotaStatusMessageView(
+                        message: "No quota data loaded for this account yet. Click Refresh to fetch it from the remote core.",
+                        color: .secondary,
+                        icon: "info.circle"
+                    )
+                }
             }
         }
         .padding(16)
@@ -563,6 +607,15 @@ private struct AccountQuotaCardV2: View {
                     }
                     .foregroundStyle(.secondary)
                 }
+
+                HStack(spacing: 4) {
+                    Image(systemName: account.quotaData == nil ? "clock.badge.questionmark" : "clock")
+                        .font(.caption2)
+                    Text(quotaRefreshSummary)
+                        .font(.caption)
+                }
+                .foregroundStyle(account.quotaData == nil ? .tertiary : .secondary)
+                .help(quotaRefreshDetail)
 
                 if account.status != "ready" && account.status != "active" {
                     Text(account.status.capitalized)
@@ -687,7 +740,7 @@ private struct AccountQuotaCardV2: View {
                             .frame(width: 28, height: 28)
                             .background(Color.red.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .help("Limit Reached")
+                            .help(quotaStatusMessage ?? "Limit reached")
                     }
                 }
             }
@@ -712,9 +765,33 @@ private struct AccountQuotaCardV2: View {
             )
             .environment(viewModel)
         }
+}
+
+private struct QuotaStatusMessageView: View {
+    let message: String
+    let color: Color
+    let icon: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(color)
+                .padding(.top, 2)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .help(message)
     }
-    
-    // MARK: - Usage Section
+}
+
+// MARK: - Usage Section
 
     private var isQuotaUnavailable: Bool {
         guard let data = account.quotaData else { return false }

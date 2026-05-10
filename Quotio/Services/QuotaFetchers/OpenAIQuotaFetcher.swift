@@ -337,24 +337,32 @@ struct CodexQuotaData: Codable, Sendable {
     
     func toProviderQuotaData() -> ProviderQuotaData {
         var models: [ModelQuota] = []
+        let sessionReset = sessionResetAt.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+        let weeklyReset = weeklyResetAt.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+        let statusMessage: String? = limitReached
+            ? "Codex usage limit reached. Session resets \(ModelQuota(name: "codex-session", percentage: sessionRemainingPercent, resetTime: sessionReset).formattedResetTime), weekly resets \(ModelQuota(name: "codex-weekly", percentage: weeklyRemainingPercent, resetTime: weeklyReset).formattedResetTime)."
+            : nil
         
         models.append(ModelQuota(
             name: "codex-session",
             percentage: sessionRemainingPercent,
-            resetTime: sessionResetAt.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+            resetTime: sessionReset,
+            tooltip: limitReached ? statusMessage : nil
         ))
         
         models.append(ModelQuota(
             name: "codex-weekly",
             percentage: weeklyRemainingPercent,
-            resetTime: weeklyResetAt.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+            resetTime: weeklyReset,
+            tooltip: limitReached ? statusMessage : nil
         ))
         
         return ProviderQuotaData(
             models: models,
             lastUpdated: lastUpdated,
             isForbidden: limitReached,
-            planType: planType
+            planType: planType,
+            statusMessage: statusMessage
         )
     }
 }

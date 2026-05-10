@@ -4,21 +4,21 @@
 
 Symbol maps for 1 large files in this module.
 
-## third_party/Cli-Proxy-API-Management-Center/src/services/api/authFiles.ts (584 lines)
+## third_party/Cli-Proxy-API-Management-Center/src/services/api/authFiles.ts (604 lines)
 
 | Line | Kind | Name | Visibility |
 | ---- | ---- | ---- | ---------- |
-| 14 | type | StatusError | (private) |
-| 15 | type | AuthFileStatusResponse | (private) |
-| 16 | type | AuthFileStatusRefreshResponse | (private) |
-| 21 | type | AuthFileStatusRefreshOptions | (private) |
-| 24 | type | AuthFileEntry | (private) |
-| 25 | type | AuthFileBatchFailure | (private) |
-| 26 | type | AuthFileBatchUploadResponse | (private) |
-| 32 | type | AuthFileBatchDeleteResponse | (private) |
-| 38 | type | AuthFileBatchUploadResult | (private) |
-| 44 | type | AuthFileBatchDeleteResult | (private) |
-| 50 | type | OAuthReauthHistoryResponse | (private) |
-| 55 | type | AuthStatusHistoryResponse | (private) |
-| 331 | fn | saveAuthFileText | (private) |
+| 17 | type | StatusError | (private) |
+| 18 | type | AuthFileStatusResponse | (private) |
+| 19 | type | AuthFileStatusRefreshResponse | (private) |
+| 24 | type | AuthFileStatusRefreshOptions | (private) |
+| 27 | type | AuthFileEntry | (private) |
+| 28 | type | AuthFileBatchFailure | (private) |
+| 29 | type | AuthFileBatchUploadResponse | (private) |
+| 35 | type | AuthFileBatchDeleteResponse | (private) |
+| 41 | type | AuthFileBatchUploadResult | (private) |
+| 47 | type | AuthFileBatchDeleteResult | (private) |
+| 53 | type | OAuthReauthHistoryResponse | (private) |
+| 58 | type | AuthStatusHistoryResponse | (private) |
+| 334 | fn | saveAuthFileText | (private) |
 

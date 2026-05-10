@@ -1,10 +1,10 @@
 # third_party/CLIProxyAPIPlus/internal/runtime/executor/kiro_executor.go
 
-[← Back to Module](../modules/third_party-CLIProxyAPIPlus-internal-runtime-executor/MODULE.md) | [← Back to INDEX](../INDEX.md)
+[← Back to Module](../modules/root/MODULE.md) | [← Back to INDEX](../INDEX.md)
 
 ## Overview
 
-- **Lines:** 4763
+- **Lines:** 4646
 - **Language:** Go
 - **Symbols:** 60
 - **Public symbols:** 11
@@ -53,26 +53,26 @@
 | 2354 | fn | skipEventStreamHeaderValue | (private) | `func skipEventStreamHeaderValue(headers []byte,...` |
 | 2404 | fn | extractEventTypeFromBytes | (private) | `func (e *KiroExecutor) extractEventTypeFromByte...` |
 | 2457 | fn | streamToChannel | (private) | `func (e *KiroExecutor) streamToChannel(ctx cont...` |
-| 3633 | fn | CountTokens | pub | `func (e *KiroExecutor) CountTokens(ctx context....` |
-| 3678 | fn | Refresh | pub | `func (e *KiroExecutor) Refresh(ctx context.Cont...` |
-| 3845 | fn | persistRefreshedAuth | (private) | `func (e *KiroExecutor) persistRefreshedAuth(aut...` |
-| 3891 | fn | fetchAndSaveProfileArn | (private) | `func (e *KiroExecutor) fetchAndSaveProfileArn(c...` |
-| 3938 | fn | reloadAuthFromFile | (private) | `func (e *KiroExecutor) reloadAuthFromFile(auth ...` |
-| 4052 | fn | isTokenExpired | (private) | `func (e *KiroExecutor) isTokenExpired(accessTok...` |
-| 4128 | fn | fetchToolDescription | (private) | `func fetchToolDescription(ctx context.Context, ...` |
-| 4197 | struct | webSearchHandler | (private) | - |
-| 4209 | fn | newWebSearchHandler | (private) | `func newWebSearchHandler(ctx context.Context, m...` |
-| 4227 | fn | setMcpHeaders | (private) | `func (h *webSearchHandler) setMcpHeaders(req *h...` |
-| 4251 | const | mcpMaxRetries | (private) | - |
-| 4255 | fn | callMcpAPI | (private) | `func (h *webSearchHandler) callMcpAPI(request *...` |
-| 4333 | fn | webSearchAuthAttrs | (private) | `func webSearchAuthAttrs(auth *cliproxyauth.Auth...` |
-| 4340 | const | maxWebSearchIterations | (private) | - |
-| 4348 | fn | handleWebSearchStream | (private) | `func (e *KiroExecutor) handleWebSearchStream(` |
-| 4555 | fn | handleWebSearch | (private) | `func (e *KiroExecutor) handleWebSearch(` |
-| 4648 | fn | callKiroAndBuffer | (private) | `func (e *KiroExecutor) callKiroAndBuffer(` |
-| 4691 | fn | callKiroDirectStream | (private) | `func (e *KiroExecutor) callKiroDirectStream(` |
-| 4722 | fn | sendFallbackText | (private) | `func (e *KiroExecutor) sendFallbackText(` |
-| 4741 | fn | executeNonStreamFallback | (private) | `func (e *KiroExecutor) executeNonStreamFallback(` |
+| 3516 | fn | CountTokens | pub | `func (e *KiroExecutor) CountTokens(ctx context....` |
+| 3561 | fn | Refresh | pub | `func (e *KiroExecutor) Refresh(ctx context.Cont...` |
+| 3728 | fn | persistRefreshedAuth | (private) | `func (e *KiroExecutor) persistRefreshedAuth(aut...` |
+| 3774 | fn | fetchAndSaveProfileArn | (private) | `func (e *KiroExecutor) fetchAndSaveProfileArn(c...` |
+| 3821 | fn | reloadAuthFromFile | (private) | `func (e *KiroExecutor) reloadAuthFromFile(auth ...` |
+| 3935 | fn | isTokenExpired | (private) | `func (e *KiroExecutor) isTokenExpired(accessTok...` |
+| 4011 | fn | fetchToolDescription | (private) | `func fetchToolDescription(ctx context.Context, ...` |
+| 4080 | struct | webSearchHandler | (private) | - |
+| 4092 | fn | newWebSearchHandler | (private) | `func newWebSearchHandler(ctx context.Context, m...` |
+| 4110 | fn | setMcpHeaders | (private) | `func (h *webSearchHandler) setMcpHeaders(req *h...` |
+| 4134 | const | mcpMaxRetries | (private) | - |
+| 4138 | fn | callMcpAPI | (private) | `func (h *webSearchHandler) callMcpAPI(request *...` |
+| 4216 | fn | webSearchAuthAttrs | (private) | `func webSearchAuthAttrs(auth *cliproxyauth.Auth...` |
+| 4223 | const | maxWebSearchIterations | (private) | - |
+| 4231 | fn | handleWebSearchStream | (private) | `func (e *KiroExecutor) handleWebSearchStream(` |
+| 4438 | fn | handleWebSearch | (private) | `func (e *KiroExecutor) handleWebSearch(` |
+| 4531 | fn | callKiroAndBuffer | (private) | `func (e *KiroExecutor) callKiroAndBuffer(` |
+| 4574 | fn | callKiroDirectStream | (private) | `func (e *KiroExecutor) callKiroDirectStream(` |
+| 4605 | fn | sendFallbackText | (private) | `func (e *KiroExecutor) sendFallbackText(` |
+| 4624 | fn | executeNonStreamFallback | (private) | `func (e *KiroExecutor) executeNonStreamFallback(` |
 
 ## Public API
 
@@ -138,7 +138,7 @@ func (e *EventStreamError) Error() string {
 func (e *KiroExecutor) CountTokens(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
 ```
 
-**Line:** 3633 | **Kind:** fn
+**Line:** 3516 | **Kind:** fn
 
 ### `Refresh`
 
@@ -146,7 +146,7 @@ func (e *KiroExecutor) CountTokens(ctx context.Context, auth *cliproxyauth.Auth,
 func (e *KiroExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Auth) (*cliproxyauth.Auth, error) {
 ```
 
-**Line:** 3678 | **Kind:** fn
+**Line:** 3561 | **Kind:** fn
 
 ## Memory Markers
 
@@ -206,27 +206,27 @@ func (e *KiroExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Auth) (*c
 
 > Duplicate content filtering removed - it was causing legitimate repeated
 
-### 🟢 `NOTE` (line 2879)
+### 🟢 `NOTE` (line 2874)
 
 > Duplicate content filtering was removed because it incorrectly
 
-### 🟢 `NOTE` (line 3277)
+### 🟢 `NOTE` (line 3188)
 
 > We don't close the thinking block here - it will be closed when we see
 
-### 🟢 `NOTE` (line 3566)
+### 🟢 `NOTE` (line 3457)
 
 > The effective input context is ~170k (200k - 30k reserved for output)
 
-### 🟢 `NOTE` (line 3628)
+### 🟢 `NOTE` (line 3511)
 
 > Claude SSE event builders moved to internal/translator/kiro/claude/kiro_claude_stream.go
 
-### 🟢 `NOTE` (line 3696)
+### 🟢 `NOTE` (line 3579)
 
 > This check has a design limitation - it reads from the auth object passed in,
 
-### 🟢 `NOTE` (line 4345)
+### 🟢 `NOTE` (line 4228)
 
 > We skip the "model decides to search" step because Claude Code already
 

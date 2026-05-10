@@ -10,6 +10,7 @@ graph TD
     third_party_CLIProxyAPIPlus_internal_translator_codex_openai_chat_completions[third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions] --> context[context]
     third_party_CLIProxyAPIPlus_internal_translator_codex_openai_chat_completions[third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions] --> gjson[gjson]
     third_party_CLIProxyAPIPlus_internal_translator_codex_openai_chat_completions[third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions] --> interfaces[interfaces]
+    third_party_CLIProxyAPIPlus_internal_translator_codex_openai_chat_completions[third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions] --> sha256[sha256]
     third_party_CLIProxyAPIPlus_internal_translator_codex_openai_chat_completions[third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions] --> sjson[sjson]
     third_party_CLIProxyAPIPlus_internal_translator_codex_openai_chat_completions[third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions] --> strconv[strconv]
     third_party_CLIProxyAPIPlus_internal_translator_codex_openai_chat_completions[third_party-CLIProxyAPIPlus-internal-translator-codex-openai-chat-completions] --> strings[strings]
@@ -31,6 +32,7 @@ Dependencies from other modules:
 - `context`
 - `gjson`
 - `interfaces`
+- `sha256`
 - `sjson`
 - `strconv`
 - `strings`

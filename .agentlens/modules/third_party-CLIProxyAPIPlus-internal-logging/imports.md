@@ -8,6 +8,7 @@
 graph TD
     third_party_CLIProxyAPIPlus_internal_logging[third_party-CLIProxyAPIPlus-internal-logging] --> atomic[atomic]
     third_party_CLIProxyAPIPlus_internal_logging[third_party-CLIProxyAPIPlus-internal-logging] --> brotli[brotli]
+    third_party_CLIProxyAPIPlus_internal_logging[third_party-CLIProxyAPIPlus-internal-logging] --> bufio[bufio]
     third_party_CLIProxyAPIPlus_internal_logging[third_party-CLIProxyAPIPlus-internal-logging] --> buildinfo[buildinfo]
     third_party_CLIProxyAPIPlus_internal_logging[third_party-CLIProxyAPIPlus-internal-logging] --> bytes[bytes]
     third_party_CLIProxyAPIPlus_internal_logging[third_party-CLIProxyAPIPlus-internal-logging] --> config[config]
@@ -48,6 +49,7 @@ Dependencies from other modules:
 
 - `atomic`
 - `brotli`
+- `bufio`
 - `buildinfo`
 - `bytes`
 - `config`

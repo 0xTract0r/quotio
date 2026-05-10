@@ -19,7 +19,7 @@
 | `third_party/Cli-Proxy-API-Management-Center/src/components/ui/ModelInputList.tsx` | 103 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/components/ui/Select.tsx` | 331 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/components/ui/SelectionCheckbox.tsx` | 50 |  |
-| `third_party/Cli-Proxy-API-Management-Center/src/components/ui/ToggleSwitch.tsx` | 48 |  |
+| `third_party/Cli-Proxy-API-Management-Center/src/components/ui/ToggleSwitch.tsx` | 51 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/components/ui/icons.tsx` | 479 |  |
 | `third_party/Cli-Proxy-API-Management-Center/src/components/ui/modelInputListUtils.ts` | 29 |  |
 

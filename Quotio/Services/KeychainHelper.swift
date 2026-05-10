@@ -43,6 +43,15 @@ enum KeychainHelper {
     private static var identityProxyService: String { AppRuntimeProfile.namespacedKeychainService(identityProxyServiceBase) }
 
     static func saveManagementKey(_ key: String, for configId: String) {
+        if RuntimeProfile.usesFileBackedRemoteManagementKeyStore {
+            if RemoteManagementKeyFileStore.save(key, for: configId, source: .savedConfiguration) {
+                deleteRemoteManagementKeyFromKeychain(for: configId)
+                return
+            }
+            Log.keychain("Failed to save file-backed remote management key for config \(configId)")
+            return
+        }
+
         let account = "management-key-\(configId)"
         guard let data = key.data(using: .utf8) else { return }
         if !saveData(data, service: remoteService, account: account) {
@@ -51,6 +60,15 @@ enum KeychainHelper {
     }
 
     static func getManagementKey(for configId: String) -> String? {
+        if let override = RuntimeProfile.remoteManagementKeyOverride {
+            seedFileBackedRemoteManagementKeyIfNeeded(override, for: configId)
+            return override
+        }
+
+        if RuntimeProfile.usesFileBackedRemoteManagementKeyStore {
+            return RemoteManagementKeyFileStore.readKey(for: configId)
+        }
+
         let account = "management-key-\(configId)"
         if let key = readString(service: remoteService, account: account) {
             return key
@@ -59,15 +77,23 @@ enum KeychainHelper {
     }
 
     static func deleteManagementKey(for configId: String) {
-        let account = "management-key-\(configId)"
-        deleteData(service: remoteService, account: account)
-        for legacy in legacyRemoteServices {
-            deleteLegacyData(service: legacy, account: account)
+        if RuntimeProfile.usesFileBackedRemoteManagementKeyStore {
+            RemoteManagementKeyFileStore.deleteKey(for: configId)
         }
+        deleteRemoteManagementKeyFromKeychain(for: configId)
     }
 
     static func hasManagementKey(for configId: String) -> Bool {
         getManagementKey(for: configId) != nil
+    }
+
+    static func seedFileBackedRemoteManagementKeyIfNeeded(_ key: String, for configId: String) {
+        guard RuntimeProfile.usesFileBackedRemoteManagementKeyStore else {
+            return
+        }
+        if RemoteManagementKeyFileStore.save(key, for: configId, source: .environmentOverride) {
+            deleteRemoteManagementKeyFromKeychain(for: configId)
+        }
     }
 
     static func saveLocalManagementKey(_ key: String) -> Bool {
@@ -202,6 +228,14 @@ enum KeychainHelper {
             return decoded
         }
         return nil
+    }
+
+    private static func deleteRemoteManagementKeyFromKeychain(for configId: String) {
+        let account = "management-key-\(configId)"
+        deleteData(service: remoteService, account: account)
+        for legacy in legacyRemoteServices {
+            deleteLegacyData(service: legacy, account: account)
+        }
     }
 
 
@@ -349,5 +383,132 @@ enum KeychainHelper {
 
     private static var legacyKeychainMigrationEnabled: Bool {
         ProcessInfo.processInfo.environment[legacyMigrationEnvironmentKey] == "1"
+    }
+}
+
+private enum RemoteManagementKeyFileStore {
+    private struct StorageFile: Codable {
+        var version: Int
+        var updatedAt: Date
+        var entries: [String: StorageEntry]
+
+        enum CodingKeys: String, CodingKey {
+            case version
+            case updatedAt = "updated_at"
+            case entries
+        }
+    }
+
+    private struct StorageEntry: Codable {
+        var managementKey: String
+        var updatedAt: Date
+        var source: String
+
+        enum CodingKeys: String, CodingKey {
+            case managementKey = "management_key"
+            case updatedAt = "updated_at"
+            case source
+        }
+    }
+
+    enum Source: String {
+        case environmentOverride = "environment-override"
+        case savedConfiguration = "saved-configuration"
+    }
+
+    static func readKey(for configId: String) -> String? {
+        guard let storageURL else {
+            return nil
+        }
+        return load(from: storageURL).entries[configId]?.managementKey
+    }
+
+    @discardableResult
+    static func save(_ key: String, for configId: String, source: Source) -> Bool {
+        guard let storageURL else {
+            return false
+        }
+
+        do {
+            try FileManager.default.createDirectory(
+                at: storageURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+
+            var storage = load(from: storageURL)
+            storage.entries[configId] = StorageEntry(
+                managementKey: key,
+                updatedAt: Date(),
+                source: source.rawValue
+            )
+            storage.updatedAt = Date()
+            let data = try encoder.encode(storage)
+            try data.write(to: storageURL, options: .atomic)
+            return true
+        } catch {
+            Log.keychain("Failed to write remote management key file at \(storageURL.path): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    static func deleteKey(for configId: String) {
+        guard let storageURL else {
+            return
+        }
+
+        do {
+            var storage = load(from: storageURL)
+            guard storage.entries.removeValue(forKey: configId) != nil else {
+                return
+            }
+
+            if storage.entries.isEmpty {
+                if FileManager.default.fileExists(atPath: storageURL.path) {
+                    try FileManager.default.removeItem(at: storageURL)
+                }
+                return
+            }
+
+            storage.updatedAt = Date()
+            let data = try encoder.encode(storage)
+            try data.write(to: storageURL, options: .atomic)
+        } catch {
+            Log.keychain("Failed to delete remote management key file entry at \(storageURL.path): \(error.localizedDescription)")
+        }
+    }
+
+    private static var storageURL: URL? {
+        RuntimeProfile.remoteManagementKeyFileURL
+    }
+
+    private static var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
+    private static func load(from url: URL) -> StorageFile {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return emptyStorage()
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            return try decoder.decode(StorageFile.self, from: data)
+        } catch {
+            Log.keychain("Failed to decode remote management key file at \(url.path): \(error.localizedDescription)")
+            return emptyStorage()
+        }
+    }
+
+    private static func emptyStorage() -> StorageFile {
+        StorageFile(version: 1, updatedAt: Date(), entries: [:])
     }
 }
