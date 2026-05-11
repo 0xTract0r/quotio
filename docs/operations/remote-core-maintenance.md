@@ -214,6 +214,7 @@ management key 文件和取值逻辑不变；启用 HTTPS 后，变化的是：
 - 本机只监听 `127.0.0.1:<localPort>`，不监听 `0.0.0.0`
 - `GET http://127.0.0.1:<localPort>/healthz` 能经 relay 返回远端 core 的健康结果
 - 经本机 relay 调 `/v0/management/auth-files`、`/v0/management/usage`、`/v0/management/logs` 能读到远端数据；不要把本地 request history 当成 remote-relay 日志真源
+- 若 UI 显示“远程已断开”，先同时验证轻量 `/healthz` 和带 management key 的 `/v0/management/auth-files` / `/usage`。不要因为 `/auth-files` 单次超时就判定远端 core 宕机；只有 `401/403` 才优先按 management key 错误处理。
 - 若这轮改动涉及账号中心化 / 账号设置，还要经 relay 复验 `/v0/management/auth-files/account-settings` 的详情读回；若声称写回链路正常，至少对专用 smoke 账号完成一次“修改备注 / 停用 / 恢复”闭环，并同时核对 relay 与远端直连结果
 - 隔离 smoke 日志中不应出现 `local-management-key` Keychain 读写弹框或系统交互；Keychain legacy migration 默认关闭
 

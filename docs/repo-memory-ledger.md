@@ -102,6 +102,7 @@ proxy/core 相关实验默认先走 dev runtime 或独立 worktree。
 - `remote-core` / `remote-relay` / `monitor` 启动时不应再预备本地 core runtime 或写 `local-management-key`
 - 远端模式当前不暴露本地专属 `Identity Packages`，避免把宿主侧 phase-1 能力误当成远端 runtime 真源
 - 对“远端 management key”的 dev-only 例外已经单独收口：显式设置 `QUOTIO_REMOTE_MANAGEMENT_KEY_STORE=file` 后，Quotio 只把远端连接 key 落到本地 JSON，并继续把本地 core 的 `local-management-key` / `config.yaml remote-management.secret-key` 留在原链路；默认关闭，不改变正式版默认行为
+- 远端连接状态不要只用 `/v0/management/auth-files` 这类重接口单点判断；账号多或远端短暂抖动时它可能超时，但本地 relay 与远端 core 仍健康。Remote readiness 至少要区分 `401/403` 这类 key 错误和网络/重接口暂时失败，并用轻量 `/healthz` 兜底确认 core 存活，避免 UI 误报“远程已断开”。
 
 ### 11. 账号设置正在替代远端 `Identity Package` 主流程
 

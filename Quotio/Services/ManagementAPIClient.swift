@@ -11,6 +11,7 @@ actor ManagementAPIClient {
     private let session: URLSession
     private let sessionDelegate: SessionDelegate
     private let clientId: String
+    private let coreBaseURL: String
     
     /// Whether this client is connected to a remote server (vs localhost)
     let isRemote: Bool
@@ -81,6 +82,7 @@ actor ManagementAPIClient {
         self.clientId = String(UUID().uuidString.prefix(6))
         self.isRemote = false
         self.timeoutConfig = .local
+        self.coreBaseURL = Self.coreBaseURL(from: baseURL)
         
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeoutConfig.requestTimeout
@@ -104,6 +106,7 @@ actor ManagementAPIClient {
         self.clientId = String(UUID().uuidString.prefix(6))
         self.isRemote = true
         self.timeoutConfig = timeoutConfig
+        self.coreBaseURL = Self.coreBaseURL(from: baseURL)
         
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeoutConfig.requestTimeout
@@ -140,6 +143,17 @@ actor ManagementAPIClient {
     func invalidate() {
         Self.log("[\(clientId)] Session invalidating...")
         session.invalidateAndCancel()
+    }
+
+    private static func coreBaseURL(from managementBaseURL: String) -> String {
+        let suffix = "/v0/management"
+        let normalizedURL = managementBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        guard normalizedURL.hasSuffix(suffix) else {
+            return normalizedURL
+        }
+
+        return String(normalizedURL.dropLast(suffix.count))
     }
     
     private func makeRequest(_ endpoint: String, method: String = "GET", body: Data? = nil, retryCount: Int = 0) async throws -> Data {
@@ -200,6 +214,57 @@ actor ManagementAPIClient {
             throw APIError.connectionError(error.localizedDescription)
         } catch {
             Self.log("[\(clientId)][\(requestId)] UNEXPECTED ERROR: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    private func makeCoreRequest(_ endpoint: String, retryCount: Int = 0) async throws -> Data {
+        let requestId = String(UUID().uuidString.prefix(6))
+        let activeCount = Self.incrementActiveRequests()
+        let startTime = Date()
+
+        Self.log("[\(clientId)][\(requestId)] START CORE GET \(endpoint) (active=\(activeCount), retry=\(retryCount))")
+
+        defer {
+            let endCount = Self.decrementActiveRequests()
+            let duration = Date().timeIntervalSince(startTime)
+            Self.log("[\(clientId)][\(requestId)] END CORE GET \(endpoint) duration=\(String(format: "%.3f", duration))s (active=\(endCount))")
+        }
+
+        guard let url = URL(string: "\(coreBaseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("close", forHTTPHeaderField: "Connection")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+
+            guard 200...299 ~= httpResponse.statusCode else {
+                Self.log("[\(clientId)][\(requestId)] CORE HTTP ERROR \(httpResponse.statusCode)")
+                throw APIError.httpError(httpResponse.statusCode)
+            }
+
+            return data
+        } catch let error as URLError {
+            Self.log("[\(clientId)][\(requestId)] CORE URL ERROR: \(error.code.rawValue) - \(error.localizedDescription)")
+
+            if retryCount < timeoutConfig.maxRetries && (error.code == .timedOut || error.code == .networkConnectionLost || error.code == .cannotConnectToHost) {
+                let backoffSeconds = min(pow(2.0, Double(retryCount)) * 0.5, 3.0)
+                try? await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+                return try await makeCoreRequest(endpoint, retryCount: retryCount + 1)
+            }
+
+            throw APIError.connectionError(error.localizedDescription)
+        } catch {
+            Self.log("[\(clientId)][\(requestId)] CORE UNEXPECTED ERROR: \(error.localizedDescription)")
             throw error
         }
     }
@@ -637,15 +702,29 @@ actor ManagementAPIClient {
     }
     
     /// Check if the management API is responding.
-    /// Use `/auth-files` because it is part of the stable authenticated
-    /// management surface on both local and remote cores, unlike `/debug`
-    /// or `/healthz` which may be absent on some deployed builds.
+    /// Use `/auth-files` as the primary authenticated management check.
+    /// In remote mode, fall back to lightweight `/healthz` for transient
+    /// heavy endpoint failures while still treating `401/403` as key errors.
     func checkProxyResponding() async -> Bool {
         do {
             _ = try await makeRequest("/auth-files")
             return true
-        } catch {
+        } catch APIError.httpError(401), APIError.httpError(403) {
             return false
+        } catch {
+            guard isRemote else {
+                return false
+            }
+
+            Log.warning("[\(clientId)] Remote authenticated readiness check failed: \(error.localizedDescription). Trying core /healthz before marking disconnected.")
+
+            do {
+                _ = try await makeCoreRequest("/healthz")
+                return true
+            } catch {
+                Log.warning("[\(clientId)] Remote core /healthz fallback failed: \(error.localizedDescription)")
+                return false
+            }
         }
     }
 }
