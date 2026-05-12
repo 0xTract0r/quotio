@@ -1,6 +1,6 @@
 # Repo Memory Ledger
 
-最后更新：2026-04-25
+最后更新：2026-05-12
 
 这份文档只记录仓库级、长期有效、值得反复记住的事实和边界。
 
@@ -68,6 +68,20 @@ proxy/core 相关实验默认先走 dev runtime 或独立 worktree。
 远端 Claude 账号重认证不能只看 management UI 显示“成功”或“等待中”。最小闭环证据必须同时包含：远端日志显示 callback 被消费、token exchange completed、目标 auth 文件更新时间变化、management `api-call` 对 Anthropic `/v1/messages` 返回 `200`，以及本地 `18317` relay 的真实 Claude 请求返回成功。
 
 `connection not allowed by ruleset` 这类错误发生在 SOCKS CONNECT 阶段，含义是账号代理链路或上游代理规则拒绝了到 `api.anthropic.com:443` 的连接；它不是 Anthropic OAuth 返回、不是 token 保存失败，也不能直接归因为 TLS 指纹。T076 的真实成功路径是第一次 Claude OAuth token exchange 被 SOCKS ruleset 拒绝，随后同一账号路径短重试成功；日志没有出现标准 OAuth transport fallback，因此不能把 fallback 说成真实发生。
+
+### 6.2 远端 AI 断流要先分清 `.5` 网关、账号代理和 provider 三段
+
+远端 core 在 `10.1.1.201` 上运行时，`10.1.1.5` OpenWRT/OpenClash 是它的生产网关。任何 `.5` 上的 OpenClash 规则、selector、overlay 或 restart 都可能影响 `201 -> 账号专属 SOCKS/HTTP proxy -> provider` 的出站链路，从而表现为本地 Codex / Claude 客户端断流。
+
+T240 的长期结论：
+
+- 本地 Codex/Claude 看到 `stream disconnected`、`context deadline exceeded` 或 `Client.Timeout` 时，不能只看本地 relay/DIRECT；必须同时看远端 `main.log` 和对应 request log
+- Codex `/v1/responses` 的 500 若 request log 显示 `p.webshare.io:<port> -> chatgpt.com/auth.openai.com` `EOF`、`connect timeout` 或 `connection reset`，优先按 `201 -> .5 -> 账号代理商 -> provider` 链路不稳排查，不要误判为 model 配置或本地 Clash 规则
+- Claude 的 `connection not allowed by ruleset` 是 SOCKS CONNECT 阶段拒绝；`context canceled` 往往是下游/上游流被取消后的结果，需要结合同窗 provider-facing request log 和前后 200 判断是否持续故障
+- `unknown provider for model gpt-5.1-codex-mini` 是模型配置型 502，不应和网络断流混算
+- `80.174.217.1:12324` 是 Claude 账号专属代理，不应写成 Codex/Claude 共用代理
+
+生产边界：OpenClash 已交给独立维护方处理时，本仓库 AI 会话只做只读诊断和文档沉淀，不直接修改 `.5` overlay、不 reload/restart OpenClash，也不把 selector 切换当作无风险操作。若未来必须改 `.5`，应先准备离线 diff、备份、回滚口令、影响范围和维护窗口，再由 operator 执行。
 
 ### 7. 模型同步是分层问题，不是单点问题
 

@@ -1,6 +1,6 @@
 # 远端 Linux core 维护规则
 
-最后更新：2026-04-21
+最后更新：2026-05-12
 
 这份文档只负责说明“当前运行真值在哪里、维护入口是什么、最低复验要做什么”。完整部署流水和历史记录继续看 [`linux-cliproxyapi-plus-deploy.md`](./linux-cliproxyapi-plus-deploy.md)。
 
@@ -23,6 +23,7 @@
 - 远端 auth 挂载目录：`/home/wisedata/deploy/cliproxyapi-plus/runtime/auth`
 - 管理页静态文件：`/home/wisedata/deploy/cliproxyapi-plus/runtime/static/management.html`
 - 本地源码根目录：`/Users/corylin/Project/ai/quotio`
+- 远端主机的生产网关：`10.1.1.5` OpenWRT/OpenClash。远端 core 到账号专属代理商和 provider 的出站流量会经过这台网关；不要把本地客户端显示 `DIRECT` 误读成远端上游链路没有经过 `.5`。
 
 当前稳定基线是 HTTPS，自签名证书 SAN 包含 `IP:10.1.1.201`。客户端若尚未信任该证书链，临时 smoke 可以用 `curl -k`，长期接入仍必须导入并信任该证书或改成内部 CA / 受信证书。
 
@@ -33,8 +34,11 @@
 - 当前默认策略是：不要把本地正式最新 Codex auth 再同步到远端 / dev，也不要让多个运行面长期并行刷新同一账号
 - 若必须用本地账号解除远端 provider-facing 验证阻塞，只允许同步 access-token-only 副本：不要上传 refresh token；在账号设置里把 `refresh_enabled=false`，或使用 `scripts/sync-access-token-only-auth.sh` 生成/上传已移除 refresh token 的临时 auth
 - Claude OAuth 重新认证排障要看 token exchange 和真实 provider 请求，不能只看 UI 状态。T076 的实测故障链路是远端已收到 localhost callback，但第一次 `api.anthropic.com:443` token exchange 被 SOCKS 代理返回 `connection not allowed by ruleset`；短重试后同一账号路径成功，没有触发标准 OAuth transport fallback。这个错误应优先按代理规则 / 出口策略排查，不应误判为 callback 没提交、token 已拿到但没落盘、Anthropic 业务 4xx 或 TLS 指纹拒绝。
+- T240 的实测补充：Codex `/v1/responses` 大量 500 时，request log 若显示 `p.webshare.io:<port> -> chatgpt.com/auth.openai.com` 的 `EOF`、`connect timeout` 或 `connection reset`，优先按 `201 -> 10.1.1.5 OpenClash -> 账号代理商 -> provider` 链路不稳排查；这类问题不同于 `unknown provider for model ...` 的配置型 502。Claude `connection not allowed by ruleset` 同样是 SOCKS CONNECT 阶段拒绝，不是 Anthropic API 业务响应。
 
 后续任何代码或部署变更，都应先在独立 worktree 中完成，再从该 worktree 执行远端部署；不要直接在 `master` 主工作区上改远端真值。
+
+OpenClash 运行态是生产网关，不属于远端 core 部署 helper 的可随手操作范围。除非用户明确安排维护窗口，本仓库 AI 会话不要直接修改 `.5` overlay、reload/restart OpenClash 或切换全局 selector；只允许准备只读诊断、离线 diff、回滚步骤和交给 operator 执行的 runbook。
 
 ## access-token-only 远端测试账号
 
@@ -208,6 +212,14 @@ management key 文件和取值逻辑不变；启用 HTTPS 后，变化的是：
 3. 用 `runtime/secrets.env` 里的管理 key 调 `GET ${BASE_URL}/v0/management/auth-files` 成功
 4. 保存 `/healthz`、`/management.html` 和 `GET ${BASE_URL}/v0/management/auth-files` 的响应头，确认 `X-CPA-COMMIT` 等于本次 manifest 里的 `core_build_commit`，`X-CPA-VERSION` 等于 `core_build_version` 加 `-plus`，`X-CPA-BUILD-DATE` 等于本次 manifest 里的 `core_build_date`
 5. 对这次受影响的 provider / auth，至少做一次远端 provider-facing 复验
+
+若排查的是 Codex/Claude 断流而不是部署变更，最小证据顺序是：
+
+1. 本地客户端日志只用于确认用户侧症状，例如 `stream disconnected`、`context deadline exceeded`、`Client.Timeout`
+2. 远端 `runtime/logs/main.log` 用 5 分钟桶聚合 `/v1/responses`、`/v1/messages?beta=true`、`/v1/chat/completions` 的 `200/500/502`
+3. 对 500/502 的 request log 只抽取 `URL`、`Timestamp`、`Error`、`Status` 和 error JSON，不 dump request body，避免暴露 token 或把大上下文写进报告
+4. 看到 `unknown provider for model ...` 时归为模型配置问题；看到 SOCKS `EOF`、`connect timeout`、`connection reset`、`connection not allowed by ruleset` 时归为账号代理 / `.5` 网关 / 代理商链路问题
+5. 以同窗后续是否大量恢复 `200` 判断是否仍在持续故障，不要把单次 `context canceled` 直接升级成 outage
 
 若验收对象是 Quotio `remote-relay`，还要额外确认：
 
