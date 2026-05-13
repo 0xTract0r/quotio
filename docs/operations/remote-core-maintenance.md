@@ -1,6 +1,6 @@
 # 远端 Linux core 维护规则
 
-最后更新：2026-05-12
+最后更新：2026-05-13
 
 这份文档只负责说明“当前运行真值在哪里、维护入口是什么、最低复验要做什么”。完整部署流水和历史记录继续看 [`linux-cliproxyapi-plus-deploy.md`](./linux-cliproxyapi-plus-deploy.md)。
 
@@ -35,6 +35,9 @@
 - 若必须用本地账号解除远端 provider-facing 验证阻塞，只允许同步 access-token-only 副本：不要上传 refresh token；在账号设置里把 `refresh_enabled=false`，或使用 `scripts/sync-access-token-only-auth.sh` 生成/上传已移除 refresh token 的临时 auth
 - Claude OAuth 重新认证排障要看 token exchange 和真实 provider 请求，不能只看 UI 状态。T076 的实测故障链路是远端已收到 localhost callback，但第一次 `api.anthropic.com:443` token exchange 被 SOCKS 代理返回 `connection not allowed by ruleset`；短重试后同一账号路径成功，没有触发标准 OAuth transport fallback。这个错误应优先按代理规则 / 出口策略排查，不应误判为 callback 没提交、token 已拿到但没落盘、Anthropic 业务 4xx 或 TLS 指纹拒绝。
 - T240 的实测补充：Codex `/v1/responses` 大量 500 时，request log 若显示 `p.webshare.io:<port> -> chatgpt.com/auth.openai.com` 的 `EOF`、`connect timeout` 或 `connection reset`，优先按 `201 -> 10.1.1.5 OpenClash -> 账号代理商 -> provider` 链路不稳排查；这类问题不同于 `unknown provider for model ...` 的配置型 502。Claude `connection not allowed by ruleset` 同样是 SOCKS CONNECT 阶段拒绝，不是 Anthropic API 业务响应。
+- OAuth re-auth 必须保留用户字段：远端 core 已修复 `RequestCodexToken` / `saveTokenRecord` 在 OAuth re-auth 路径上覆盖 `proxy_url` / `note` / `headers` / `refresh_disabled` / `refresh_enabled` / `websockets` / `disabled` / `account_settings` 的 bug。修复后这些字段会在写入新 OAuth token 之前从同账号旧记录里 merge 回来；Codex plan-type 改名（如 `plus -> pro`）也会自动删除旧 credential 文件并把旧 in-memory entry 标记 disabled。Re-auth 后如果发现 proxy 或 managed header 等用户字段消失，应优先确认 core image 是否包含本修复，再排查其他原因。
+- 管理 UI 的 `GET /v0/management/auth-files` 现在是纯 read-only fast path，不再在请求线上同步 managed-header / runtime-identity 状态；这些刷新改由 handler 内置的 `managedHeaderSyncScheduler` 背景执行（per-auth in-flight dedup + 指数退避 60s -> 10m）。所以列表慢、`ListAuthFiles slow` warning 或 managed header 一段时间内没更新，应优先看后台 goroutine 是否被 in-flight 锁或 cooldown 阻断，而不是先怀疑账号本身。
+- `CodexExecutor.Refresh` / `ClaudeExecutor.Refresh` 现在在执行 OAuth refresh 前会显式检查 `auth.RefreshDisabled()`（覆盖 metadata `refresh_disabled=true` / `refresh_enabled=false` / `account_settings.refresh_enabled=false`），任何调用路径（retry-on-401、unaware path）都不会再绕过 operator 设置触发 provider refresh。
 
 后续任何代码或部署变更，都应先在独立 worktree 中完成，再从该 worktree 执行远端部署；不要直接在 `master` 主工作区上改远端真值。
 

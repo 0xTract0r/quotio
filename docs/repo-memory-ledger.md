@@ -1,6 +1,6 @@
 # Repo Memory Ledger
 
-最后更新：2026-05-12
+最后更新：2026-05-13
 
 这份文档只记录仓库级、长期有效、值得反复记住的事实和边界。
 
@@ -147,6 +147,9 @@ T240 的长期结论：
   - `managed_header_state` 只有在 projection 真变化时才追加 history，避免把时间戳刷新误记成版本演进
   - T060 已完成远端闭环：safe deploy manifest `build/remote-deploy-safety/20260509T083141Z/manifest.env`；远端 3 个 Codex 账号均返回 `completeness=online-coherent-bundle` / `source=community:codex-proxy` / `codex_proxy_compatible_v1`，Claude 返回 `completeness=partial-cli-version-only` / `source=online:npm` / `claude_reqwest_rustls_compatible_v1`；controlled echo runtime probe 证明托管 header policy/source/version 已进入 core-mediated 账号运行证据，但仍不是 provider 官方 attestation
 - `extra_headers` 若与 managed / protocol-reserved headers 冲突，必须由 core API 拒绝，而不是默默覆盖
+- OAuth re-auth 必须保留用户定义字段，不能由 OAuth 响应覆盖：`proxy_url` / `note` / `headers` / `refresh_disabled` / `refresh_enabled` / `websockets` / `disabled` / `account_settings`（含 `managed_header_state` / `runtime_identity_state`）/ `label` / `tags` / `extra_headers` 都由 management UI 写入，OAuth handler 只能更新 token 自身字段（`access_token` / `refresh_token` / `id_token` / `email` / `account_id` / `expired` / `last_refresh` 等）。Codex plan-type 改名（如 `plus -> pro`）导致 credential 文件名变化时，merge 完后必须删除旧文件并标记旧 in-memory 条目 disabled，避免孤儿和重复账号。
+- `RefreshDisabled()` 当前覆盖 metadata `refresh_disabled=true` / `refresh_enabled=false` / `disable_refresh=true` / `auto_refresh_disabled=true` / 同名 attribute / `account_settings.{refresh_enabled=false, refresh_disabled=true, ...}` 各路径，executors（至少 Codex / Claude）在 Refresh 入口必须显式短路返回，避免 retry-on-401 等 unaware caller 绕过 operator 设置触发 provider refresh。
+- `GET /v0/management/auth-files` 必须是 read-only fast path，不能在请求线上做同步 managed-header / runtime-identity 写盘或同步外呼。这条 endpoint 一旦回退成同步 sync，3 个 codex 账号 × 3 次 token refresh retry 就足以阻塞列表 21~24 秒（T260 实测）。后台 sync 必须有 per-auth in-flight dedup、成功冷却（默认 30s）、失败指数退避（60s -> 10m）和 worker timeout（默认 25s）。
 - Management Center `/quota` 页面现在是远端配额观测主入口之一：页面挂载期间默认启用自动刷新，默认间隔 1 分钟，并显示上次刷新时间；实现上只刷新当前可见/当前分页的账号配额，避免打开页面后无界地批量打 provider
 - Quotio 远端模式的配额自动刷新不能依赖 `NSApplication.shared.isActive`。菜单栏常驻/窗口隐藏时 app 可能不是 active，但用户配置的 1 分钟刷新仍应执行；否则 menu bar 会持续显示几分钟前的旧数据
 - `transport_profile` / `tls_profile` 当前要分开讲：
