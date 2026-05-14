@@ -1,19 +1,19 @@
 # 远端 Linux core 维护规则
 
-最后更新：2026-05-13
+最后更新：2026-05-14
 
 这份文档只负责说明“当前运行真值在哪里、维护入口是什么、最低复验要做什么”。完整部署流水和历史记录继续看 [`linux-cliproxyapi-plus-deploy.md`](./linux-cliproxyapi-plus-deploy.md)。
 
 ## 当前运行真值
 
-> 2026-04-21 现态说明：
-> 远端 `10.1.1.201` 已恢复到 HTTPS 基线，`runtime/config/config.yaml` 中 `proxy-url` 已恢复、`tls.enable: true`，`runtime/tls/server.crt` / `server.key` 在位。
-> 当前对外与人类客户端接入基线重新回到 `https://10.1.1.201:18317`。只有当未来显式执行受控 HTTP 降级时，才应再把 `http://10.1.1.201:18317` 视作临时事故地址。
+> 2026-05-11 现态说明：
+> 远端 `10.1.1.201` 已切到 `cpa.wisedata.co` 的 Let's Encrypt HTTPS 证书，`runtime/config/config.yaml` 中 `proxy-url` 已恢复、`tls.enable: true`，`runtime/tls/server.crt` / `server.key` 在位。
+> 当前对外与人类客户端接入基线是 `https://cpa.wisedata.co:18317`。只有当未来显式执行受控 HTTP 降级时，才应再把 `http://10.1.1.201:18317` 视作临时事故地址。
 
 - 远端主机：`wisedata@10.1.1.201`
-- 人类客户端目标基线：Quotio -> `https://10.1.1.201:18317`
+- 人类客户端目标基线：Quotio / Claude / Codex -> `https://cpa.wisedata.co:18317`
 - Quotio 接入方式：`remote-core` 直连远端 endpoint；或 `remote-relay` 保留本机 `127.0.0.1:<port>` 客户端入口并转发到远端 core
-- 管理页基线 URL：`https://10.1.1.201:18317/management.html`
+- 管理页基线 URL：`https://cpa.wisedata.co:18317/management.html`
 - 管理 key 文件：`/home/wisedata/deploy/cliproxyapi-plus/runtime/secrets.env`
 - 远端部署根目录：`/home/wisedata/deploy/cliproxyapi-plus`
 - 远端配置文件：`/home/wisedata/deploy/cliproxyapi-plus/runtime/config/config.yaml`
@@ -25,7 +25,58 @@
 - 本地源码根目录：`/Users/corylin/Project/ai/quotio`
 - 远端主机的生产网关：`10.1.1.5` OpenWRT/OpenClash。远端 core 到账号专属代理商和 provider 的出站流量会经过这台网关；不要把本地客户端显示 `DIRECT` 误读成远端上游链路没有经过 `.5`。
 
-当前稳定基线是 HTTPS，自签名证书 SAN 包含 `IP:10.1.1.201`。客户端若尚未信任该证书链，临时 smoke 可以用 `curl -k`，长期接入仍必须导入并信任该证书或改成内部 CA / 受信证书。
+当前稳定基线是 HTTPS，客户端入口域名为 `cpa.wisedata.co`。本机通过 `/etc/hosts` 把该域名解析到 `10.1.1.201`；远端服务端证书由 Let's Encrypt 签发，SAN 包含 `DNS:cpa.wisedata.co`，因此正常客户端不需要 `curl -k`、`NODE_TLS_REJECT_UNAUTHORIZED=0` 或自签证书 bundle。若绕过 hosts 改用公网 DNS，必须确保 `cpa.wisedata.co` 仍能解析到目标远端地址。
+
+### 2026-05-11 本机 Claude / Codex 直连远端状态
+
+本机曾在 `remote-relay` 下让 Claude / Codex 继续走 `http://127.0.0.1:18317`，由本地 Quotio 转发到远端。2026-05-11 为排查本地大量 Codex 断流，先临时直连 `https://10.1.1.201:18317`，后续已签发并部署 `cpa.wisedata.co` 的 Let's Encrypt 证书，最终把本机 Claude / Codex CLI 改成直接访问远端域名入口：
+
+- Codex：`~/.codex/config.toml` 的 `model_providers.cliproxyapi.base_url` 改为 `https://cpa.wisedata.co:18317/v1`
+- Claude：`~/.claude/settings.json` 的 `env.ANTHROPIC_BASE_URL` 改为 `https://cpa.wisedata.co:18317`
+- Claude settings 保留 `HTTP_PROXY` / `HTTPS_PROXY` 时，必须同时设置 `NO_PROXY` / `no_proxy = cpa.wisedata.co,10.1.1.201,127.0.0.1,localhost`；否则本机代理会把到远端 core 的内网流量带偏并触发 `ECONNRESET`
+- Codex 若运行环境存在系统代理，也需要同等 `NO_PROXY` / `no_proxy`；当前本机已在 `~/.zshrc` 持久化该绕过
+- 两者继续使用本机原有 Quotio API key / auth token，不改变远端 auth 挂载目录，也不触发远端 deploy 或重启
+
+已验证事实：
+
+- `curl https://cpa.wisedata.co:18317/healthz` 返回 `{"status":"ok"}`，`SSL_VERIFY_RESULT=0`
+- `claude -p` 已返回 `claude-cpa-noproxy-ok`
+- `codex exec` 已返回 `codex-cpa-noproxy-only-ok`
+
+当前远端证书要点：
+
+- `subject = /CN=cpa.wisedata.co`
+- `issuer = Let's Encrypt E7`
+- `SAN = DNS:cpa.wisedata.co`
+- `Basic Constraints = CA:FALSE`
+- `SHA256 Fingerprint = 7E:3E:A2:CF:C5:08:82:54:32:E8:F6:4F:51:23:B3:1F:C2:90:8F:12:87:1E:BC:19:D1:1B:02:F9:91:0C:44:3C`
+- `notAfter = 2026-08-09 10:03:40 GMT`
+
+风险边界：
+
+- 这是本机 CLI 接入方式和远端 TLS 证书变更；不改变远端 auth 挂载目录
+- 远端旧自签证书已备份到 `backups/tls-20260511T111422Z`
+- Let’s Encrypt 手动 DNS 模式不能自动续期；下次续期会生成新的 `_acme-challenge.cpa.wisedata.co` TXT value，需要在过期前手动续期或改成 DNS API 自动续期
+- 如果本机代理继续接管 `cpa.wisedata.co:18317`，Claude/Codex 仍可能失败；优先检查 `NO_PROXY` / `no_proxy`
+
+回滚到本地 Quotio relay：
+
+```toml
+# ~/.codex/config.toml
+[model_providers.cliproxyapi]
+base_url = "http://127.0.0.1:18317/v1"
+```
+
+```json
+// ~/.claude/settings.json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:18317"
+  }
+}
+```
+
+若要回滚远端证书，恢复 `backups/tls-20260511T111422Z/server.crt` 与 `server.key` 到 `runtime/tls/` 后重启远端 compose 服务；这会重新回到旧自签证书链。
 
 另一个长期运维边界：
 

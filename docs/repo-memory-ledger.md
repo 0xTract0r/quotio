@@ -1,6 +1,6 @@
 # Repo Memory Ledger
 
-最后更新：2026-05-13
+最后更新：2026-05-14
 
 这份文档只记录仓库级、长期有效、值得反复记住的事实和边界。
 
@@ -198,6 +198,14 @@ T240 的长期结论：
 - 适用范围：每个 provider executor 的 outbound `applyXxxHeaders(req, ..., auth)` helper（PrepareRequest / Execute / ExecuteStream 共用入口）。helper 在写完硬编码 UA / Authorization / Accept 等 header 之后，必须显式调用一次 `util.ApplyCustomHeadersFromAttrs(req, auth.Attributes)`，否则账号设置里写入的 `header:<name>` 属性会在持久化和管理 UI 都正常往返、但**永远不会出现在真实 outbound 请求上**。
 - 当前已落地：Codex / Claude / Kimi / Kilo / Gemini / Gemini Vertex / Gemini CLI / Antigravity / AIStudio / Codex websockets / Claude legacy device profile / IFlow / Qwen / GitHub Copilot（注：Claude / Codex 还会在 custom header 后用 managed-header snapshot 恢复 UA / Originator 等关键 header；其它 provider 默认允许 custom header 覆盖硬编码默认值，与 codex 行为一致）。
 - 反例：IFlow / Qwen / GitHub Copilot 的 `applyXxxHeaders` 此前不接受 `auth` 参数，account 级 `extra_headers` / `account_settings.headers` 仅在 management UI 与配置盘上有效，业务请求 outbound 时被完全忽略。新增 provider 时默认让 helper 接受 `auth` 并在末尾调用 `ApplyCustomHeadersFromAttrs`，并补一个测试：构造一个含 `header:X-Custom-Foo:bar` 的 attribute，调用 apply helper，断言 outbound request header 出现该字段。
+
+### 14. 本机 CLI 直连远端 HTTPS 时，域名证书和代理绕过都要对齐
+
+- 2026-05-11 为排查本地 Codex 断流，本机 Claude / Codex CLI 已从本地 `127.0.0.1:18317` relay 改成直连远端 `https://cpa.wisedata.co:18317`
+- `cpa.wisedata.co` 由本机 `/etc/hosts` 指到 `10.1.1.201`，远端 core 使用 Let’s Encrypt E7 签发的 `DNS:cpa.wisedata.co` 证书；正常客户端不再需要 `NODE_TLS_REJECT_UNAUTHORIZED=0`、`NODE_EXTRA_CA_CERTS` 或 `SSL_CERT_FILE`
+- 如果 Claude / Codex 所在环境配置了 `HTTP_PROXY` / `HTTPS_PROXY`，必须同步设置 `NO_PROXY` / `no_proxy` 覆盖 `cpa.wisedata.co,10.1.1.201,127.0.0.1,localhost`；否则内网 core 流量会被代理带偏，表现为 `ECONNRESET` 或 Codex `stream disconnected before completion`
+- Let’s Encrypt 手动 DNS 模式证书需要续期维护；下次续期会生成新的 `_acme-challenge.cpa.wisedata.co` TXT value，不能复用本轮 value
+- 详细配置、证书指纹、验证命令和回滚步骤见 `docs/operations/remote-core-maintenance.md`
 
 ## 收敛补充规则
 

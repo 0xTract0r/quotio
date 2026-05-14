@@ -402,6 +402,8 @@ curl -fsS -k \
 注意：
 
 - `-k` 只适用于自签名 smoke；长期接入的 Quotio、浏览器和其他客户端应改为信任该证书或使用受信 CA 证书
+- 2026-05-11 已把远端 TLS 证书替换为 `cpa.wisedata.co` 的 Let’s Encrypt 证书；本机通过 `/etc/hosts` 将 `cpa.wisedata.co` 指到 `10.1.1.201` 后，Claude / Codex 可使用 `https://cpa.wisedata.co:18317` 直连且不需要 `NODE_TLS_REJECT_UNAUTHORIZED=0`、`NODE_EXTRA_CA_CERTS` 或 `SSL_CERT_FILE`
+- 如果客户端环境配置了 `HTTP_PROXY` / `HTTPS_PROXY`，必须为 `cpa.wisedata.co,10.1.1.201,127.0.0.1,localhost` 设置 `NO_PROXY` / `no_proxy`；否则本机代理可能无法访问内网远端 core，表现为 `ECONNRESET` 或 `stream disconnected before completion`
 - management key 不因为 HTTPS 改变；变化的是 URL scheme 和客户端对证书链的信任要求
 - `HEAD /management.html` 依然不能作为验收依据
 
