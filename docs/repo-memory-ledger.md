@@ -147,9 +147,6 @@ T240 的长期结论：
   - `managed_header_state` 只有在 projection 真变化时才追加 history，避免把时间戳刷新误记成版本演进
   - T060 已完成远端闭环：safe deploy manifest `build/remote-deploy-safety/20260509T083141Z/manifest.env`；远端 3 个 Codex 账号均返回 `completeness=online-coherent-bundle` / `source=community:codex-proxy` / `codex_proxy_compatible_v1`，Claude 返回 `completeness=partial-cli-version-only` / `source=online:npm` / `claude_reqwest_rustls_compatible_v1`；controlled echo runtime probe 证明托管 header policy/source/version 已进入 core-mediated 账号运行证据，但仍不是 provider 官方 attestation
 - `extra_headers` 若与 managed / protocol-reserved headers 冲突，必须由 core API 拒绝，而不是默默覆盖
-- OAuth re-auth 必须保留用户定义字段，不能由 OAuth 响应覆盖：`proxy_url` / `note` / `headers` / `refresh_disabled` / `refresh_enabled` / `websockets` / `disabled` / `account_settings`（含 `managed_header_state` / `runtime_identity_state`）/ `label` / `tags` / `extra_headers` 都由 management UI 写入，OAuth handler 只能更新 token 自身字段（`access_token` / `refresh_token` / `id_token` / `email` / `account_id` / `expired` / `last_refresh` 等）。Codex plan-type 改名（如 `plus -> pro`）导致 credential 文件名变化时，merge 完后必须删除旧文件并标记旧 in-memory 条目 disabled，避免孤儿和重复账号。
-- `RefreshDisabled()` 当前覆盖 metadata `refresh_disabled=true` / `refresh_enabled=false` / `disable_refresh=true` / `auto_refresh_disabled=true` / 同名 attribute / `account_settings.{refresh_enabled=false, refresh_disabled=true, ...}` 各路径，executors（至少 Codex / Claude）在 Refresh 入口必须显式短路返回，避免 retry-on-401 等 unaware caller 绕过 operator 设置触发 provider refresh。
-- `GET /v0/management/auth-files` 必须是 read-only fast path，不能在请求线上做同步 managed-header / runtime-identity 写盘或同步外呼。这条 endpoint 一旦回退成同步 sync，3 个 codex 账号 × 3 次 token refresh retry 就足以阻塞列表 21~24 秒（T260 实测）。后台 sync 必须有 per-auth in-flight dedup、成功冷却（默认 30s）、失败指数退避（60s -> 10m）和 worker timeout（默认 25s）。
 - Management Center `/quota` 页面现在是远端配额观测主入口之一：页面挂载期间默认启用自动刷新，默认间隔 1 分钟，并显示上次刷新时间；实现上只刷新当前可见/当前分页的账号配额，避免打开页面后无界地批量打 provider
 - Quotio 远端模式的配额自动刷新不能依赖 `NSApplication.shared.isActive`。菜单栏常驻/窗口隐藏时 app 可能不是 active，但用户配置的 1 分钟刷新仍应执行；否则 menu bar 会持续显示几分钟前的旧数据
 - `transport_profile` / `tls_profile` 当前要分开讲：
@@ -177,6 +174,18 @@ T240 的长期结论：
   - 把两份配置里的 `vpnkitCIDR` 从 `192.168.65.0/24` 改到未冲突网段（当前验证值：`172.31.255.0/24`）
   - 重启 Docker Desktop，再复验 `docker version`
 - 这条记忆的用途是避免再次把“本机 Docker Desktop 内部网段冲突”误判成远端 deploy 脚本或 core 代码问题
+
+### 13. OAuth executor `Refresh` 必须把 `auth.ProxyURL` 传到底层 auth client，不能 fallback 到全局 `cfg.ProxyURL`
+
+- 适用范围：`internal/runtime/executor/{claude,qwen,iflow,codex}_executor.go` 的 `Refresh`（含 IFlow 的 `refreshCookieBased` / `refreshOAuthBased`）。在已经持有特定账号 `auth` 上下文的 token refresh / cookie refresh 路径里，构造底层 auth client（`NewClaudeAuth*`、`NewQwenAuth*`、`NewIFlowAuth*`、`NewCodexAuth*`）必须显式传 `auth.ProxyURL`，使用对应的 `WithProxyURL` ctor；不能只传 `e.cfg`。
+- 反例症状（已生产观察过）：远端 Claude 账号配置了账号级 SOCKS5 `proxy_url`，但 executor `Refresh` 走全局 OpenClash 代理 → 自动 refresh 静默失败（manager 日志里 `core auth auto-refresh started` 循环仍在跑）→ 用户每 8 小时必须手动重新 OAuth。
+- 修复模板（已落地）：
+  - `claude_executor.go` `Refresh` → `claudeauth.NewClaudeAuthWithProxyURL(e.cfg, auth.ProxyURL)`
+  - `qwen_executor.go` `Refresh` → `qwenauth.NewQwenAuthWithProxyURL(e.cfg, auth.ProxyURL)`
+  - `iflow_executor.go` `refreshCookieBased` / `refreshOAuthBased` → `iflowauth.NewIFlowAuthWithProxyURL(e.cfg, auth.ProxyURL)`
+  - 参考已正确实现的 `codex_executor.go` `Refresh` → `codexauth.NewCodexAuthWithProxyURL(e.cfg, auth.ProxyURL)`
+- 例外：OAuth 起始 URL 生成 / 设备码 / 首次登录路径（管理 API `RequestQwenToken` / `RequestIFlowToken` / SDK `Login` / `cmd/iflow_cookie.go` / `newClaudeOAuthAuth(nil)` fallback）尚未持有账号 `auth` 上下文，保持使用 `cfg.ProxyURL` 是预期行为。
+- 新增同类 provider 的 OAuth 实现时，默认按这条规则走，并附最小 regression test：在 auth 包验证 `WithProxyURL` 的 override 优先级，在 executor 包验证 `Refresh` 实际通过 `auth.ProxyURL` 路由（local httptest 当作 HTTP proxy 接收 CONNECT 即可）。
 
 ## 收敛补充规则
 
