@@ -180,15 +180,24 @@ T240 的长期结论：
 
 ### 13. OAuth executor `Refresh` 必须把 `auth.ProxyURL` 传到底层 auth client，不能 fallback 到全局 `cfg.ProxyURL`
 
-- 适用范围：`internal/runtime/executor/{claude,qwen,iflow,codex}_executor.go` 的 `Refresh`（含 IFlow 的 `refreshCookieBased` / `refreshOAuthBased`）。在已经持有特定账号 `auth` 上下文的 token refresh / cookie refresh 路径里，构造底层 auth client（`NewClaudeAuth*`、`NewQwenAuth*`、`NewIFlowAuth*`、`NewCodexAuth*`）必须显式传 `auth.ProxyURL`，使用对应的 `WithProxyURL` ctor；不能只传 `e.cfg`。
-- 反例症状（已生产观察过）：远端 Claude 账号配置了账号级 SOCKS5 `proxy_url`，但 executor `Refresh` 走全局 OpenClash 代理 → 自动 refresh 静默失败（manager 日志里 `core auth auto-refresh started` 循环仍在跑）→ 用户每 8 小时必须手动重新 OAuth。
+- 适用范围：`internal/runtime/executor/{claude,qwen,iflow,codex,kiro,gitlab,github_copilot}_executor.go` 的 `Refresh`（含 IFlow 的 `refreshCookieBased` / `refreshOAuthBased`；Kiro 的 SSO OIDC IDC/Builder-ID 路径 **和** social-auth Google/GitHub 路径；GitLab 的 OAuth refresh + 后续 `FetchDirectAccess`；GitHub Copilot 的 `Refresh` **和** `ensureAPIToken`，后者会在 cache miss 时随每次业务请求触发 token exchange）；以及 `sdk/auth/kiro.go` 的 `KiroAuthenticator.Refresh`。在已经持有特定账号 `auth` 上下文的 token refresh / cookie refresh / token-exchange / profile-discovery 路径里，构造底层 auth client（`NewClaudeAuth*`、`NewQwenAuth*`、`NewIFlowAuth*`、`NewCodexAuth*`、`NewSSOOIDCClient*`、`NewKiroOAuth*`、`NewAuthClient*` (gitlab)、`NewCopilotAuth*`）必须显式传 `auth.ProxyURL`，使用对应的 `WithProxyURL` ctor；不能只传 `e.cfg`。
+- 反例症状（已生产观察过）：远端 Claude 账号配置了账号级 SOCKS5 `proxy_url`，但 executor `Refresh` 走全局 OpenClash 代理 → 自动 refresh 静默失败（manager 日志里 `core auth auto-refresh started` 循环仍在跑）→ 用户每 8 小时必须手动重新 OAuth。Copilot 的危害更严重：`ensureAPIToken` 在每次业务请求 cache miss 时都会重新走 token-exchange，缺失 `auth.ProxyURL` 会让该账号几乎所有业务请求的 token 阶段都泄露到全局代理。
 - 修复模板（已落地）：
   - `claude_executor.go` `Refresh` → `claudeauth.NewClaudeAuthWithProxyURL(e.cfg, auth.ProxyURL)`
   - `qwen_executor.go` `Refresh` → `qwenauth.NewQwenAuthWithProxyURL(e.cfg, auth.ProxyURL)`
   - `iflow_executor.go` `refreshCookieBased` / `refreshOAuthBased` → `iflowauth.NewIFlowAuthWithProxyURL(e.cfg, auth.ProxyURL)`
+  - `kiro_executor.go` `Refresh` 与 `fetchAndSaveProfileArn` → `kiroauth.NewSSOOIDCClientWithProxyURL(e.cfg, auth.ProxyURL)`；social-auth fallback → `kiroauth.NewKiroOAuthWithProxyURL(e.cfg, auth.ProxyURL)`；`sdk/auth/kiro.go` `KiroAuthenticator.Refresh` 同款替换
+  - `gitlab_executor.go` `Refresh` → `gitlab.NewAuthClientWithProxyURL(e.cfg, auth.ProxyURL)`（同时覆盖后续 `FetchDirectAccess`）
+  - `github_copilot_executor.go` `Refresh` / `ensureAPIToken` / `FetchGitHubCopilotModels` → `copilotauth.NewCopilotAuthWithProxyURL(e.cfg, auth.ProxyURL)`（含 cache-miss 路径，所以不只是定期 refresh 触发）
   - 参考已正确实现的 `codex_executor.go` `Refresh` → `codexauth.NewCodexAuthWithProxyURL(e.cfg, auth.ProxyURL)`
-- 例外：OAuth 起始 URL 生成 / 设备码 / 首次登录路径（管理 API `RequestQwenToken` / `RequestIFlowToken` / SDK `Login` / `cmd/iflow_cookie.go` / `newClaudeOAuthAuth(nil)` fallback）尚未持有账号 `auth` 上下文，保持使用 `cfg.ProxyURL` 是预期行为。
-- 新增同类 provider 的 OAuth 实现时，默认按这条规则走，并附最小 regression test：在 auth 包验证 `WithProxyURL` 的 override 优先级，在 executor 包验证 `Refresh` 实际通过 `auth.ProxyURL` 路由（local httptest 当作 HTTP proxy 接收 CONNECT 即可）。
+- 例外：OAuth 起始 URL 生成 / 设备码 / 首次登录路径（管理 API `RequestQwenToken` / `RequestIFlowToken` / Kiro 管理面 `aws` 设备码 `RegisterClient` / SDK `Login` / `cmd/iflow_cookie.go` / `newClaudeOAuthAuth(nil)` fallback）尚未持有账号 `auth` 上下文，保持使用 `cfg.ProxyURL` 是预期行为。
+- 新增同类 provider 的 OAuth 实现时，默认按这条规则走，并附最小 regression test：在 auth 包验证 `WithProxyURL` 的 override 优先级和空 override 回退 cfg.ProxyURL 的双向行为，在 executor 包验证 `Refresh` 实际通过 `auth.ProxyURL` 路由（local httptest 当作 HTTP proxy 接收 CONNECT 即可）。
+
+#### 13.1 Provider apply helpers 必须显式注入 `account_settings.headers` / `extra_headers`
+
+- 适用范围：每个 provider executor 的 outbound `applyXxxHeaders(req, ..., auth)` helper（PrepareRequest / Execute / ExecuteStream 共用入口）。helper 在写完硬编码 UA / Authorization / Accept 等 header 之后，必须显式调用一次 `util.ApplyCustomHeadersFromAttrs(req, auth.Attributes)`，否则账号设置里写入的 `header:<name>` 属性会在持久化和管理 UI 都正常往返、但**永远不会出现在真实 outbound 请求上**。
+- 当前已落地：Codex / Claude / Kimi / Kilo / Gemini / Gemini Vertex / Gemini CLI / Antigravity / AIStudio / Codex websockets / Claude legacy device profile / IFlow / Qwen / GitHub Copilot（注：Claude / Codex 还会在 custom header 后用 managed-header snapshot 恢复 UA / Originator 等关键 header；其它 provider 默认允许 custom header 覆盖硬编码默认值，与 codex 行为一致）。
+- 反例：IFlow / Qwen / GitHub Copilot 的 `applyXxxHeaders` 此前不接受 `auth` 参数，account 级 `extra_headers` / `account_settings.headers` 仅在 management UI 与配置盘上有效，业务请求 outbound 时被完全忽略。新增 provider 时默认让 helper 接受 `auth` 并在末尾调用 `ApplyCustomHeadersFromAttrs`，并补一个测试：构造一个含 `header:X-Custom-Foo:bar` 的 attribute，调用 apply helper，断言 outbound request header 出现该字段。
 
 ## 收敛补充规则
 
