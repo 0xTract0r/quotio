@@ -399,7 +399,7 @@ final class QuotaViewModel {
             return
         }
 
-        // Always refresh quotas directly first (works without proxy)
+        // Refresh available quota data before proxy startup.
         await refreshQuotasUnified()
         
         let autoStartProxy = RuntimeProfile.autoStartProxyOverride ?? UserDefaults.standard.bool(forKey: "autoStartProxy")
@@ -1491,9 +1491,13 @@ final class QuotaViewModel {
     func manualRefresh() async {
         if modeManager.isMonitorMode {
             await refreshQuotasDirectly()
+        } else if usesCoreManagedQuotaSnapshots {
+            await refreshData()
+            await refreshCoreManagedQuotas(triggerRefresh: true)
+            pruneMenuBarItems()
+            notifyQuotaDataChanged()
         } else if modeManager.isRemoteProxyMode {
             await refreshData()
-            await refreshAllQuotas()
         } else if proxyManager.proxyStatus.running {
             await refreshData()
         } else {
@@ -1505,17 +1509,183 @@ final class QuotaViewModel {
     private var allowsLocalAuthFileFallback: Bool {
         !modeManager.isRemoteProxyMode
     }
+
+    private var usesCoreManagedQuotaSnapshots: Bool {
+        apiClient != nil && (modeManager.isRemoteProxyMode || proxyManager.proxyStatus.running)
+    }
+
+    @discardableResult
+    private func refreshCoreManagedQuotas(triggerRefresh: Bool = false, provider: AIProvider? = nil) async -> Bool {
+        guard let client = apiClient else { return false }
+
+        do {
+            let response: QuotaSnapshotsResponse
+            if triggerRefresh {
+                response = try await client.refreshQuotaSnapshots(provider: provider)
+            } else {
+                response = try await client.fetchQuotaSnapshots()
+            }
+            applyCoreManagedQuotaSnapshots(response)
+            return true
+        } catch {
+            Log.quota("Core-managed quota snapshot failed: \(error.localizedDescription)")
+            if modeManager.isRemoteProxyMode {
+                applyCoreManagedQuotaFailure("Core-managed quota snapshot failed: \(error.localizedDescription)")
+            }
+            return false
+        }
+    }
+
+    private func applyCoreManagedQuotaFailure(_ message: String) {
+        for provider in [AIProvider.codex, .claude] {
+            let files = authFiles.filter { $0.providerType == provider && !$0.disabled }
+            guard !files.isEmpty else { continue }
+            providerQuotas[provider] = Dictionary(
+                uniqueKeysWithValues: files.map { file in
+                    (file.quotaLookupKey, remoteQuotaFailureData(message, isForbidden: false))
+                }
+            )
+        }
+    }
+
+    private func applyCoreManagedQuotaSnapshots(_ response: QuotaSnapshotsResponse) {
+        applyCoreManagedQuotaSnapshots(response, provider: .codex)
+        applyCoreManagedQuotaSnapshots(response, provider: .claude)
+    }
+
+    private func applyCoreManagedQuotaSnapshots(_ response: QuotaSnapshotsResponse, provider: AIProvider) {
+        let files = authFiles.filter { $0.providerType == provider && !$0.disabled }
+        guard !files.isEmpty else {
+            providerQuotas.removeValue(forKey: provider)
+            return
+        }
+
+        var quotas: [String: ProviderQuotaData] = [:]
+        for file in files {
+            guard let entry = quotaSnapshotEntry(for: file, provider: provider, entries: response.entries) else {
+                quotas[file.quotaLookupKey] = remoteQuotaFailureData(
+                    "Core quota snapshot is not available for this account yet.",
+                    isForbidden: false
+                )
+                continue
+            }
+            quotas[file.quotaLookupKey] = providerQuotaData(from: entry, provider: provider)
+        }
+        providerQuotas[provider] = quotas
+    }
+
+    private func quotaSnapshotEntry(for file: AuthFile, provider: AIProvider, entries: [QuotaSnapshotEntry]) -> QuotaSnapshotEntry? {
+        let providerEntries = entries.filter { $0.provider == provider.rawValue }
+        if let entry = providerEntries.first(where: { $0.authID == file.id }) {
+            return entry
+        }
+        if let authIndex = file.authIndex, let entry = providerEntries.first(where: { $0.authIndex == authIndex }) {
+            return entry
+        }
+        return providerEntries.first { $0.name == file.name }
+    }
+
+    private func providerQuotaData(from entry: QuotaSnapshotEntry, provider: AIProvider) -> ProviderQuotaData {
+        guard let snapshot = entry.snapshot else {
+            return remoteQuotaFailureData(coreQuotaStatusMessage(entry) ?? "Core quota snapshot is pending.", isForbidden: false)
+        }
+
+        do {
+            var quotaData: ProviderQuotaData
+            switch provider {
+            case .codex:
+                let data = try jsonData(from: snapshot.usage)
+                let payload = try JSONDecoder().decode(CodexUsageResponse.self, from: data)
+                quotaData = CodexQuotaData(from: payload).toProviderQuotaData()
+            case .claude:
+                let body = try jsonString(from: snapshot.usage)
+                quotaData = try remoteClaudeQuotaData(from: body)
+            default:
+                return remoteQuotaFailureData("Core quota snapshot provider \(provider.rawValue) is not supported.", isForbidden: false)
+            }
+
+            quotaData.lastUpdated = parseQuotaSnapshotDate(entry.lastRefreshedAt) ?? Date()
+            if let planType = entry.planType?.trimmingCharacters(in: .whitespacesAndNewlines), !planType.isEmpty {
+                quotaData.planType = planType
+            }
+            if let statusMessage = coreQuotaStatusMessage(entry) {
+                quotaData.statusMessage = statusMessage
+            }
+            return quotaData
+        } catch {
+            return remoteQuotaFailureData(
+                "Core quota snapshot could not be decoded: \(error.localizedDescription)",
+                planType: entry.planType,
+                isForbidden: false
+            )
+        }
+    }
+
+    private func coreQuotaStatusMessage(_ entry: QuotaSnapshotEntry) -> String? {
+        let status = entry.status.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let error = entry.error?.trimmingCharacters(in: .whitespacesAndNewlines), !error.isEmpty {
+            return "Core quota refresh \(status.isEmpty ? "failed" : status): \(error)"
+        }
+        if status.isEmpty || status == "ok" {
+            return nil
+        }
+        if status == "stale" {
+            if let next = parseQuotaSnapshotDate(entry.nextRefreshAt) {
+                return "Core quota snapshot is pending. Next refresh: \(next.formatted(date: .abbreviated, time: .standard))."
+            }
+            return "Core quota snapshot is pending."
+        }
+        return "Core quota refresh status: \(status)."
+    }
+
+    private func jsonData(from value: JSONValue?) throws -> Data {
+        guard let value else {
+            throw APIError.decodingError("missing quota snapshot payload")
+        }
+        return try JSONEncoder().encode(value)
+    }
+
+    private func jsonString(from value: JSONValue?) throws -> String {
+        let data = try jsonData(from: value)
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw APIError.decodingError("quota snapshot payload is not UTF-8")
+        }
+        return string
+    }
+
+    private func parseQuotaSnapshotDate(_ value: String?) -> Date? {
+        guard let value, !value.isEmpty else { return nil }
+
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
+        return standard.date(from: value)
+    }
     
-    func refreshAllQuotas() async {
+    func refreshAllQuotas(triggerCoreRefresh: Bool = false) async {
         guard !isLoadingQuotas else { return }
 
         isLoadingQuotas = true
         lastQuotaRefresh = Date()
 
-        if modeManager.isRemoteProxyMode {
-            async let codex: () = refreshRemoteCodexQuotasInternal()
-            async let claude: () = refreshRemoteClaudeQuotasInternal()
-            _ = await (codex, claude)
+        if usesCoreManagedQuotaSnapshots {
+            async let coreManaged: Bool = refreshCoreManagedQuotas(triggerRefresh: triggerCoreRefresh)
+            if modeManager.isRemoteProxyMode {
+                _ = await coreManaged
+            } else {
+                async let antigravity: () = refreshAntigravityQuotasInternal()
+                async let copilot: () = refreshCopilotQuotasInternal()
+                async let glm: () = refreshGlmQuotasInternal()
+                async let warp: () = refreshWarpQuotasInternal()
+                async let kiro: () = refreshKiroQuotasInternal()
+
+                _ = await (coreManaged, antigravity, copilot, glm, warp, kiro)
+            }
         } else {
             // Note: Cursor and Trae removed from auto-refresh (issue #29)
             // User must use "Scan for IDEs" to detect these
@@ -1544,7 +1714,7 @@ final class QuotaViewModel {
     /// In Remote Mode: skips local fetchers (data comes from remote proxy)
     /// Note: Cursor and Trae require explicit user scan (issue #29)
     func refreshQuotasUnified() async {
-        if modeManager.isRemoteProxyMode {
+        if modeManager.isRemoteProxyMode || usesCoreManagedQuotaSnapshots {
             await refreshAllQuotas()
             return
         }
@@ -1652,37 +1822,6 @@ final class QuotaViewModel {
         providerQuotas[.codex] = quotas
     }
 
-    private func setHeader(_ name: String, value: String, in headers: inout [String: String]) {
-        if let existingKey = headers.keys.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
-            headers[existingKey] = value
-        } else {
-            headers[name] = value
-        }
-    }
-
-    private func remoteCodexQuotaHeaders(for file: AuthFile, accountID: String?) -> [String: String] {
-        var headers = file.accountSettings?.managedHeaders ?? [:]
-        headers = headers.filter { key, _ in
-            key.caseInsensitiveCompare("Accept-Encoding") != .orderedSame
-        }
-        if let extraHeaders = file.accountSettings?.extraHeaders {
-            for (key, value) in extraHeaders where !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if headers.keys.contains(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) {
-                    continue
-                }
-                headers[key] = value
-            }
-        }
-
-        setHeader("Authorization", value: "Bearer $TOKEN$", in: &headers)
-        setHeader("Accept", value: "application/json", in: &headers)
-        setHeader("Content-Type", value: "application/json", in: &headers)
-        if let accountID = accountID, !accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            setHeader("Chatgpt-Account-Id", value: accountID, in: &headers)
-        }
-        return headers
-    }
-
     private func remoteQuotaFailureData(_ message: String, planType: String? = nil, isForbidden: Bool = true) -> ProviderQuotaData {
         ProviderQuotaData(
             models: [],
@@ -1691,26 +1830,6 @@ final class QuotaViewModel {
             planType: planType,
             statusMessage: message
         )
-    }
-
-    private func remoteClaudeQuotaHeaders(for file: AuthFile) -> [String: String] {
-        var headers = file.accountSettings?.managedHeaders ?? [:]
-        headers = headers.filter { key, _ in
-            key.caseInsensitiveCompare("Accept-Encoding") != .orderedSame
-        }
-        if let extraHeaders = file.accountSettings?.extraHeaders {
-            for (key, value) in extraHeaders where !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if headers.keys.contains(where: { $0.caseInsensitiveCompare(key) == .orderedSame }) {
-                    continue
-                }
-                headers[key] = value
-            }
-        }
-
-        setHeader("Authorization", value: "Bearer $TOKEN$", in: &headers)
-        setHeader("Accept", value: "application/json", in: &headers)
-        setHeader("anthropic-beta", value: "oauth-2025-04-20", in: &headers)
-        return headers
     }
 
     private func parseRemoteClaudeQuotaUsage(_ json: [String: Any]?, name: String) -> ModelQuota? {
@@ -1806,200 +1925,12 @@ final class QuotaViewModel {
         )
     }
 
-    private func refreshRemoteCodexQuotasInternal() async {
-        guard let client = apiClient else {
-            Log.quota("Remote Codex quota skipped: management client unavailable")
-            #if DEBUG
-            if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota-skip reason=management-client-unavailable")
-            }
-            #endif
-            return
-        }
-
-        let codexFiles = authFiles.filter { $0.providerType == .codex && !$0.disabled }
-        var quotas: [String: ProviderQuotaData] = [:]
-
-        for file in codexFiles {
-            guard let authIndex = file.authIndex?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !authIndex.isEmpty else {
-                let message = "Remote quota skipped: core did not return auth_index for this account."
-                Log.quota("Remote Codex quota skipped for \(file.name): missing auth_index")
-                quotas[file.quotaLookupKey] = remoteQuotaFailureData(message)
-                #if DEBUG
-                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=skipped reason=missing-auth-index")
-                }
-                #endif
-                continue
-            }
-            let accountID = file.codexChatGPTAccountID
-
-            do {
-                let response = try await client.apiCall(APICallRequest(
-                    authIndex: authIndex,
-                    method: "GET",
-                    url: "https://chatgpt.com/backend-api/wham/usage",
-                    header: remoteCodexQuotaHeaders(for: file, accountID: accountID),
-                    data: nil
-                ))
-
-                guard 200...299 ~= response.statusCode else {
-                    Log.quota("Remote Codex quota failed for \(file.name): upstream HTTP \(response.statusCode)")
-                    quotas[file.quotaLookupKey] = remoteQuotaFailureData("Remote quota request failed: upstream HTTP \(response.statusCode).")
-                    #if DEBUG
-                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=failed upstream_http=\(response.statusCode)")
-                    }
-                    #endif
-                    continue
-                }
-                guard let body = response.body,
-                      let data = body.data(using: .utf8) else {
-                    Log.quota("Remote Codex quota failed for \(file.name): empty response body")
-                    quotas[file.quotaLookupKey] = remoteQuotaFailureData("Remote quota request returned an empty body.")
-                    #if DEBUG
-                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=failed reason=empty-body")
-                    }
-                    #endif
-                    continue
-                }
-
-                let payload = try JSONDecoder().decode(CodexUsageResponse.self, from: data)
-                let quotaData = CodexQuotaData(from: payload).toProviderQuotaData()
-                quotas[file.quotaLookupKey] = quotaData
-                #if DEBUG
-                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                    RuntimeIsolationDebugLog.write(
-                        "[ui-smoke] remote-codex-quota account=\(file.name) status=loaded " +
-                        "models=\(quotaData.models.count) forbidden=\(quotaData.isForbidden) " +
-                        "message_present=\(!(quotaData.statusMessage ?? "").isEmpty)"
-                    )
-                }
-                #endif
-            } catch {
-                Log.quota("Remote Codex quota failed for \(file.name): \(error.localizedDescription)")
-                quotas[file.quotaLookupKey] = remoteQuotaFailureData("Remote quota request failed: \(error.localizedDescription)")
-                #if DEBUG
-                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota account=\(file.name) status=failed error=\(error.localizedDescription)")
-                }
-                #endif
-            }
-        }
-
-        providerQuotas[.codex] = quotas
-        #if DEBUG
-        if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-            RuntimeIsolationDebugLog.write("[ui-smoke] remote-codex-quota-complete accounts=\(quotas.count)")
-        }
-        #endif
-    }
-
-    private func refreshRemoteClaudeQuotasInternal() async {
-        guard let client = apiClient else {
-            Log.quota("Remote Claude quota skipped: management client unavailable")
-            #if DEBUG
-            if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota-skip reason=management-client-unavailable")
-            }
-            #endif
-            return
-        }
-
-        let claudeFiles = authFiles.filter { $0.providerType == .claude && !$0.disabled }
-        var quotas: [String: ProviderQuotaData] = [:]
-
-        for file in claudeFiles {
-            guard let authIndex = file.authIndex?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !authIndex.isEmpty else {
-                let message = "Remote Claude quota skipped: core did not return auth_index for this account."
-                Log.quota("Remote Claude quota skipped for \(file.name): missing auth_index")
-                quotas[file.quotaLookupKey] = remoteQuotaFailureData(message)
-                #if DEBUG
-                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=skipped reason=missing-auth-index")
-                }
-                #endif
-                continue
-            }
-
-            do {
-                let response = try await client.apiCall(APICallRequest(
-                    authIndex: authIndex,
-                    method: "GET",
-                    url: "https://api.anthropic.com/api/oauth/usage",
-                    header: remoteClaudeQuotaHeaders(for: file),
-                    data: nil
-                ))
-
-                guard 200...299 ~= response.statusCode else {
-                    Log.quota("Remote Claude quota failed for \(file.name): upstream HTTP \(response.statusCode)")
-                    quotas[file.quotaLookupKey] = remoteQuotaFailureData(
-                        "Remote Claude quota request failed: upstream HTTP \(response.statusCode).",
-                        isForbidden: response.statusCode == 401 || response.statusCode == 403
-                    )
-                    #if DEBUG
-                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=failed upstream_http=\(response.statusCode)")
-                    }
-                    #endif
-                    continue
-                }
-                guard let body = response.body, !body.isEmpty else {
-                    Log.quota("Remote Claude quota failed for \(file.name): empty response body")
-                    quotas[file.quotaLookupKey] = remoteQuotaFailureData(
-                        "Remote Claude quota request returned an empty body.",
-                        isForbidden: false
-                    )
-                    #if DEBUG
-                    if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                        RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=failed reason=empty-body")
-                    }
-                    #endif
-                    continue
-                }
-
-                let quotaData = try remoteClaudeQuotaData(from: body)
-                quotas[file.quotaLookupKey] = quotaData
-                #if DEBUG
-                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                    RuntimeIsolationDebugLog.write(
-                        "[ui-smoke] remote-claude-quota account=\(file.name) status=loaded " +
-                        "models=\(quotaData.models.count) forbidden=\(quotaData.isForbidden) " +
-                        "message_present=\(!(quotaData.statusMessage ?? "").isEmpty)"
-                    )
-                }
-                #endif
-            } catch {
-                Log.quota("Remote Claude quota failed for \(file.name): \(error.localizedDescription)")
-                quotas[file.quotaLookupKey] = remoteQuotaFailureData(
-                    "Remote Claude quota request failed: \(error.localizedDescription)",
-                    isForbidden: false
-                )
-                #if DEBUG
-                if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-                    RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota account=\(file.name) status=failed error=\(error.localizedDescription)")
-                }
-                #endif
-            }
-        }
-
-        providerQuotas[.claude] = quotas
-        #if DEBUG
-        if RuntimeProfile.remoteCodexQuotaSmokeEnabled {
-            RuntimeIsolationDebugLog.write("[ui-smoke] remote-claude-quota-complete accounts=\(quotas.count)")
-        }
-        #endif
-    }
-
     private func refreshRemoteQuotaForProvider(_ provider: AIProvider) async {
         switch provider {
         case .codex:
-            await refreshRemoteCodexQuotasInternal()
+            await refreshCoreManagedQuotas(triggerRefresh: true, provider: .codex)
         case .claude:
-            await refreshRemoteClaudeQuotasInternal()
+            await refreshCoreManagedQuotas(triggerRefresh: true, provider: .claude)
         default:
             Log.quota("Remote quota refresh for \(provider.rawValue) is not implemented; keeping management-backed account state only")
         }
@@ -2011,6 +1942,13 @@ final class QuotaViewModel {
     }
     
     func refreshQuotaForProvider(_ provider: AIProvider) async {
+        if usesCoreManagedQuotaSnapshots && (provider == .codex || provider == .claude) {
+            await refreshCoreManagedQuotas(triggerRefresh: true, provider: provider)
+            pruneMenuBarItems()
+            notifyQuotaDataChanged()
+            return
+        }
+
         if modeManager.isRemoteProxyMode {
             await refreshRemoteQuotaForProvider(provider)
             pruneMenuBarItems()

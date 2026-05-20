@@ -218,6 +218,8 @@ Go to **Agents** tab → Select an installed agent → Click **Configure** → C
 </picture>
 
 ### Quota Monitoring
+When Quotio is connected to a local or remote CLIProxyAPI core, Codex/Claude quota data is read from core-managed snapshots; manual refresh asks the core to refresh and persist the quota snapshot instead of calling provider quota endpoints from the app.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="screenshots/quota_dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="screenshots/quota.png" />

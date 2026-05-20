@@ -178,6 +178,8 @@ brew install --cask quotio
 </picture>
 
 ### 配额监控
+当 Quotio 连接本地或远端 CLIProxyAPI core 时，Codex / Claude 配额会读取 core 管理的快照；手动刷新会请求 core 刷新并持久化快照，而不是由 App 直接访问 provider 配额接口。
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="screenshots/quota_dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="screenshots/quota.png" />

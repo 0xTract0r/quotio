@@ -303,6 +303,22 @@ actor ManagementAPIClient {
         let data = try await makeRequest("/api-call", method: "POST", body: body)
         return try JSONDecoder().decode(APICallResponse.self, from: data)
     }
+
+    func fetchQuotaSnapshots() async throws -> QuotaSnapshotsResponse {
+        let data = try await makeRequest("/quota/snapshots")
+        return try JSONDecoder().decode(QuotaSnapshotsResponse.self, from: data)
+    }
+
+    func refreshQuotaSnapshots(provider: AIProvider? = nil, authID: String? = nil, name: String? = nil) async throws -> QuotaSnapshotsResponse {
+        let request = QuotaSnapshotRefreshRequest(
+            authID: authID,
+            name: name,
+            provider: provider?.rawValue
+        )
+        let body = try JSONEncoder().encode(request)
+        let data = try await makeRequest("/quota/refresh", method: "POST", body: body)
+        return try JSONDecoder().decode(QuotaSnapshotsResponse.self, from: data)
+    }
     
     func deleteAuthFile(name: String) async throws {
         _ = try await makeRequest("/auth-files?name=\(name)", method: "DELETE")
@@ -836,6 +852,107 @@ struct APICallResponse: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case header, body
         case statusCode = "status_code"
+    }
+}
+
+struct QuotaSnapshotsResponse: Codable, Sendable {
+    let generatedAt: String?
+    let entries: [QuotaSnapshotEntry]
+
+    enum CodingKeys: String, CodingKey {
+        case entries
+        case generatedAt = "generated_at"
+    }
+}
+
+struct QuotaSnapshotEntry: Codable, Sendable {
+    let authID: String
+    let authIndex: String?
+    let name: String?
+    let provider: String
+    let label: String?
+    let status: String
+    let error: String?
+    let planType: String?
+    let lastRefreshedAt: String?
+    let nextRefreshAt: String?
+    let snapshot: QuotaSnapshotBody?
+
+    enum CodingKeys: String, CodingKey {
+        case name, provider, label, status, error, snapshot
+        case authID = "auth_id"
+        case authIndex = "auth_index"
+        case planType = "plan_type"
+        case lastRefreshedAt = "last_refreshed_at"
+        case nextRefreshAt = "next_refresh_at"
+    }
+}
+
+struct QuotaSnapshotBody: Codable, Sendable {
+    let usage: JSONValue?
+    let profile: JSONValue?
+}
+
+private struct QuotaSnapshotRefreshRequest: Codable, Sendable {
+    let authID: String?
+    let name: String?
+    let provider: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, provider
+        case authID = "auth_id"
+    }
+}
+
+enum JSONValue: Codable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: JSONValue])
+    case array([JSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: JSONValue].self) {
+            self = .object(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .number(let value):
+            if value.rounded() == value,
+               value >= Double(Int.min),
+               value <= Double(Int.max) {
+                try container.encode(Int(value))
+            } else {
+                try container.encode(value)
+            }
+        case .bool(let value):
+            try container.encode(value)
+        case .object(let value):
+            try container.encode(value)
+        case .array(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
     }
 }
 

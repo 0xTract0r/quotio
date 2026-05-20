@@ -453,7 +453,7 @@ struct DashboardScreen: View {
                         .foregroundStyle(.secondary)
                     
                     Button {
-                        Task { await viewModel.refreshQuotasDirectly() }
+                        Task { await viewModel.refreshQuotasUnified() }
                     } label: {
                         Label("action.refresh".localized(), systemImage: "arrow.clockwise")
                     }
